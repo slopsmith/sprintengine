@@ -134,6 +134,8 @@ test('SidebarAccountBar.accountMenu', async () => {
     'the cluster is exactly the account control and the gear — no trigger glyphs',
   )
 
+  dom.window.document.body.innerHTML = ''
+
   // Signed out it still opens, with the rows that are not an account's and the
   // way in. A row pressed closes the menu and opens what it names.
   const opened: string[] = []
