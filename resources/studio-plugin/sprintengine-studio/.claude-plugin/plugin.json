@@ -1,16 +1,10 @@
 {
   "name": "sprintengine-studio",
   "description": "Drive SprintEngine Studio from an agent: backlog, scheduled agents, workspaces and terminals, canvas boards, review. Ships the stdio bridge to the running app and one skill per area.",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": {
     "name": "SprintEngine Studio"
   },
   "homepage": "https://github.com/sprintengine/studio-releases",
-  "keywords": [
-    "sprintengine",
-    "studio",
-    "backlog",
-    "scheduled-agents",
-    "canvas"
-  ]
+  "keywords": ["sprintengine", "studio", "backlog", "scheduled-agents", "canvas"]
 }

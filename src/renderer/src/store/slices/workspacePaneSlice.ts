@@ -2,7 +2,12 @@ import { nanoid } from 'nanoid'
 import { rememberClosedPaneTab } from '../../utils/recentlyClosedTabs'
 import { BROWSER_MAX_RECENT_URLS } from '../../../../shared/browser'
 import { normalizeBrowserViewport } from '../../../../shared/browser-devices'
-import { canvasBoardKeyPath, canvasBoardName, normalizeCanvasPath } from '../../../../shared/canvas/paths'
+import {
+  canvasBoardKeyPath,
+  canvasBoardName,
+  isCanvasStoreKey,
+  normalizeCanvasPath,
+} from '../../../../shared/canvas/paths'
 import { isAbsoluteFilePath } from '../../../../shared/paths'
 import type {
   Workspace,
@@ -57,8 +62,10 @@ const SINGLETON_PANE_TAB_KINDS: ReadonlySet<WorkspacePaneTabKind> = new Set([
 function canvasTabKey(tab: Pick<WorkspacePaneTab, 'canvas'>): string {
   // Folded where the filesystem folds it, and main folds its own registry key
   // the same way: two spellings of one path are one file, so two tabs over them
-  // would be two live editors writing the same board.
-  return canvasBoardKeyPath(tab.canvas?.path ?? '', rendererPlatform())
+  // would be two live editors writing the same board. The store is part of it:
+  // `arch` here and another project's `arch` are two boards with one name.
+  const path = canvasBoardKeyPath(tab.canvas?.path ?? '', rendererPlatform())
+  return tab.canvas?.store ? `${tab.canvas.store}\u0000${path}` : path
 }
 
 /**
@@ -197,8 +204,15 @@ function normalizeTab(input: unknown): WorkspacePaneTab | null {
     // An unusable path drops the FIELD, never the tab: the tab then opens on
     // the board picker, which is a surface the person can act in, where
     // dropping the tab would lose a place in the strip with no explanation.
-    const path = normalizeCanvasPath(String((raw.canvas as { path?: unknown }).path ?? ''))
-    if (path.ok) tab.canvas = { path: path.value }
+    //
+    // The store survives with the path or not at all: a foreign tab that came
+    // back without its store would name a board in THIS project, and the pane
+    // would make an empty one of that name.
+    const { path: rawPath, store } = raw.canvas as { path?: unknown; store?: unknown }
+    const path = normalizeCanvasPath(String(rawPath ?? ''))
+    if (path.ok && (store === undefined || isCanvasStoreKey(store))) {
+      tab.canvas = { path: path.value, ...(store ? { store } : {}) }
+    }
   }
   if (tab.kind === 'document') {
     // A document tab reads one file and has no picker to fall back to, so a
@@ -497,7 +511,8 @@ export interface WorkspacePaneSliceActions {
    * would leave the normalizer to drop one of them after the fact — taking the
    * person somewhere they did not ask to be.
    */
-  setPaneTabBoard: (id: WorkspaceId, tabId: string, path: string) => void
+  /** `store` names a board of another project, as `CanvasBoardRef` does. */
+  setPaneTabBoard: (id: WorkspaceId, tabId: string, path: string, store?: string) => void
   setPaneOpen: (id: WorkspaceId, open: boolean) => void
   /**
    * The shortcut semantics of the old rail switches, for the singleton kinds:
@@ -786,7 +801,7 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         ws.paneState = normalizeWorkspacePaneState(pane)
       }),
 
-    setPaneTabBoard: (id, tabId, path) =>
+    setPaneTabBoard: (id, tabId, path, store) =>
       set((state) => {
         const ws = state.workspaces.find((w) => w.id === id)
         if (!ws) return
@@ -796,7 +811,8 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         if (!tab || tab.kind !== 'canvas') return
         const normalized = normalizeCanvasPath(path)
         if (!normalized.ok) return
-        const key = canvasTabKey({ canvas: { path: normalized.value } })
+        const canvas = { path: normalized.value, ...(store ? { store } : {}) }
+        const key = canvasTabKey({ canvas })
         const existing = pane.tabs.find(
           (candidate) => candidate.id !== tabId && candidate.kind === 'canvas' && canvasTabKey(candidate) === key,
         )
@@ -805,7 +821,7 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
           pane.activeTabId = existing.id
           pane.open = true
         } else {
-          tab.canvas = { path: normalized.value }
+          tab.canvas = canvas
           // The same rule `updatePaneTab` follows: the board's name is the
           // tab's label, written where the board is written.
           tab.title = canvasBoardName(normalized.value)

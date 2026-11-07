@@ -11,10 +11,19 @@ export type CanvasBoardRef = {
   workspaceId: string
   /** Posix, project-relative, `*.excalidraw`. See `normalizeCanvasPath`. */
   path: string
+  /**
+   * The board store of another project, `ws_<24 hex>`: this board is that
+   * project's, and `workspaceId` only says who is looking at it. A ref with a
+   * store is never created: a board another project does not have is an error,
+   * not an empty board. Absent, the board is the workspace's own.
+   */
+  store?: string
 }
 
 /** One board as the picker and `canvas.list` show it. */
 export type CanvasBoardSummary = {
+  /** The board's global id, where the service knows its store. */
+  id?: string
   path: string
   /** Basename without the extension — what the tab and the picker label. */
   name: string
@@ -23,8 +32,51 @@ export type CanvasBoardSummary = {
   modifiedAt: number
 }
 
+/**
+ * One board in the machine-wide list. Every field is one a paired device may
+ * read: a project is named, and an absolute path never appears.
+ */
+export type CanvasMachineBoard = CanvasBoardSummary & {
+  /** The board's global id, `canvas://ws_…/arch.excalidraw`. See `canvasBoardId`. */
+  id: string
+  /** The store half of `id`. */
+  store: string
+  /** What the row calls its project; null for a project nothing remembers, a "Deleted project". */
+  project: string | null
+  /** The chat that asked is in this board's folder, so it opens without a store. */
+  here: boolean
+  /**
+   * A workspace on this machine in the board's folder, the one a new chat on
+   * the board starts beside. Null when no workspace is left there.
+   */
+  workspaceId: string | null
+}
+
+/** Which chat to start for a board, and where: `canvas:continue-in-new-chat`. */
+export type CanvasContinueInput = {
+  /** The chat asking; its project is where a board with no project left is taken up. */
+  workspaceId: string
+  /** The board's global id, as a list row carries it. */
+  id: string
+  name: string
+  /** The row's workspace, in the board's folder, when it has one. */
+  boardWorkspaceId?: string | null
+}
+
+/** The new chat, in the ids the store knows it by. */
+export type CanvasContinueResult = { workspaceId: string; agentId: string }
+
+/** The machine-wide list: newest first, with what stops it being all of them said in words. */
+export type CanvasMachineListing = {
+  boards: CanvasMachineBoard[]
+  /** Why the list is not every board on the machine, or null when it is. */
+  note: string | null
+}
+
 /** A board's live scene, as handed to a subscriber on open and on every push. */
 export type CanvasBoardState = {
+  /** The board's global id, where the service knows its store. */
+  id?: string
   path: string
   /** Bumped by the service on every accepted write; the merge base a commit cites. */
   revision: number

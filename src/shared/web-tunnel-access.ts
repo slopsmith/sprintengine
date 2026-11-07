@@ -186,6 +186,8 @@ export const WEB_TUNNEL_ACCESS: { readonly [C in ServerIpcChannelName | WebTunne
   'mesh:visit-conversation': desktopOnly(BEYOND),
   'mesh:workspace-checkout': desktopOnly(BEYOND),
   'mesh:workspace-extensions': desktopOnly(BEYOND),
+  'mesh:canvas-boards': desktopOnly(BEYOND),
+  'mesh:canvas-screenshot': desktopOnly(BEYOND),
   'modules:bridge:invoke': desktopOnly(MODULES),
   'modules:host-service:invoke': desktopOnly(MODULES),
   'modules:notifications:recent': desktopOnly(MODULES),

@@ -108,3 +108,15 @@ test("the pane's own close is what fills the stack", () => {
     open: { kind: 'browser', url: 'http://localhost/a' },
   })
 })
+
+test('a closed Canvas tab comes back on the same store', () => {
+  const store = `ws_${'a'.repeat(24)}`
+  expect(closedPaneTabSpec(tab({ kind: 'canvas', canvas: { path: 'arch.excalidraw', store } }))).toEqual({
+    kind: 'canvas',
+    canvas: { path: 'arch.excalidraw', store },
+  })
+  expect(closedPaneTabSpec(tab({ kind: 'canvas', canvas: { path: 'arch.excalidraw' } }))).toEqual({
+    kind: 'canvas',
+    canvas: { path: 'arch.excalidraw' },
+  })
+})

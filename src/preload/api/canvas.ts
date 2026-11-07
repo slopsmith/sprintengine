@@ -5,9 +5,12 @@ import type {
   CanvasBoardRef,
   CanvasBoardState,
   CanvasBoardSummary,
+  CanvasContinueInput,
+  CanvasContinueResult,
   CanvasElement,
   CanvasExportImages,
   CanvasExportResult,
+  CanvasMachineListing,
   CanvasPresence,
   CanvasResult,
   CanvasScenePush,
@@ -30,11 +33,12 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 export const canvasApi = {
   canvasListBoards: (workspaceId: string): Promise<CanvasResult<CanvasBoardSummary[]>> =>
     ipcRenderer.invoke('canvas:list-boards', workspaceId),
-  canvasOpenBoard: (input: {
-    workspaceId: string
-    path: string
-    create?: boolean
-  }): Promise<CanvasResult<CanvasBoardState>> => ipcRenderer.invoke('canvas:open-board', input),
+  canvasListAllBoards: (workspaceId?: string): Promise<CanvasResult<CanvasMachineListing>> =>
+    ipcRenderer.invoke('canvas:list-all-boards', workspaceId),
+  canvasContinueInNewChat: (input: CanvasContinueInput): Promise<CanvasResult<CanvasContinueResult>> =>
+    ipcRenderer.invoke('canvas:continue-in-new-chat', input),
+  canvasOpenBoard: (input: CanvasBoardRef & { create?: boolean }): Promise<CanvasResult<CanvasBoardState>> =>
+    ipcRenderer.invoke('canvas:open-board', input),
   canvasCloseBoard: (input: CanvasBoardRef): Promise<void> => ipcRenderer.invoke('canvas:close-board', input),
   canvasCommitScene: (
     input: CanvasBoardRef & {
@@ -70,6 +74,8 @@ export const canvasApi = {
 } satisfies Pick<
   ElectronApi,
   | 'canvasListBoards'
+  | 'canvasListAllBoards'
+  | 'canvasContinueInNewChat'
   | 'canvasOpenBoard'
   | 'canvasCloseBoard'
   | 'canvasCommitScene'

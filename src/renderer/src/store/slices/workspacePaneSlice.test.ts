@@ -530,3 +530,22 @@ test('workspacePaneSlice', async () => {
 
   console.log('workspacePaneSlice tests passed')
 })
+
+test('a foreign Canvas tab keeps its store through a reload, and a bad store loses the board, never the tab', () => {
+  const store = `ws_${'a'.repeat(24)}`
+  const pane = {
+    open: true,
+    activeTabId: 'foreign',
+    tabs: [
+      { id: 'foreign', kind: 'canvas', canvas: { path: 'arch.excalidraw', store } },
+      { id: 'own', kind: 'canvas', canvas: { path: 'arch.excalidraw' } },
+      { id: 'bad', kind: 'canvas', canvas: { path: 'other.excalidraw', store: '../elsewhere' } },
+    ],
+  } as unknown as WorkspacePaneState
+  const restored = normalizeWorkspacePaneState(partializeWorkspacePaneState(pane))
+  const tab = (id: string) => restored?.tabs.find((candidate) => candidate.id === id)
+  assert.deepEqual(tab('foreign')?.canvas, { path: 'arch.excalidraw', store })
+  assert.deepEqual(tab('own')?.canvas, { path: 'arch.excalidraw' })
+  assert.ok(tab('bad'), 'the tab stays, on the picker')
+  assert.equal(tab('bad')?.canvas, undefined, 'and never as a board of that name here')
+})

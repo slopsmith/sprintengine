@@ -66,6 +66,8 @@ async function withService<T>(run: (service: CanvasServiceInternal) => Promise<C
 type CanvasPaneApi = Pick<
   ElectronApi,
   | 'canvasListBoards'
+  | 'canvasListAllBoards'
+  | 'canvasContinueInNewChat'
   | 'canvasOpenBoard'
   | 'canvasCloseBoard'
   | 'canvasCommitScene'
@@ -84,6 +86,13 @@ export function webCanvasPaneApi(): CanvasPaneApi {
         typeof workspaceId === 'string' && workspaceId.trim()
           ? service.listBoards(workspaceId.trim())
           : canvasFail('no_workspace', 'This call named no workspace.'),
+      ),
+    canvasListAllBoards: (workspaceId) => withService((service) => service.listAllBoards(workspaceId)),
+    // A chat is started by the desktop's own launch, which a tab does not run.
+    canvasContinueInNewChat: async () =>
+      canvasFail(
+        'forbidden',
+        'Starting a chat from a board is not available in a browser tab yet. Use the desktop app.',
       ),
     canvasOpenBoard: (input) =>
       withService((service) => {

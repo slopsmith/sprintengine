@@ -74,6 +74,66 @@ export function canvasBoardKeyPath(path: string, platform: string): string {
 
 const NUL = String.fromCharCode(0)
 
+/** How a global board id starts. */
+export const CANVAS_BOARD_ID_SCHEME = 'canvas://'
+
+/** A store's key: `ws_` and the first 24 hex of the hash of its folder (`deriveWorkspaceId`). */
+const CANVAS_STORE_KEY = /^ws_[0-9a-f]{24}$/
+
+/** Whether a string is a board store's key, the only spelling `store` may take. */
+export function isCanvasStoreKey(value: unknown): value is string {
+  return typeof value === 'string' && CANVAS_STORE_KEY.test(value)
+}
+
+/**
+ * The one name a board has that means the same from every chat on a machine:
+ * the store it is kept under and its path there. `canvas://ws_…/arch.excalidraw`
+ * is a board in that project's store; `canvas://ws_…/diagrams/arch.excalidraw`
+ * is that file in the project the store is kept for.
+ *
+ * A board's file carries no identity of its own (only its elements have ids),
+ * and `canvas.excalidraw` is in every store, so a bare name means nothing
+ * outside its own project.
+ */
+export function canvasBoardId(store: string, path: string): string {
+  return `${CANVAS_BOARD_ID_SCHEME}${store}/${path}`
+}
+
+/**
+ * The first message of a chat started to keep working on a board. The same
+ * words wherever the chat runs: a chat on a paired machine is started there, and
+ * its agent reads this with that machine's tools. It names the board by id so
+ * the agent cannot land on a board of the same name of its own. `board` is a
+ * path only on a paired machine too old to name its boards, where the chat
+ * starts in the board's own project.
+ */
+export function canvasContinuePrompt(name: string, board: string): string {
+  return `I want to keep working on the Canvas board "${name}". Pass ${board} as \`board\` to every canvas tool, because a bare name could mean another board. Open it with canvas.open, read it with canvas.describe, then ask me what to change.`
+}
+
+/**
+ * A caller's board as a global id, when it is spelled as one: null for an
+ * ordinary name or path, which `normalizeCanvasPath` then reads. The bare form
+ * without the scheme is read too, because the alternative is worse: `ws_…/arch`
+ * is a perfectly good project path, and would write a board into the repository.
+ * Anything else that starts like an id is refused here, for the same reason.
+ */
+export function parseCanvasBoardId(input: string): CanvasResult<{ store: string; path: string }> | null {
+  if (typeof input !== 'string') return null
+  const raw = input.trim().replace(/\\/g, '/')
+  const hasScheme = raw.toLowerCase().startsWith(CANVAS_BOARD_ID_SCHEME)
+  const body = hasScheme ? raw.slice(CANVAS_BOARD_ID_SCHEME.length) : raw
+  const cut = body.indexOf('/')
+  const head = cut < 0 ? body : body.slice(0, cut)
+  if (!hasScheme && !isCanvasStoreKey(head)) return null
+  if (!isCanvasStoreKey(head) || cut < 0) {
+    return canvasFail('invalid_path', `A board id is canvas://ws_…/<board>, from canvas.list: ${input}`)
+  }
+  const path = normalizeCanvasPath(body.slice(cut + 1))
+  if (!path.ok) return path
+  return canvasOk({ store: head, path: path.value })
+}
+
 /**
  * Normalize a caller's board path to a posix `.excalidraw` path: a bare file
  * name for a store board, project-relative otherwise. Accepts a bare name (`arch`), a name with the extension, and any depth

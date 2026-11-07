@@ -503,6 +503,51 @@ project's working tree unless the person puts it there.
   store first and to `diagrams/<name>.excalidraw` when only that exists; the
   picker refuses to create a store board whose name a legacy board already has,
   since a bare name would then be ambiguous.
+- **Every board on the machine.** A board's global id is its store and its
+  path, `canvas://ws_<24 hex>/arch.excalidraw` (`canvasBoardId`), and a path with
+  a folder names that file in the project the store is kept for. `CanvasBoardRef`
+  carries it as an optional `store`, which every layer keeps: a tab that lost it
+  would name a board in its own project. `canvas.list` with `scope: machine`, and
+  "All boards" in the picker, read every store in full and each known project's
+  `diagrams/` and no deeper, fresh on every call, with no index
+  (`canvas-store-catalogue.ts`). A row names a project, never a folder, and one
+  nothing remembers is a "Deleted project". It still opens: `locate` reads a ref
+  with a store without the workspace root.
+- **A foreign board is never created.** `ensureBoard` drops `create` for any ref
+  with a store, so the tools, the pane's open and its commits all refuse a board
+  that is not there. A bare name that is not a board here and is one elsewhere is
+  refused as `foreign_board`, with that board's id, by every tool that creates.
+  The default name is exempt, being in every store. A truly new name still makes
+  a board. A bound agent may reach another project's board only by explicit id
+  (owner ruling 2026-11-07), and that is the same file, not a copy.
+- **A board is one entry by its file.** The registry is keyed by absolute path,
+  so every ref reaching a file shares its revision, watcher and queue, and pushes
+  go out per subscription under that subscriber's own ref. The sender excluded
+  from an echo is one tab, not its whole window: a window can hold a board twice,
+  in two workspace layers. The store key function is not changed by any of this,
+  and must not be: changing it orphans every existing board.
+- **What a store says about itself.** `store.json` beside the boards holds the
+  folder and the project's name. It is written with a store's first board and
+  backfilled by a listing where the folder is known, so a store stays attributable
+  once its workspaces are gone.
+- **Continue in a new chat.** A chat whose first message names the board by id,
+  with the board open beside it. It starts in the board's folder, else the asking
+  chat's project, else under no project: a folder that went away is never a
+  reason to refuse the board.
+- **Paired machines.** A paired chat's picker lists that machine's boards through
+  `canvas.list` there (`canvas-machine-boards`; an older machine lists its project
+  and says so). A board is shown as a picture from `canvas.screenshot`, and
+  changed through a new chat on that machine, started by the mesh's
+  `conversation.create`. Live human editing of a far board is not built: the
+  editor needs the whole scene and a push of every change, which would take
+  board-only file routes on the tailnet so this desktop can run the canvas service
+  over `createProtocolCanvasFs`. New board is not offered on a paired chat for the
+  same reason. The phone shows the name of a board the agent used and says to open
+  it on the desktop; it has no list of boards.
+- **A web tab** lists the boards of the workspaces its server has, and says so.
+  An orphaned store on a server needs an owner method of its own, since `files.*`
+  roots name a workspace. Its store keys are derived from the workspace id and
+  mean nothing outside that tab's service.
 - **Export.** The only way a board reaches the repository. The editor's menu
   has **Export to folder…**. The dialog always exports the board file and
   optionally a PNG and an SVG, rendered by the tab's own editor. Main shows the

@@ -68,7 +68,7 @@ export type PanePopOutOpenTabInput = { kind: WorkspacePaneTabKind } & Partial<
 export type PanePopOutAction =
   | { type: 'close'; tabId: string }
   | { type: 'update'; tabId: string; patch: Partial<Omit<WorkspacePaneTab, 'id' | 'kind'>> }
-  | { type: 'set-board'; tabId: string; path: string }
+  | { type: 'set-board'; tabId: string; path: string; store?: string }
   | { type: 'recent-url'; url: string }
   | { type: 'open'; input: PanePopOutOpenTabInput }
   /**

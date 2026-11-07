@@ -1,11 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
-import type { CanvasBoardSummary } from '../../../../../../shared/canvas/types'
-import {
-  canvasBoardKeyPath,
-  canvasPathIsCaseInsensitive,
-  normalizeCanvasPath,
-} from '../../../../../../shared/canvas/paths'
+import { canvasPathIsCaseInsensitive, normalizeCanvasPath } from '../../../../../../shared/canvas/paths'
+import { showToast } from '../../../../store/toastStore'
 import {
   Badge,
   EmptyState,
@@ -14,6 +10,7 @@ import {
   Pager,
   PrimaryButton,
   RowButton,
+  SegmentedControl,
   SettingCard,
   Skeleton,
   TruncatedText,
@@ -23,7 +20,10 @@ import { CanvasGlyph } from '../paneKinds'
 import {
   CANVAS_DEFAULT_NEW_BOARD_NAME,
   canvasBoardFolder,
+  canvasBoardProjectLabel,
+  canvasBoardRowKey,
   canvasBoardRowLabel,
+  canvasDuplicateKey,
   canvasPickerPage,
   collidingCanvasBoardPath,
   describeCanvasChangedAt,
@@ -31,11 +31,18 @@ import {
   formatCanvasChangedAt,
   uniqueCanvasBoardName,
 } from './canvasPickerModel'
+import {
+  continueBoardInNewChat,
+  listCanvasBoards,
+  type CanvasBoardScope,
+  type CanvasBoardSource,
+  type CanvasPickerBoard,
+} from './canvasBoardSource'
 import { hostPlatform } from '../../../../clientCapabilities'
 import { isImeKey } from '../../../../utils/imeKey'
 
-// What a Canvas tab shows before it has a board: this project's boards, and one
-// affordance that makes another.
+// What a Canvas tab shows before it has a board: this project's boards, every
+// board on the machine a toggle away, and one affordance that makes another.
 //
 // It is a LIST — the same list card the app already uses for its agent CLIs,
 // its skills and its paired devices — rather than the grid of tiles the pane's
@@ -48,25 +55,43 @@ import { isImeKey } from '../../../../utils/imeKey'
 // So: a quiet heading naming the list and counting it, the primary action on
 // that same line where it never pages away, ten rows in one bordered card, and
 // the kit pager at its foot.
+//
+// "All boards" is the owner's ask (2026-11-07): every board ever drawn, from any
+// chat, so a new conversation can pick up a board that was drawn somewhere else.
+// A row there says its project, and offers to open the board here or to carry on
+// with it in a new chat. Its name helpers keep reading this project's own list:
+// a board called `arch` in another project does not take the name here.
 
 type CanvasBoardPickerProps = {
   workspaceId: string
-  /** Picking a board writes it onto this tab; the tab then opens the editor. */
-  onPick: (path: string) => void
+  /** Which machine the boards are on: this one, or the paired machine a chat runs on. */
+  source?: CanvasBoardSource
+  /** Which list opens first. A chat with no project folder has only one worth showing. */
+  initialScope?: CanvasBoardScope
+  /** Picking a board writes it onto this tab; the tab then opens it. `store` is another project's. */
+  onPick: (path: string, store?: string) => void
   /**
    * Boards another tab in this pane already holds. Picking one is not refused —
    * it brings that tab forward — but a row that says so beforehand is the
    * difference between "open it" and "why did my tab disappear".
    */
-  openPaths?: readonly string[]
+  openBoards?: readonly { path: string; store?: string | null }[]
 }
 
 type PickerState =
-  { kind: 'loading' } | { kind: 'ready'; boards: CanvasBoardSummary[] } | { kind: 'error'; message: string }
+  | { kind: 'loading' }
+  | { kind: 'ready'; boards: CanvasPickerBoard[]; note: string | null }
+  | { kind: 'error'; message: string }
 
 // One frozen array for every state that has no boards, so the memos below are
 // not invalidated by a fresh `[]` on each render.
-const NO_BOARDS: readonly CanvasBoardSummary[] = []
+const NO_BOARDS: readonly CanvasPickerBoard[] = []
+const HERE: CanvasBoardSource = { kind: 'here' }
+
+const SCOPE_ITEMS: { value: CanvasBoardScope; label: string }[] = [
+  { value: 'project', label: 'This project' },
+  { value: 'all', label: 'All boards' },
+]
 
 /** The mark on the primary action and on the row that is not a board yet. */
 function PlusGlyph({ className }: { className?: string }) {
@@ -82,8 +107,20 @@ function BoardMark({ name }: { name: string }) {
   return <ExtensionIcon name={name} size={32} mark={<CanvasGlyph className="text-[color:var(--icon-chip-ink)]" />} />
 }
 
-export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoardPickerProps) {
+export function CanvasBoardPicker({
+  workspaceId,
+  source = HERE,
+  initialScope = 'project',
+  onPick,
+  openBoards,
+}: CanvasBoardPickerProps) {
+  const [scope, setScope] = useState<CanvasBoardScope>(initialScope)
   const [state, setState] = useState<PickerState>({ kind: 'loading' })
+  // This project's own paths, whichever list is on screen: what a new name is
+  // checked against. Null until they are known.
+  const [projectPaths, setProjectPaths] = useState<readonly string[] | null>(null)
+  // The board a chat is being started for, so its button cannot be pressed twice.
+  const [continuing, setContinuing] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [page, setPage] = useState(1)
   const [naming, setNaming] = useState(false)
@@ -110,9 +147,14 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
     setState({ kind: 'loading' })
     void (async () => {
       try {
-        const result = await window.api.canvasListBoards(workspaceId)
+        const result = await listCanvasBoards(source, workspaceId, scope)
         if (cancelled) return
-        setState(result.ok ? { kind: 'ready', boards: result.value } : { kind: 'error', message: result.error.message })
+        if (!result.ok) {
+          setState({ kind: 'error', message: result.error.message })
+          return
+        }
+        setState({ kind: 'ready', boards: result.value.boards, note: result.value.note })
+        if (scope === 'project') setProjectPaths(result.value.boards.map((board) => board.path))
       } catch {
         if (!cancelled) {
           setState({ kind: 'error', message: 'The list of boards could not be read.' })
@@ -122,7 +164,25 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
     return () => {
       cancelled = true
     }
-  }, [attempt, workspaceId])
+  }, [attempt, scope, source, workspaceId])
+
+  // A picker that opened on every board still needs this project's names.
+  const canCreate = source.kind === 'here'
+  useEffect(() => {
+    if (!canCreate || scope === 'project' || projectPaths !== null) return
+    let cancelled = false
+    void listCanvasBoards(source, workspaceId, 'project').then(
+      (result) => {
+        if (!cancelled) setProjectPaths(result.ok ? result.value.boards.map((board) => board.path) : [])
+      },
+      () => {
+        if (!cancelled) setProjectPaths([])
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [canCreate, projectPaths, scope, source, workspaceId])
 
   // Page 3 of one project is not page 3 of the next, and a half-typed name for
   // one project's board is not a name for another's.
@@ -130,17 +190,28 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
     setPage(1)
     setNaming(false)
     setNameError(null)
+    setProjectPaths(null)
   }, [workspaceId])
+
+  const changeScope = useCallback((next: CanvasBoardScope) => {
+    setScope(next)
+    setPage(1)
+  }, [])
 
   const boards = state.kind === 'ready' ? state.boards : NO_BOARDS
   // Folded the way the pane and main fold their own keys, so a board open under
   // another spelling of its path is still marked as open.
   const openKeys = useMemo(
-    () => new Set((openPaths ?? []).map((path) => canvasBoardKeyPath(path, hostPlatform()))),
-    [openPaths],
+    () => new Set((openBoards ?? []).map((board) => canvasBoardRowKey(board, hostPlatform()))),
+    [openBoards],
   )
-  const duplicateNames = useMemo(() => duplicateCanvasBoardNames(boards), [boards])
-  const paths = useMemo(() => boards.map((board) => board.path), [boards])
+  // Told apart by project on a list of every board, where each row says its own.
+  const rowsForNames = useMemo(
+    () => boards.map((board) => (board.showsProject ? board : { ...board, project: undefined })),
+    [boards],
+  )
+  const duplicateNames = useMemo(() => duplicateCanvasBoardNames(rowsForNames), [rowsForNames])
+  const paths = useMemo(() => projectPaths ?? [], [projectPaths])
   // The name the field opens on: `canvas`, then `canvas-2`, so opening it twice
   // never lands on the same file.
   const suggested = useMemo(() => uniqueCanvasBoardName(CANVAS_DEFAULT_NEW_BOARD_NAME, paths), [paths])
@@ -208,7 +279,7 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
   // while the field is open, where every letter belongs to the name being typed.
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (naming || state.kind !== 'ready') return
+      if (naming || state.kind !== 'ready' || !canCreate || projectPaths === null) return
       if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return
       if (event.key.toUpperCase() !== 'N') return
       const target = event.target as HTMLElement | null
@@ -216,15 +287,43 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
       event.preventDefault()
       startNaming()
     },
-    [naming, startNaming, state.kind],
+    [canCreate, naming, projectPaths, startNaming, state.kind],
+  )
+
+  const continueBoard = useCallback(
+    (board: CanvasPickerBoard) => {
+      const key = canvasBoardRowKey(board, hostPlatform())
+      setContinuing(key)
+      void continueBoardInNewChat(source, workspaceId, board).then((started) => {
+        setContinuing((current) => (current === key ? null : current))
+        if (!started.ok) {
+          showToast({ tone: 'error', title: 'Could not start the chat', description: started.error.message })
+        }
+      })
+    },
+    [source, workspaceId],
   )
 
   // A listing that failed says so and nothing else. A heading counting zero
   // boards over a "New board" button that would fail the same way is the
   // surface pretending it is merely empty.
+  //
+  // The scope stays, though: every board on the machine is still a click away
+  // from a project whose own list could not be read.
+  const scopeControl = (
+    <SegmentedControl
+      ariaLabel="Which boards to list"
+      size="sm"
+      items={SCOPE_ITEMS}
+      value={scope}
+      onChange={changeScope}
+    />
+  )
+
   if (state.kind === 'error') {
     return (
-      <div className="h-full bg-[color:var(--bg-surface)]">
+      <div className="flex h-full flex-col items-center gap-3 bg-[color:var(--bg-surface)] p-6">
+        {scopeControl}
         <EmptyState
           title="The boards could not be listed"
           body={state.message}
@@ -291,9 +390,11 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
   const rows = view.boards.map((board) => {
     const folder = canvasBoardFolder(board.path)
     const changed = formatCanvasChangedAt(board.modifiedAt, now)
-    const open = openKeys.has(canvasBoardKeyPath(board.path, hostPlatform()))
+    const key = canvasBoardRowKey(board, hostPlatform())
+    const open = openKeys.has(key)
+    const pick = () => onPick(board.path, board.store ?? undefined)
     return (
-      <li key={board.path}>
+      <li key={key}>
         {/* The list-card row anatomy the agent CLI, plugin and skill rows draw:
             the wrapper owns the fill and the card's 16/12px inset, and the row
             half inside it is the kit's `flush` density, which draws no ground of
@@ -301,20 +402,21 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
             surface's own row: that row's target is named "Show details for …"
             and its trailing slot sits OUTSIDE the button, and a board's row
             opens a board and is clickable to its right edge. */}
-        <div className="flex items-center gap-2 py-1.5 pl-2 pr-4 transition-colors hover:bg-[color:var(--bg-hover)]">
+        <div className="group/board flex items-center gap-2 py-1.5 pl-2 pr-4 transition-colors hover:bg-[color:var(--bg-hover)]">
           <RowButton
             density="flush"
-            onClick={() => onPick(board.path)}
+            onClick={pick}
             aria-label={canvasBoardRowLabel({
               name: board.name,
               folder,
               changed: describeCanvasChangedAt(board.modifiedAt, now),
               open,
+              ...(board.showsProject ? { project: board.project } : {}),
             })}
             className="min-w-0 flex-1"
           >
             <BoardMark name={board.name} />
-            <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 flex-1 flex-col">
               <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                 <TruncatedText
                   as="span"
@@ -323,7 +425,7 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
                 />
                 {/* Only where the name alone cannot be chosen between. A folder
                     on every row is a column of the word "diagrams". */}
-                {duplicateNames.has(board.name.toLowerCase()) ? (
+                {duplicateNames.has(canvasDuplicateKey(board.showsProject ? board : { name: board.name })) ? (
                   <TruncatedText
                     as="span"
                     text={folder}
@@ -339,6 +441,13 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
                   </Badge>
                 ) : null}
               </span>
+              {board.showsProject ? (
+                <TruncatedText
+                  as="span"
+                  text={canvasBoardProjectLabel(board.project)}
+                  className="min-w-0 text-meta leading-4 text-[color:var(--text-subtle)]"
+                />
+              ) : null}
             </span>
             {/* Aria-hidden because the accessible name says the same thing in
                 words — "5m" read aloud is not a time. */}
@@ -349,6 +458,20 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
               {changed}
             </span>
           </RowButton>
+          {/* Beside the row rather than inside it: a button in a button is not
+              one anybody can reach. Revealed the way a worklist row reveals its
+              actions, on hover and on keyboard focus, so ten rows do not read as
+              twenty buttons. The whole row already opens the board; "Open here"
+              says what that does on a row that offers something else too. */}
+          <span className="hidden shrink-0 items-center gap-1 group-focus-within/board:flex group-hover/board:flex">
+            <GhostButton onClick={pick}>Open here</GhostButton>
+            <GhostButton
+              onClick={() => continueBoard(board)}
+              disabled={continuing === key || (!board.id && source.kind === 'here')}
+            >
+              Continue in a new chat
+            </GhostButton>
+          </span>
         </div>
       </li>
     )
@@ -378,20 +501,23 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
         {/* The section heading the app's other lists wear: the label muted, the
             count beside it in mono. The card below is the group's edge, so the
             heading only names it. */}
-        <div className="flex items-baseline gap-2">
-          <span className="text-body font-medium text-[color:var(--text-muted)]">Boards</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-body font-medium text-[color:var(--text-muted)]">
+            {source.kind === 'paired' ? `Boards on ${source.machineName}` : 'Boards'}
+          </span>
           {state.kind === 'ready' ? (
             <span className="font-mono text-meta tabular-nums text-[color:var(--text-subtle)]">{boards.length}</span>
           ) : null}
+          {scopeControl}
           {/* Hidden while the field is open rather than disabled: the field IS
               the button, moved into the card. Held back while the listing is
               still coming, because the name it would suggest is only unique
               once we know what the project already has. */}
-          {!naming ? (
+          {!naming && canCreate ? (
             <PrimaryButton
               ref={newBoardRef}
               onClick={startNaming}
-              disabled={state.kind !== 'ready'}
+              disabled={state.kind !== 'ready' || projectPaths === null}
               // `gap` is the kit button's own (`gap-1.5`); only the push to the
               // right of the heading line belongs to this caller.
               className="ml-auto"
@@ -402,6 +528,10 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
           ) : null}
         </div>
 
+        {state.kind === 'ready' && state.note ? (
+          <p className="text-meta leading-4 text-[color:var(--text-subtle)]">{state.note}</p>
+        ) : null}
+
         {state.kind === 'loading' ? (
           <SettingCard as="ul" ariaLabel="Boards">
             {skeletonRows}
@@ -409,8 +539,12 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
         ) : empty && !naming ? (
           <EmptyState
             density="list"
-            title="No boards yet."
-            body="Boards are kept by the app, outside your repository — you and your agents can both draw on them. Export one to a folder when it belongs in the project."
+            title={scope === 'all' ? 'No boards on this machine yet.' : 'No boards yet.'}
+            body={
+              source.kind === 'paired'
+                ? `Agents on ${source.machineName} draw boards there, and they are listed here.`
+                : 'Boards are kept by the app, outside your repository — you and your agents can both draw on them. Export one to a folder when it belongs in the project.'
+            }
           />
         ) : (
           <SettingCard as="ul" ariaLabel="Boards">
@@ -427,7 +561,7 @@ export function CanvasBoardPicker({ workspaceId, onPick, openPaths }: CanvasBoar
             pageCount={view.pageCount}
             rangeLabel={view.rangeLabel}
             onPageChange={setPage}
-            ariaLabel="Boards in this project"
+            ariaLabel={scope === 'all' ? 'All boards' : 'Boards in this project'}
           />
         ) : null}
       </div>

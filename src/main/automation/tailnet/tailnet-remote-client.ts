@@ -458,6 +458,21 @@ export async function callRemoteTool(input: {
   args?: Record<string, unknown>
   timeoutMs?: number
 }): Promise<RemoteCallOutcome<Record<string, unknown>>> {
+  const answer = await callRemoteToolResult(input)
+  return answer.ok ? { ok: true, value: answer.value.structured } : answer
+}
+
+/**
+ * The same call, with the result's content blocks as well: where a tool's
+ * image rides, because repeating one in `structuredContent` would double it.
+ */
+export async function callRemoteToolResult(input: {
+  endpoint: TailnetEndpoint
+  token: string
+  tool: string
+  args?: Record<string, unknown>
+  timeoutMs?: number
+}): Promise<RemoteCallOutcome<{ structured: Record<string, unknown>; content: unknown[] }>> {
   let answer: JsonAnswer
   try {
     answer = await requestTailnetJson({
@@ -506,7 +521,7 @@ export async function callRemoteTool(input: {
       message: typeof failure?.message === 'string' ? failure.message : `"${input.tool}" was refused by that machine.`,
     }
   }
-  return { ok: true, value: structured }
+  return { ok: true, value: { structured, content: Array.isArray(result?.content) ? result.content : [] } }
 }
 
 /**

@@ -12,7 +12,12 @@
 // of them needs a renderer to be proved right.
 
 import type { CanvasBoardSummary } from '../../../../../../shared/canvas/types'
-import { CANVAS_LEGACY_FOLDER, canvasBoardIsInStore, canvasBoardName } from '../../../../../../shared/canvas/paths'
+import {
+  CANVAS_LEGACY_FOLDER,
+  canvasBoardIsInStore,
+  canvasBoardKeyPath,
+  canvasBoardName,
+} from '../../../../../../shared/canvas/paths'
 
 /**
  * Boards per page.
@@ -41,7 +46,7 @@ export function clampCanvasPage(page: number, pageCount: number): number {
   return Math.min(Math.max(Math.floor(page), 1), pageCount)
 }
 
-export type CanvasPickerPage = {
+export type CanvasPickerPage<Board> = {
   /** 1-based and already clamped — a page number can outlive its rows. */
   page: number
   pageCount: number
@@ -51,15 +56,15 @@ export type CanvasPickerPage = {
   /** "Showing 1–10 of 23" — the position, in words, beside the page numbers. */
   rangeLabel: string
   /** The boards this page holds, in the order they were handed over. */
-  boards: CanvasBoardSummary[]
+  boards: Board[]
 }
 
 /** The page a person is standing on: which slice, and the sentence naming it. */
-export function canvasPickerPage(input: {
-  boards: readonly CanvasBoardSummary[]
+export function canvasPickerPage<Board>(input: {
+  boards: readonly Board[]
   page: number
   pageSize?: number
-}): CanvasPickerPage {
+}): CanvasPickerPage<Board> {
   const pageSize = Math.max(1, input.pageSize ?? CANVAS_PICKER_PAGE_SIZE)
   const total = input.boards.length
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
@@ -78,11 +83,27 @@ export function canvasPickerPage(input: {
   }
 }
 
+/** A board whose project nothing remembers: its folder is gone and no record names it. */
+export const CANVAS_DELETED_PROJECT_LABEL = 'Deleted project'
+
+/** What a row of every board calls its project. */
+export function canvasBoardProjectLabel(project: string | null): string {
+  return project ?? CANVAS_DELETED_PROJECT_LABEL
+}
+
+/**
+ * One string per board in a pane: its store and its path. A path alone is not
+ * enough once a list holds every project's boards, and `canvas` is in all of them.
+ */
+export function canvasBoardRowKey(board: { path: string; store?: string | null }, platform: string): string {
+  return `${board.store ?? ''}\u0000${canvasBoardKeyPath(board.path, platform)}`
+}
+
 /**
  * What a board in the app's store says instead of a folder. The store's real
- * path is a dot-folder inside the sidecar, which means nothing to a person
- * choosing between two boards of one name; where it is kept is what tells them
- * apart from the one in their project.
+ * path is in the app's data folder, which means nothing to a person choosing
+ * between two boards of one name; where it is kept is what tells them apart
+ * from the one in their project.
  */
 export const CANVAS_STORE_LOCATION_LABEL = 'app storage'
 
@@ -111,15 +132,26 @@ export function canvasBoardFolder(path: string): string {
  * of one name are one file on the platforms most people are on, and a row that
  * grew a folder because of a board on page 3 must keep it on page 1.
  */
-export function duplicateCanvasBoardNames(boards: readonly CanvasBoardSummary[]): ReadonlySet<string> {
+export function duplicateCanvasBoardNames(
+  boards: readonly (Pick<CanvasBoardSummary, 'name'> & { project?: string | null })[],
+): ReadonlySet<string> {
   const seen = new Set<string>()
   const twice = new Set<string>()
   for (const board of boards) {
-    const key = board.name.toLowerCase()
+    const key = canvasDuplicateKey(board)
     if (seen.has(key)) twice.add(key)
     else seen.add(key)
   }
   return twice
+}
+
+/**
+ * The name a row is compared by: its project as well, on a list of every board,
+ * where a row says its project already and two `canvas` rows are told apart.
+ */
+export function canvasDuplicateKey(board: { name: string; project?: string | null }): string {
+  const name = board.name.toLowerCase()
+  return board.project === undefined ? name : `${board.project ?? ''}\u0000${name}`
 }
 
 /**
@@ -235,8 +267,16 @@ export function describeCanvasChangedAt(ms: number | null | undefined, now: numb
  * person who cannot see which rows are adjacent has nothing else to tell
  * `architecture` from `architecture`.
  */
-export function canvasBoardRowLabel(input: { name: string; folder: string; changed: string; open: boolean }): string {
+export function canvasBoardRowLabel(input: {
+  name: string
+  folder: string
+  changed: string
+  open: boolean
+  /** The board's project, on a row of every board. */
+  project?: string | null
+}): string {
   const parts = [`Open board ${input.name}`, `in ${input.folder}`]
+  if (input.project !== undefined) parts.push(`project ${canvasBoardProjectLabel(input.project)}`)
   if (input.changed) parts.push(input.changed)
   if (input.open) parts.push('already open in another tab')
   return parts.join(', ')
