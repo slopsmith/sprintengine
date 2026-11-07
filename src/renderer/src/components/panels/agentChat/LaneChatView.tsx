@@ -142,7 +142,13 @@ function LaneBody({
     >
       <SubagentTypesProvider value={projection.agentTypes}>
         <SubagentStopProvider value={stop}>
-          <div ref={rootRef} className="flex h-full min-h-0 flex-col bg-[color:var(--agent-surface)]">
+          {/* A chat's ground, as `ChatShell` lays it: what the transcript and the box
+              inherit their type and their contrast from. */}
+          <div
+            ref={rootRef}
+            data-chat-pane=""
+            className="flex h-full min-h-0 flex-col bg-[color:var(--agent-surface)] text-meta text-[color:var(--text-default)]"
+          >
             <SubagentViewHeader
               crumbs={crumbs}
               name={name}

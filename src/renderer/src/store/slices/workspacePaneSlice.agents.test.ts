@@ -1,10 +1,39 @@
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { STATIC_PANE_KINDS } from '../../components/workspace/pane/paneKinds'
+import type { Workspace, WorkspacePaneState } from '../../types/workspace'
+import { healRetiredRailLayout } from './layoutSlice'
 import { normalizeWorkspacePaneState } from './workspacePaneSlice'
 
 // A chat's subagents are on the right-hand panel now, so the tab that listed
 // them is gone. An older profile still has it saved.
+
+// What every restore runs: main's records reach a window without passing the
+// normalizer, so a record read straight from disk has to come through here.
+const restored = (paneState: unknown): Workspace =>
+  healRetiredRailLayout({
+    id: 'w',
+    layoutModel: { global: {}, borders: [], layout: { type: 'row', children: [] } },
+    paneState: paneState as WorkspacePaneState,
+  } as unknown as Workspace)
+
+test('restoring a record from disk drops its agents tab and keeps the rest', () => {
+  const pane = restored({
+    open: true,
+    activeTabId: 'old-agents',
+    tabs: [
+      { id: 'old-agents', kind: 'agents' },
+      { id: 'files', kind: 'files' },
+    ],
+  }).paneState
+  assert.deepEqual(pane?.tabs, [{ id: 'files', kind: 'files' }])
+  assert.equal(pane?.activeTabId, 'files')
+})
+
+test('a record with no agents tab comes back the same record', () => {
+  const workspace = restored({ open: false, activeTabId: 'files', tabs: [{ id: 'files', kind: 'files' }] })
+  assert.equal(healRetiredRailLayout(workspace), workspace)
+})
 
 test('no pane kind lists subagents: the "+" menu offers no such tab', () => {
   assert.equal(

@@ -361,6 +361,22 @@ function normalizeRecentUrls(input: unknown): string[] {
   return out
 }
 
+// Kinds that were tabs once. A profile from an older build still names them, and
+// a tab of one has nothing to draw: a chat's subagents are on the right-hand panel
+// now (owner ruling 2026-11-07).
+const RETIRED_PANE_TAB_KINDS: ReadonlySet<string> = new Set(['agents'])
+
+/**
+ * A record with its retired tabs gone, and the same record back (by reference)
+ * when it holds none. Run on hydration: main hands the renderer records that
+ * never pass the normalizer above, and it is the only thing that drops a kind.
+ */
+export function dropRetiredPaneTabs(paneState: WorkspacePaneState): WorkspacePaneState {
+  if (!Array.isArray(paneState.tabs)) return paneState
+  if (!paneState.tabs.some((tab) => RETIRED_PANE_TAB_KINDS.has(tab.kind))) return paneState
+  return normalizeWorkspacePaneState(paneState) ?? defaultWorkspacePaneState()
+}
+
 /**
  * What persists: the favicon is a per-load cache and is fetched again on load,
  * and whether a tab floats or sits in a pop-out window is this session's alone.

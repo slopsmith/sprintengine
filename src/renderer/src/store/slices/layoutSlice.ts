@@ -1,6 +1,6 @@
 import type { IJsonModel } from 'flexlayout-react'
 import { railSideOfComponents } from '../../utils/modelRegistry'
-import { adoptLegacyBacklogTab, paneStateFromLegacyLayout } from './workspacePaneSlice'
+import { adoptLegacyBacklogTab, dropRetiredPaneTabs, paneStateFromLegacyLayout } from './workspacePaneSlice'
 import { workspaceSyncClient } from '../workspaceSyncClient'
 import type { Workspace, WorkspaceId } from '../../types/workspace'
 
@@ -120,7 +120,8 @@ export function stripRetiredModuleTabsFromLayout(layoutModel: unknown): unknown 
  * The whole rail-to-pane move for one workspace record: seed the pane from a
  * layout that still docks Files/Git/Backlog (only when the record carries no
  * pane yet), adopt a still-docked Backlog into a record that already has a
- * pane (v74 — after v73 every record has one), then strip the retired tabs.
+ * pane (v74 — after v73 every record has one), then strip the retired tabs,
+ * those of the layout and those of the pane alike.
  * Reference-preserving when there is nothing to do, so it is safe on every
  * hydration — which is where it has to run: main owns the registry
  * and hands the renderer records that never pass the persist ladder, so the
@@ -128,7 +129,7 @@ export function stripRetiredModuleTabsFromLayout(layoutModel: unknown): unknown 
  */
 export function healRetiredRailLayout(ws: Workspace): Workspace {
   const paneState = ws.paneState
-    ? adoptLegacyBacklogTab(ws.layoutModel, ws.paneState)
+    ? dropRetiredPaneTabs(adoptLegacyBacklogTab(ws.layoutModel, ws.paneState))
     : paneStateFromLegacyLayout(ws.layoutModel)
   const layoutModel = stripRetiredModuleTabsFromLayout(stripRetiredRailTabsFromLayout(ws.layoutModel))
   if (paneState === ws.paneState && layoutModel === ws.layoutModel) return ws
