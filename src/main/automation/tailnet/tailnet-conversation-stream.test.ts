@@ -1599,6 +1599,7 @@ test('a phone probing with hello, with no socket naming the token, is sent the w
     capabilities: ['conversations', 'conversation-hello', 'conversation-quote-tokens'],
   })
   for (const text of words) assert.equal(text.includes('sprintengine-quote:'), false, text)
+})
 
 test('a client that asks is told a chat’s sub-agents, and one that does not is told nothing', async () => {
   const socket = new Socket()
