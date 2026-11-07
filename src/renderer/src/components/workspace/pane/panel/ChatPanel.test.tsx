@@ -17,7 +17,7 @@ vi.mock('./useWorkspaceCheckoutFacts', () => ({ useWorkspaceCheckoutFacts: () =>
 
 const WS = 'ws-panel'
 const AGENT = 'agent-1'
-const MACHINE = { id: 'mac-mini', glyph: 'laptop', color: 'blue', source: 'paired' } as never
+const MACHINE = { id: 'mac-mini', kind: 'laptop', colour: 'blue', overridden: false } as never
 
 let root: Root | null = null
 let host: HTMLElement
