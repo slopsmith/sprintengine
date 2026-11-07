@@ -168,6 +168,11 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
     [moduleOverrides, moduleRegistryGeneration],
   )
 
+  // The Backlog is not offered from the panel (owner ruling 2026-11-07): it opens
+  // from its command and from its row under Extensions, and a tab of it is listed
+  // here like any other once it is open.
+  const addKinds = useMemo(() => kinds.filter((definition) => definition.kind !== 'backlog'), [kinds])
+
   const closeTab = useCallback(
     (tabId: string) => {
       const tab = tabs.find((candidate) => candidate.id === tabId)
@@ -304,7 +309,12 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
               />
             </TabsScroller>
             <div className="app-no-drag flex h-full shrink-0 items-center pl-0.5">
-              <WorkspacePaneAddMenu kinds={kinds} onPick={openKind} open={addMenuOpen} onOpenChange={setAddMenuOpen} />
+              <WorkspacePaneAddMenu
+                kinds={addKinds}
+                onPick={openKind}
+                open={addMenuOpen}
+                onOpenChange={setAddMenuOpen}
+              />
             </div>
           </>
         ) : null}
@@ -407,7 +417,7 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
               onTabContextMenu={(tabId, event) => setTabMenu({ x: event.clientX, y: event.clientY, tabId })}
               addControl={
                 <WorkspacePaneAddMenu
-                  kinds={kinds}
+                  kinds={addKinds}
                   onPick={openKind}
                   open={addMenuOpen}
                   onOpenChange={setAddMenuOpen}

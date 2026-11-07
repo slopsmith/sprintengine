@@ -374,6 +374,21 @@ test('the column shows the menu in place of a tab, and Back returns to the tab i
   assert.equal((await paneOf())?.activeTabId, 't1', 'with the tab it left still in front behind it')
 })
 
+test('the panel offers no Backlog: it opens from its command and under Extensions', async () => {
+  const { dispatchPanelCommandEvent } = await import('../../../utils/panelCommands')
+  await renderPane({ open: true, activeTabId: 't1', tabs: [{ id: 't1', kind: 'files' }] }, false)
+  await act(async () => dispatchPanelCommandEvent('pane.add', WS))
+  const rows = [...dom.window.document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent ?? '')
+  assert.ok(
+    rows.some((row) => row.startsWith('Browser')),
+    'the menu is up',
+  )
+  assert.equal(
+    rows.some((row) => row.startsWith('Backlog')),
+    false,
+  )
+})
+
 test('the panel is the docked column: asked for while maximised, it unmaximises', async () => {
   await renderPane({ open: true, activeTabId: 't1', menu: true, tabs: [{ id: 't1', kind: 'files' }] }, true)
   const { useWorkspaceStore } = await import('../../../store/workspaceStore')
