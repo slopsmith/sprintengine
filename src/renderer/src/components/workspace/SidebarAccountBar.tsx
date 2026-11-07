@@ -36,7 +36,7 @@ import type { RailBadge } from './AppRail'
 // Three bars of different heights, the column chart with no axes (lucide
 // "chart-no-axes-column" geometry): a chart, read at icon size, with nothing
 // in it that could be mistaken for a value.
-function UsageGlyph({ className }: { className?: string }) {
+export function UsageGlyph({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />

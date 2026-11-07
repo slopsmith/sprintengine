@@ -238,7 +238,7 @@ test("the window's + offers the pane's kinds less a terminal and the modal rows"
     { kind: 'browser', label: 'Browser', letter: 'B', Glyph: glyph },
     { kind: 'terminal', label: 'Terminal', letter: 'T', Glyph: glyph },
     { kind: 'files', label: 'Files', letter: 'F', Glyph: glyph },
-    { kind: 'agents', label: 'Agents', letter: 'A', Glyph: glyph },
+    { kind: 'agents', label: 'Subagents', letter: 'A', Glyph: glyph },
     { kind: 'reviews', label: 'Reviews', letter: 'R', Glyph: glyph, modalSurfaceId: 'reviews' },
   ])
   assert.deepEqual(

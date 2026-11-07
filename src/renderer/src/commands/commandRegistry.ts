@@ -636,7 +636,7 @@ export const COMMAND_REGISTRY = [
   // "+" menu and a chat's own agent lanes open it.
   command({
     id: 'panel.agents.toggle',
-    title: 'Toggle agents',
+    title: 'Toggle subagents',
     category: 'panel',
     scopes: ['workspace'],
     availability: ['activeWorkspace'],

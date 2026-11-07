@@ -3,7 +3,7 @@ import React from 'react'
 // The context strip tucked under the composer box and one piece with it:
 // rounded at the bottom only, inset from the box's sides, its top hidden under
 // the box's lower edge (owner ruling 2026-10-04). ONE container, because the
-// New chat composer and an open conversation's composer wear the same strip —
+// New chat's composer wears this strip —
 // what it holds differs (a launch's choices; a running chat's facts), the
 // object does not.
 //
@@ -11,8 +11,7 @@ import React from 'react'
 // sit apart by spacing alone — no divider — and each is `whitespace-nowrap`
 // and keeps its width, except a project's name, the item allowed to shrink
 // (truncating at its end), so the controls beside it stay in reach. What does
-// not fit is the host's to move elsewhere (the conversation strip cuts the
-// branch from its front, then folds items into a "⋮" menu); clipping along the line is only the
+// not fit is the host's to move elsewhere.
 // last guard against a host that has not, and it clips sideways alone so a
 // focus ring above or below an item is never cut.
 

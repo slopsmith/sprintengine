@@ -202,7 +202,7 @@ export const STATIC_PANE_KINDS: readonly PaneKindDefinition[] = [
   { kind: 'backlog', label: 'Backlog', letter: 'L', moduleId: 'backlog', Glyph: BacklogGlyph },
   { kind: 'canvas', label: 'Canvas', letter: 'C', moduleId: 'canvas', Glyph: CanvasGlyph },
   // The agents the focused chat sent off to work, running and finished.
-  { kind: 'agents', label: 'Agents', letter: 'A', Glyph: AgentsGlyph },
+  { kind: 'agents', label: 'Subagents', letter: 'A', Glyph: AgentsGlyph },
   // Every picture in the focused chat: what the person attached and what the
   // agent's steps returned.
   { kind: 'library', label: 'Library', letter: 'I', Glyph: LibraryGlyph },

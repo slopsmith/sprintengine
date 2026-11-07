@@ -21,6 +21,7 @@ import {
 import { remoteProjectName } from '../../sidebar/folderGroups'
 import { dispatchFileReveal } from '../../../../utils/fileReveal'
 import { DiffGlyph, FilesGlyph, LibraryGlyph, CanvasGlyph, TerminalGlyph } from '../paneKinds'
+import { ContextRow, PermissionsRow, PullRequestRow, ServerRow, UsageRow } from './ChatPanelFactRows'
 import { ChatPanelOpenNow, type OpenNowProps } from './ChatPanelOpenNow'
 import { ChatPanelSubagents } from './ChatPanelSubagents'
 import { useChatPanelTarget } from './chatPanelTarget'
@@ -166,6 +167,7 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
   }
 
   const changes = facts ? facts.changes : checkout.changes
+  const shownChanges = changes && (changes.added > 0 || changes.removed > 0) ? changes : null
   const branchName = facts ? (facts.branch?.name ?? null) : checkout.branch
   const worktree = facts?.branch?.worktree ?? false
   const changesRow = activityRow('changes')
@@ -185,17 +187,21 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
       <ChatPanelOpenNow {...openNow} activity={activity} />
       <Section title="This chat" inset="flush">
         <PanelCard>
-          {changes || !farMachine ? (
+          {shownChanges || !farMachine ? (
             <PanelRow
               glyph={<DiffGlyph className={`icon-sm ${activityTone(changesRow)}`} />}
               label="Changes"
               meta={
-                changes ? (
-                  <DiffStatPill added={changes.added} removed={changes.removed} ariaLabel={changes.phrase} />
+                shownChanges ? (
+                  <DiffStatPill
+                    added={shownChanges.added}
+                    removed={shownChanges.removed}
+                    ariaLabel={shownChanges.phrase}
+                  />
                 ) : null
               }
               onClick={farMachine ? null : openChanges}
-              ariaLabel={changes ? `Changes, ${changes.phrase}` : 'Changes'}
+              ariaLabel={shownChanges ? `Changes, ${shownChanges.phrase}` : 'Changes'}
             />
           ) : null}
           {filesEnabled || farMachine ? (
@@ -223,10 +229,22 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
                   : () => openPaneTab(workspaceId, { kind: 'git' })
               }
               ariaLabel={worktree ? `Branch ${branchName}, in a worktree` : `Branch ${branchName}`}
+              dataBranch={branchName}
             />
           ) : null}
+          {facts ? <PullRequestRow facts={facts} /> : null}
+          {facts?.localServers ? <ServerRow localServers={facts.localServers} /> : null}
         </PanelCard>
       </Section>
+      {facts && (facts.permissions || facts.permissionLabel || facts.context || facts.usageLimits) ? (
+        <Section title="Session" inset="flush">
+          <PanelCard>
+            <PermissionsRow facts={facts} />
+            <ContextRow facts={facts} />
+            <UsageRow facts={facts} />
+          </PanelCard>
+        </Section>
+      ) : null}
       <Section title="Project" inset="flush">
         <PanelCard>
           <PanelRow

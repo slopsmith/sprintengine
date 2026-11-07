@@ -660,7 +660,7 @@ function pullRequestMenuItems(pullRequests: readonly BranchPullRequest[], now: n
 }
 
 /**
- * What the open chat's composer strip says about the pull requests its
+ * What the panel's Pull request row says about the pull requests its
  * conversation opened (owner ruling 2026-10-04): the words on the button, and
  * the pull request they are about. Null draws nothing.
  *
@@ -679,7 +679,7 @@ function pullRequestMenuItems(pullRequests: readonly BranchPullRequest[], now: n
 export function stripPullRequestCopy(
   list: readonly BranchPullRequest[],
   now: number,
-): { pr: BranchPullRequest; text: string; tooltip: PullRequestCopy } | null {
+): { pr: BranchPullRequest; text: string; short: string; tooltip: PullRequestCopy } | null {
   const shown = list.filter((pr) => pr.state !== 'closed')
   const pr = primaryPullRequest(shown)
   const tooltip = peekMarkCopy(shown, now)
@@ -694,20 +694,29 @@ export function stripPullRequestCopy(
         : pr.isDraft
           ? `Open draft PR ${number}`
           : `Open PR ${number}`
-  return { pr, text, tooltip }
+  // The panel's row is already named Pull request, so its words start at the number.
+  const short = pr.forge
+    ? `Opened ${number}`
+    : pr.state === 'merged'
+      ? `Merged ${number}`
+      : pr.watch
+        ? `${number} · ${pullRequestWatchWords(pr.watch)}`
+        : pr.isDraft
+          ? `Draft ${number}`
+          : number
+  return { pr, text, short, tooltip }
 }
 
 /**
- * The open chat's "Open PR" button, at the bottom of the conversation on the
- * composer's strip (owner ruling 2026-10-04). Nothing is drawn when the
- * conversation opened no pull request (decision 3).
+ * The open chat's pull request, on the panel's Pull request row. Nothing is
+ * drawn when the conversation opened no pull request (decision 3).
  *
  * The same split control the peek wears: the button opens the pull request in
  * the browser, through the app's one external-open path, and with more than
  * one a chevron opens the whole record, grouped by state. Its words say the
  * state; the glyph and its tone agree with them.
  */
-export function PullRequestStripButton({
+export function PullRequestPanelButton({
   pullRequests,
   now,
   onStopWatching,
@@ -722,7 +731,7 @@ export function PullRequestStripButton({
 }): JSX.Element | null {
   const copy = stripPullRequestCopy(pullRequests, now)
   if (!copy) return null
-  const { pr, text, tooltip } = copy
+  const { pr, text, short, tooltip } = copy
   const watching = pr.watch && pr.state === 'open' && onStopWatching ? pr : null
   const trouble = watching?.watch ? pullRequestWatchIsTrouble(watching.watch) : false
   const items = pullRequestMenuItems(pullRequests, now)
@@ -738,7 +747,7 @@ export function PullRequestStripButton({
       onSelect: () => onStopWatching?.(watching.url),
     })
   return (
-    <Tooltip content={<MarkTooltip copy={tooltip} />} multiline placement="top" wrapperClassName="flex shrink-0">
+    <Tooltip content={<MarkTooltip copy={tooltip} />} multiline placement="left" wrapperClassName="flex min-w-0">
       {/* A plain wrapper: `SplitButton` takes a closed set of props, so the
           tooltip's handlers live here (see `PullRequestPeekMark`). */}
       <span className="flex items-center">
@@ -749,11 +758,11 @@ export function PullRequestStripButton({
               <span className="inline-flex" style={{ color: PULL_REQUEST_TONE_VAR[pullRequestTone(pr.state)] }}>
                 <PullRequestGlyph state={pr.state} className="icon-xs" />
               </span>
-              <span className={trouble ? 'text-[color:var(--tone-error)]' : undefined}>{text}</span>
+              <span className={trouble ? 'text-[color:var(--tone-error)]' : undefined}>{short}</span>
             </span>
           }
           primaryAriaLabel={`${text}. ${tooltip.ariaLabel}`}
-          primaryData={{ name: 'data-strip-pull-request', value: pr.url }}
+          primaryData={{ name: 'data-panel-pull-request', value: pr.url }}
           menuAriaLabel={
             watching
               ? `All pull requests from this conversation, ${pullRequests.length}, and Stop watching`

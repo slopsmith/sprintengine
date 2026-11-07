@@ -1,10 +1,10 @@
 import { JSDOM } from 'jsdom'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 
-import type { BranchPullRequest } from '../../../../../shared/git/pull-request'
+import type { BranchPullRequest } from '../../../../../../shared/git/pull-request'
 
-// The open chat's "Open PR" button on the composer's strip (owner ruling
-// 2026-10-04): what it says for each state, that it is drawn only for a
+// The open chat's pull request on the panel's row (owner ruling 2026-10-04):
+// what it says for each state, that it is drawn only for a
 // conversation that opened a pull request, and that it opens the pull request
 // in the browser.
 
@@ -89,7 +89,7 @@ async function mount(node: React.ReactNode) {
 }
 
 test('the words carry the state, and a pull request closed unmerged is left off as the sidebar leaves it off', async () => {
-  const { stripPullRequestCopy } = await import('../../workspace/PullRequestMark')
+  const { stripPullRequestCopy } = await import('../../PullRequestMark')
   const text = (list: BranchPullRequest[]) => stripPullRequestCopy(list, NOW)?.text ?? null
   expect(text([])).toBe(null)
   expect(text([pr({ number: 12 })])).toBe('Open PR #12')
@@ -120,51 +120,32 @@ test('the words carry the state, and a pull request closed unmerged is left off 
 })
 
 test('the strip draws the button only for a conversation that opened a pull request, and it opens it', async () => {
-  const { ConversationComposerStrip } = await import('./conversationStrip')
-  const none = await mount(
-    <ConversationComposerStrip machine={null} branch={null} changes={null} context={null} now={NOW} />,
-  )
+  const { PanelFactRows } = await import('./panelFactsFixture')
+  const none = await mount(<PanelFactRows context={null} now={NOW} />)
   expect(none.container.innerHTML).toBe('')
   await none.unmount()
 
   const closedOnly = await mount(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
-      context={null}
-      pullRequests={[pr({ number: 2, state: 'closed' })]}
-      now={NOW}
-    />,
+    <PanelFactRows context={null} pullRequests={[pr({ number: 2, state: 'closed' })]} now={NOW} />,
   )
-  expect(closedOnly.container.querySelector('[data-strip-pull-request]')).toBe(null)
+  expect(closedOnly.container.querySelector('[data-panel-pull-request]')).toBe(null)
   await closedOnly.unmount()
 
   const one = await mount(
-    <ConversationComposerStrip
-      machine={null}
-      branch={{ name: 'feature/marks', worktree: false, onOpen: null }}
-      changes={null}
-      context={{ used: 40_000, total: 200_000 }}
-      pullRequests={[pr({ number: 12 })]}
-      now={NOW}
-    />,
+    <PanelFactRows context={{ used: 40_000, total: 200_000 }} pullRequests={[pr({ number: 12 })]} now={NOW} />,
   )
-  const button = one.container.querySelector<HTMLButtonElement>('[data-strip-pull-request]')
-  expect(button?.textContent).toContain('Open PR #12')
+  const button = one.container.querySelector<HTMLButtonElement>('[data-panel-pull-request]')
+  expect(button?.textContent).toContain('#12')
   expect(button?.getAttribute('aria-label')).toMatch(
     /^Open PR #12\. Pull request 12, open: Change 12\. Open it on GitHub$/,
   )
-  // The button sits before the ring, at the strip's right end.
-  const slots = [...one.container.querySelectorAll('[data-strip-pull-request-slot], [data-strip-context]')]
-  expect(slots.map((slot) => slot.hasAttribute('data-strip-context'))).toEqual([false, true])
   await one.act(async () => button?.click())
   expect(opened).toEqual(['https://github.com/acme/app/pull/12'])
   await one.unmount()
 })
 
 test('one slot: an open pull request wins, then Create PR, then a merged one', async () => {
-  const { pullRequestSlotChoice } = await import('./createPullRequest')
+  const { pullRequestSlotChoice } = await import('../../../panels/agentChat/createPullRequest')
   expect(pullRequestSlotChoice([pr({ number: 1 })], true)).toBe('open')
   expect(pullRequestSlotChoice([pr({ number: 1, isDraft: true })], true)).toBe('open')
   expect(pullRequestSlotChoice([pr({ number: 1, state: 'merged' })], true)).toBe('create')
@@ -191,21 +172,18 @@ test('Create PR takes the slot, drafts, pushes, creates, and says on the strip w
       return { ok: true, kind: 'created', url: 'https://github.com/acme/app/pull/40' }
     },
   })
-  const { useWorkspaceStore } = await import('../../../store/workspaceStore')
+  const { useWorkspaceStore } = await import('../../../../store/workspaceStore')
   useWorkspaceStore.setState((state) => ({
     ...state,
     appSettings: { ...state.appSettings, textGeneration: { enabled: true, engine: { cli: 'claude-code', model: '' } } },
     pluginCatalogEntries: [{ id: 'claude-code' }] as never,
   }))
-  const { ConversationComposerStrip } = await import('./conversationStrip')
-  const { localPullRequestHost } = await import('./pullRequestHost')
+  const { PanelFactRows } = await import('./panelFactsFixture')
+  const { localPullRequestHost } = await import('../../../panels/agentChat/pullRequestHost')
   let settled = 0
   const holds: boolean[] = []
   const mounted = await mount(
-    <ConversationComposerStrip
-      machine={null}
-      branch={{ name: 'feature/marks', worktree: false, onOpen: null }}
-      changes={null}
+    <PanelFactRows
       context={null}
       pullRequests={[pr({ number: 2, state: 'merged' })]}
       createPullRequest={{
@@ -216,7 +194,7 @@ test('Create PR takes the slot, drafts, pushes, creates, and says on the strip w
       now={NOW}
     />,
   )
-  expect(mounted.container.querySelector('[data-strip-pull-request]')).toBe(null)
+  expect(mounted.container.querySelector('[data-panel-pull-request]')).toBe(null)
   const button = [...mounted.container.querySelectorAll('button')].find((node) =>
     node.textContent?.includes('Create PR'),
   )
@@ -246,14 +224,14 @@ test('a held Create PR failure on a checkout no longer ready is dismissed, not r
     draftPullRequestText: async () => ({ ok: true, value: { title: 'feat: marks', body: 'Body' }, ms: 1 }),
     pushForPullRequest: async () => ({ ok: false, message: 'The push was refused.' }),
   })
-  const { useWorkspaceStore } = await import('../../../store/workspaceStore')
+  const { useWorkspaceStore } = await import('../../../../store/workspaceStore')
   useWorkspaceStore.setState((state) => ({
     ...state,
     appSettings: { ...state.appSettings, textGeneration: { enabled: true, engine: { cli: 'claude-code', model: '' } } },
     pluginCatalogEntries: [{ id: 'claude-code' }] as never,
   }))
-  const { CreatePullRequestControl } = await import('./createPullRequest')
-  const { localPullRequestHost } = await import('./pullRequestHost')
+  const { PanelFactRows } = await import('./panelFactsFixture')
+  const { localPullRequestHost } = await import('../../../panels/agentChat/pullRequestHost')
   const holds: boolean[] = []
   const props = {
     host: localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' }),
@@ -265,7 +243,7 @@ test('a held Create PR failure on a checkout no longer ready is dismissed, not r
   const container = dom.window.document.createElement('div')
   dom.window.document.body.appendChild(container)
   const root = createRoot(container)
-  await act(async () => root.render(<CreatePullRequestControl {...props} ready />))
+  await act(async () => root.render(<PanelFactRows createPullRequest={{ ...props, ready: true }} />))
   const buttonNamed = (text: string) =>
     [...container.querySelectorAll('button')].find((node) => node.textContent?.includes(text))
   await act(async () => buttonNamed('Create PR')?.click())
@@ -277,7 +255,7 @@ test('a held Create PR failure on a checkout no longer ready is dismissed, not r
   // Still ready: the failure stays beside Create PR, which tries again.
   expect(buttonNamed('Create PR')).toBeTruthy()
   // No longer ready: Create PR could only fail, so the failure is dismissed.
-  await act(async () => root.render(<CreatePullRequestControl {...props} ready={false} />))
+  await act(async () => root.render(<PanelFactRows createPullRequest={{ ...props, ready: false }} />))
   expect(buttonNamed('Create PR')).toBe(undefined)
   await act(async () => buttonNamed('Dismiss')?.click())
   expect(container.querySelector('[data-create-pull-request-error]')).toBe(null)
@@ -303,14 +281,14 @@ test('a pull request the branch already had is opened, not claimed for this chat
       return { ok: true, kind: 'existing', url: 'https://github.com/acme/app/pull/41' }
     },
   })
-  const { useWorkspaceStore } = await import('../../../store/workspaceStore')
+  const { useWorkspaceStore } = await import('../../../../store/workspaceStore')
   useWorkspaceStore.setState((state) => ({
     ...state,
     appSettings: { ...state.appSettings, textGeneration: { enabled: true, engine: { cli: 'claude-code', model: '' } } },
     pluginCatalogEntries: [{ id: 'claude-code' }] as never,
   }))
-  const { CreatePullRequestControl } = await import('./createPullRequest')
-  const { localPullRequestHost } = await import('./pullRequestHost')
+  const { PanelFactRows } = await import('./panelFactsFixture')
+  const { localPullRequestHost } = await import('../../../panels/agentChat/pullRequestHost')
   let settled = 0
   const { act } = await import('react')
   const { createRoot } = await import('react-dom/client')
@@ -319,10 +297,12 @@ test('a pull request the branch already had is opened, not claimed for this chat
   const root = createRoot(container)
   await act(async () =>
     root.render(
-      <CreatePullRequestControl
-        host={localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' })}
-        onSettled={() => (settled += 1)}
-        ready
+      <PanelFactRows
+        createPullRequest={{
+          host: localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' }),
+          onSettled: () => (settled += 1),
+          ready: true,
+        }}
       />,
     ),
   )
@@ -358,20 +338,22 @@ test('the confirm step says how many uncommitted changes the pull request leaves
       return { ok: true, kind: 'existing', url: 'https://github.com/acme/app/pull/42' }
     },
   })
-  const { useWorkspaceStore } = await import('../../../store/workspaceStore')
+  const { useWorkspaceStore } = await import('../../../../store/workspaceStore')
   useWorkspaceStore.setState((state) => ({
     ...state,
     appSettings: { ...state.appSettings, textGeneration: { enabled: true, engine: { cli: 'claude-code', model: '' } } },
     pluginCatalogEntries: [{ id: 'claude-code' }] as never,
   }))
-  const { CreatePullRequestControl } = await import('./createPullRequest')
-  const { localPullRequestHost } = await import('./pullRequestHost')
+  const { PanelFactRows } = await import('./panelFactsFixture')
+  const { localPullRequestHost } = await import('../../../panels/agentChat/pullRequestHost')
   let settled = 0
   const mounted = await mount(
-    <CreatePullRequestControl
-      host={localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' })}
-      onSettled={() => (settled += 1)}
-      ready
+    <PanelFactRows
+      createPullRequest={{
+        host: localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' }),
+        onSettled: () => (settled += 1),
+        ready: true,
+      }}
     />,
   )
   const button = [...mounted.container.querySelectorAll('button')].find((node) =>
@@ -391,7 +373,7 @@ test('the confirm step says how many uncommitted changes the pull request leaves
 })
 
 test('one uncommitted change is said in the singular', async () => {
-  const { uncommittedNote } = await import('./createPullRequest')
+  const { uncommittedNote } = await import('../../../panels/agentChat/createPullRequest')
   expect(uncommittedNote(1)).toBe('1 uncommitted change won’t be included: only the branch’s commits are pushed.')
 })
 
@@ -409,7 +391,7 @@ async function waitFor<T>(read: () => T | null | undefined): Promise<T> {
 }
 
 test('a watched pull request says what it waits on, in words, and offers Stop watching behind the chevron', async () => {
-  const { stripPullRequestCopy } = await import('../../workspace/PullRequestMark')
+  const { stripPullRequestCopy } = await import('../../PullRequestMark')
   const watched = (watch: NonNullable<BranchPullRequest['watch']>) =>
     stripPullRequestCopy([pr({ number: 12, watch })], NOW)?.text ?? null
   expect(watched({ since: NOW, waitingOn: 'first-read' })).toBe('PR #12 · Watching')
@@ -425,21 +407,18 @@ test('a watched pull request says what it waits on, in words, and offers Stop wa
     stripPullRequestCopy([pr({ number: 12, state: 'merged', watch: { since: NOW, waitingOn: 'merge' } })], NOW)?.text,
   ).toBe('Merged PR #12')
 
-  const { ConversationComposerStrip } = await import('./conversationStrip')
+  const { PanelFactRows } = await import('./panelFactsFixture')
   const stopped: string[] = []
   const strip = await mount(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
+    <PanelFactRows
       context={null}
       pullRequests={[pr({ number: 12, watch: { since: NOW, waitingOn: 'checks-failed', failedChecks: 1 } })]}
       onStopWatchingPullRequest={(url) => stopped.push(url)}
       now={NOW}
     />,
   )
-  const button = strip.container.querySelector<HTMLButtonElement>('[data-strip-pull-request]')
-  expect(button?.textContent).toContain('PR #12 · Check failed')
+  const button = strip.container.querySelector<HTMLButtonElement>('[data-panel-pull-request]')
+  expect(button?.textContent).toContain('#12 · Check failed')
   expect(button?.getAttribute('aria-label')).toMatch(/Check failed\. Studio is watching it: a check failed/)
   const chevron = strip.container.querySelector<HTMLButtonElement>('button[aria-label$="and Stop watching"]')
   expect(chevron).not.toBe(null)
@@ -454,17 +433,14 @@ test('a watched pull request says what it waits on, in words, and offers Stop wa
 
   // Where the window cannot stop it (a paired machine's chat), it says the words and offers nothing.
   const elsewhere = await mount(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
+    <PanelFactRows
       context={null}
       pullRequests={[pr({ number: 12, watch: { since: NOW, waitingOn: 'review' } })]}
       now={NOW}
     />,
   )
   expect(elsewhere.container.querySelector('button[aria-label$="and Stop watching"]')).toBe(null)
-  expect(elsewhere.container.textContent).toContain('PR #12 · Waiting for review')
+  expect(elsewhere.container.textContent).toContain('#12 · Waiting for review')
   await elsewhere.unmount()
 })
 
@@ -487,21 +463,23 @@ test('on GitLab the control says merge request, and a page opened instead says w
       descriptionLeftOut: true,
     }),
   })
-  const { useWorkspaceStore } = await import('../../../store/workspaceStore')
+  const { useWorkspaceStore } = await import('../../../../store/workspaceStore')
   useWorkspaceStore.setState((state) => ({
     ...state,
     appSettings: { ...state.appSettings, textGeneration: { enabled: true, engine: { cli: 'claude-code', model: '' } } },
     pluginCatalogEntries: [{ id: 'claude-code' }] as never,
   }))
-  const { CreatePullRequestControl } = await import('./createPullRequest')
-  const { localPullRequestHost } = await import('./pullRequestHost')
+  const { PanelFactRows } = await import('./panelFactsFixture')
+  const { localPullRequestHost } = await import('../../../panels/agentChat/pullRequestHost')
   let settled = 0
   const { container, act, unmount } = await mount(
-    <CreatePullRequestControl
-      host={localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' })}
-      onSettled={() => (settled += 1)}
-      forge="gitlab"
-      ready
+    <PanelFactRows
+      createPullRequest={{
+        host: localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' }),
+        onSettled: () => (settled += 1),
+        forge: 'gitlab',
+        ready: true,
+      }}
     />,
   )
   const button = [...container.querySelectorAll('button')].find((node) => node.textContent?.includes('Create MR'))
@@ -552,21 +530,23 @@ async function confirmCreate(outcome: unknown, openResult: unknown, draft = { ti
       return openResult
     },
   })
-  const { useWorkspaceStore } = await import('../../../store/workspaceStore')
+  const { useWorkspaceStore } = await import('../../../../store/workspaceStore')
   useWorkspaceStore.setState((state) => ({
     ...state,
     appSettings: { ...state.appSettings, textGeneration: { enabled: true, engine: { cli: 'claude-code', model: '' } } },
     pluginCatalogEntries: [{ id: 'claude-code' }] as never,
   }))
-  const { CreatePullRequestControl } = await import('./createPullRequest')
-  const { localPullRequestHost } = await import('./pullRequestHost')
+  const { PanelFactRows } = await import('./panelFactsFixture')
+  const { localPullRequestHost } = await import('../../../panels/agentChat/pullRequestHost')
   let settled = 0
   const { container, act, unmount } = await mount(
-    <CreatePullRequestControl
-      host={localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' })}
-      onSettled={() => (settled += 1)}
-      forge="gitlab"
-      ready
+    <PanelFactRows
+      createPullRequest={{
+        host: localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' }),
+        onSettled: () => (settled += 1),
+        forge: 'gitlab',
+        ready: true,
+      }}
     />,
   )
   try {

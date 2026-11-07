@@ -573,8 +573,8 @@ export default function CommandPalette({
             ? [
                 {
                   id: 'panel.agents.toggle',
-                  label: 'Toggle agents',
-                  searchLabel: 'Agents',
+                  label: 'Toggle subagents',
+                  searchLabel: 'Subagents',
                   shortcut: shortcutFor('panel.agents.toggle'),
                   run: () => {
                     onRunCommand('panel.agents.toggle')

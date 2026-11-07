@@ -7,9 +7,8 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, test } from 'vitest'
 
-import type { StudioLocalServer } from '../../../../../../packages/studio-protocol/src/public'
-import { ConversationComposerStrip } from './conversationStrip'
-import { localPullRequestHost } from './pullRequestHost'
+import type { StudioLocalServer } from '../../../../../../../packages/studio-protocol/src/public'
+import { PanelFactRows } from './panelFactsFixture'
 
 function server(overrides: Partial<StudioLocalServer> = {}): StudioLocalServer {
   return {
@@ -52,41 +51,26 @@ async function render(node: React.ReactNode): Promise<HTMLElement> {
 }
 
 test('a conversation with no servers draws nothing for them', async () => {
-  const none = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
-      context={null}
-      localServers={{ workspaceId: 'ws-1', servers: [] }}
-    />,
-  )
+  const none = await render(<PanelFactRows context={null} localServers={{ workspaceId: 'ws-1', servers: [] }} />)
   expect(none.innerHTML).toBe('')
 })
 
 test('one server is named with its state, before the ring', async () => {
   const one = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
+    <PanelFactRows
       context={{ used: 40_000, total: 200_000 }}
       localServers={{ workspaceId: 'ws-1', servers: [server()] }}
     />,
   )
-  const button = one.querySelector('[data-strip-local-servers]')
-  expect(button?.textContent).toBe('localhost:5173·Running')
+  const button = one.querySelector('[data-panel-local-servers]')
+  expect(button?.textContent).toContain('localhost:5173')
+  expect(button?.textContent).toContain('Running')
   expect(button?.getAttribute('aria-label')).toBe('Local server localhost:5173, running')
-  const slots = Array.from(one.querySelectorAll('[data-strip-local-servers-slot], [data-strip-context]'))
-  expect(slots.map((slot) => slot.hasAttribute('data-strip-context'))).toEqual([false, true])
 })
 
 test('several servers are counted with how many are up', async () => {
   const many = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
+    <PanelFactRows
       context={null}
       localServers={{
         workspaceId: 'ws-1',
@@ -97,22 +81,6 @@ test('several servers are counted with how many are up', async () => {
       }}
     />,
   )
-  expect(many.querySelector('[data-strip-local-servers]')?.textContent).toBe('2 servers·1 running')
-})
-
-test("one item takes the line's slack, so the pinned end sits together: Create PR and the ring", async () => {
-  const strip = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
-      context={{ used: 40_000, total: 200_000 }}
-      createPullRequest={{
-        host: localPullRequestHost('/Users/dev/app', { workspaceId: 'ws-1', agentId: 'agent-1' }),
-        onSettled: () => undefined,
-      }}
-    />,
-  )
-  expect(strip.querySelector('[data-strip-pull-request-slot]')).not.toBeNull()
-  expect(strip.querySelectorAll('.ml-auto').length).toBe(1)
+  expect(many.querySelector('[data-panel-local-servers]')?.textContent).toContain('2 servers')
+  expect(many.querySelector('[data-panel-local-servers]')?.textContent).toContain('1 running')
 })

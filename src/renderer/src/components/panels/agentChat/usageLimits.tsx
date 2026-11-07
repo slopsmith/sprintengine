@@ -15,7 +15,7 @@ import {
 } from '../../../../../shared/usage-limits'
 import { useRelativeNow, useRelativeNowFor } from '../../../hooks/useRelativeNow'
 import { retainUsageLimits, selectUsageLimitSnapshot, useUsageLimitsStore } from '../../../store/usageLimitsStore'
-import { GhostButton, Popover, Tooltip } from '../../ui'
+import { Popover, type PopoverPlacement, type PopoverTriggerArgs } from '../../ui'
 import { Meter } from '../../ui/Meter'
 import { Modal, ModalBody, ModalHeader } from '../../ui/Modal'
 import { formatTimeOfDay } from '../../../utils/clockFormat'
@@ -185,17 +185,23 @@ export function useUsageLimitSnapshot(provider: UsageLimitProvider | null): Usag
 }
 
 /**
- * The strip's mark: the provider's fullest window as a small bar, in the warn
- * tone at 90% or at the limit. The tooltip says it in words; a click opens
- * every provider's windows: this computer's, or, for a chat on a paired
- * machine, that machine's (`elsewhere`), as its agents reported them there.
+ * Every provider's windows, opened from the panel's Usage row: this computer's,
+ * or, for a chat on a paired machine, that machine's (`elsewhere`), as its
+ * agents reported them there. The row is the caller's: `renderTrigger` draws it,
+ * with the provider's fullest window in hand, in words.
  */
-export function UsageLimitsStripButton({
+export function UsageLimitsPopover({
   snapshot,
   elsewhere,
+  placement = 'bottom-end',
+  renderTrigger,
 }: {
   snapshot: UsageLimitSnapshot
   elsewhere?: { machineName: string; state: UsageLimitsState }
+  placement?: PopoverPlacement
+  renderTrigger: (
+    args: PopoverTriggerArgs & { label: string; window: UsageLimitWindow | null; warn: boolean },
+  ) => React.ReactNode
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   // Redrawn when the words change, at most once a minute: a reset passing
@@ -213,28 +219,11 @@ export function UsageLimitsStripButton({
       onOpenChange={setOpen}
       ariaLabel="Usage limits"
       popupRole="dialog"
-      placement="top-end"
+      placement={placement}
       surfaceClassName="w-[300px] p-3"
-      renderTrigger={({ ref, triggerProps, togglePopover }) => (
-        <Tooltip content={label} placement="top" wrapperClassName="flex">
-          <GhostButton
-            ref={ref}
-            size="xs"
-            tone="subtle"
-            onClick={togglePopover}
-            {...triggerProps}
-            aria-label={label}
-            data-strip-usage-limits={snapshot.provider}
-            className="px-1.5"
-          >
-            <Meter
-              compact
-              value={window ? (window.status === 'rejected' ? 100 : window.usedPercent) : null}
-              warn={window ? usageWindowIsWarning(window, now) : false}
-            />
-          </GhostButton>
-        </Tooltip>
-      )}
+      renderTrigger={(args) =>
+        renderTrigger({ ...args, label, window, warn: window ? usageWindowIsWarning(window, now) : false })
+      }
     >
       <UsageLimitsPanel state={state} first={snapshot.provider} />
     </Popover>

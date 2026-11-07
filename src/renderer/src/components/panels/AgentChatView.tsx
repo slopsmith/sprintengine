@@ -135,11 +135,14 @@ import { ComposerContextChips, SkillContextChip, useComposerContextPicker } from
 import { ComposerPlusMenu } from '../workspace/agentComposer/ComposerPlusMenu'
 import { unwatchPullRequest, usePullRequestsOfConversation } from '../workspace/useConversationPullRequests'
 import { useLocalServersOfConversation } from '../workspace/useLocalServers'
-import { useCreatePullRequestState } from './agentChat/createPullRequest'
+import {
+  CreatePullRequestDialogHost,
+  useCreatePullRequestFlow,
+  useCreatePullRequestState,
+} from './agentChat/createPullRequest'
 import { localPullRequestHost } from './agentChat/pullRequestHost'
 import { conversationContextReading } from './agentChat/contextReading'
 import type { ContextBreakdownSource } from './agentChat/ContextBreakdown'
-import { ConversationComposerStrip } from './agentChat/conversationStrip'
 import { useConversationStripFacts } from './agentChat/conversationStripFacts'
 import { useChatActivityCard } from './agentChat/ChatActivityCard'
 import { usePublishChatPanelFacts, type ChatPanelPermissions } from './agentChat/chatPanelStore'
@@ -4090,6 +4093,7 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureRevision])
   const [createPullRequestAsk, setCreatePullRequestAsk] = useState(0)
+  const askCreatePullRequestAgain = useCallback(() => setCreatePullRequestAsk((count) => count + 1), [])
   const createPullRequestState = useCreatePullRequestState(
     // Not asked while the conversation owns an open pull request: the slot is that one's.
     conversationPullRequests.some((pr) => pr.state === 'open') ? null : pullRequestHost,
@@ -4101,22 +4105,25 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
       createPullRequestAsk,
     ].join('|'),
   )
-  // Held while the control shows its dialog, a step or a failure: the pull
+  const createPullRequestForge = createPullRequestState?.forge ?? null
+  // Held here rather than by the panel's control, which unmounts whenever the
+  // panel closes or a tool takes the column: a step in progress or a failure to
+  // record the pull request is still there when it comes back.
+  const createPullRequestFlow = useCreatePullRequestFlow(
+    pullRequestHost,
+    createPullRequestForge,
+    askCreatePullRequestAgain,
+  )
+  // Held on while the flow shows its dialog, a step or a failure: the pull
   // request it just opened makes the checkout stop reading as ready, and that
   // must not take a failure to record it off the screen unread.
-  const [createPullRequestHeld, setCreatePullRequestHeld] = useState(false)
+  const createPullRequestReady = createPullRequestState?.readiness.ready === true
   const createPullRequest = useMemo(
     () =>
-      pullRequestHost && (createPullRequestState?.readiness.ready || createPullRequestHeld)
-        ? {
-            host: pullRequestHost,
-            onSettled: () => setCreatePullRequestAsk((count) => count + 1),
-            onHoldChange: setCreatePullRequestHeld,
-            ready: createPullRequestState?.readiness.ready === true,
-            forge: createPullRequestState?.forge ?? null,
-          }
+      createPullRequestFlow && (createPullRequestReady || createPullRequestFlow.held)
+        ? { flow: createPullRequestFlow, ready: createPullRequestReady, forge: createPullRequestForge }
         : null,
-    [pullRequestHost, createPullRequestState, createPullRequestHeld],
+    [createPullRequestFlow, createPullRequestReady, createPullRequestForge],
   )
   // ── What the right-hand panel says about this chat ───────────────────────
   // Published rather than drawn here: the panel stands beside the chat. Each
@@ -4181,6 +4188,7 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
     usageLimits: stripUsageLimits,
     ...(usageLimitsElsewhere ? { usageLimitsElsewhere } : {}),
     permissions: panelPermissions,
+    permissionLabel: chatCli ? agentPermissionChipLabel(permissionOptions, permissionPreset, permissionMode) : null,
   })
   return (
     <ConversationLinkProvider
@@ -4987,27 +4995,8 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
                 />
               ) : null}
             </div>
-            {/* Tokens only, never money: a chat runs on the person's CLI
-                subscription, and the SDK's dollar figure is an API-price
-                estimate that reads as a bill. */}
-            <ConversationComposerStrip
-              machine={stripFacts.machine}
-              branch={stripFacts.branch}
-              changes={stripFacts.changes}
-              context={contextReading}
-              contextBreakdown={contextBreakdownSource}
-              pullRequests={conversationPullRequests}
-              {...(transport.kind !== 'remote'
-                ? { onStopWatchingPullRequest: stopWatchingPullRequest }
-                : remoteUnwatch
-                  ? { onStopWatchingPullRequest: stopRemoteWatch }
-                  : {})}
-              createPullRequest={createPullRequest}
-              localServers={stripLocalServers}
-              usageLimits={stripUsageLimits}
-              {...(usageLimitsElsewhere ? { usageLimitsElsewhere } : {})}
-            />
           </div>
+          <CreatePullRequestDialogHost flow={createPullRequestFlow} forge={createPullRequestForge} />
           {replay ? (
             <ConversationReplayView
               source={replay}

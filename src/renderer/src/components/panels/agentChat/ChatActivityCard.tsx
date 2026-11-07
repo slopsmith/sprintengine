@@ -118,7 +118,7 @@ export function chatActivityRows(
       case 'agents': {
         const agents = activity.agents ?? { total: 0, working: 0 }
         return row(
-          `Agents · ${agents.total}`,
+          `Subagents · ${agents.total}`,
           agents.working ? `${agents.working} working` : 'All done',
           agents.working > 0,
           `${agents.total}:${agents.working}`,

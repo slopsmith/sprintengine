@@ -112,7 +112,7 @@ export {
 export { Popover } from './Popover'
 export { FilterMenu } from './FilterMenu'
 export type { FilterMenuGroup } from './FilterMenu'
-export type { PopoverProps, PopoverPlacement } from './Popover'
+export type { PopoverProps, PopoverPlacement, PopoverTriggerArgs } from './Popover'
 export { UseSkillInAgentMenu } from './UseSkillInAgentMenu'
 export type { UseSkillInAgentMenuProps } from './UseSkillInAgentMenu'
 export { useWorkspaceSkills, InlineSkillPicker, SkillPickerPopover } from './SkillPickerPopover'

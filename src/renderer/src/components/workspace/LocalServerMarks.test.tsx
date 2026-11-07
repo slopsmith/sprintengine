@@ -3,7 +3,7 @@
 // Where the local servers agents started are seen: the open chat's strip (the
 // conversation's servers, running or not, in words) and the sidebar row's mark
 // (only while one is up). The strip's own placement is
-// conversationStripLocalServers.test.tsx.
+// pane/panel/ChatPanelLocalServers.test.tsx.
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, test } from 'vitest'

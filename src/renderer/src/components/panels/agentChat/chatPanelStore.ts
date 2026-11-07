@@ -1,13 +1,13 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
 import type { BranchPullRequest } from '../../../../../shared/git/pull-request'
+import type { MachineIdentity } from '../../../../../shared/machine-identity'
 import type { UsageLimitSnapshot, UsageLimitsState } from '../../../../../shared/usage-limits'
 import type { CliPermissionPreset } from '../../../../../shared/electron-api'
 import type { StudioLocalServer } from '../../../../../../packages/studio-protocol/src/public'
 import type { AgentCli } from '../../../types/workspace'
 import type { PermissionModeOption } from '../../workspace/agentComposer/agentSpawnShared'
 import type { ContextBreakdownSource } from './ContextBreakdown'
-import type { ConversationStripBranch, ConversationStripChanges, ConversationStripMachine } from './conversationStrip'
 import type { CreatePullRequestSlot } from './createPullRequest'
 
 // What each open chat says about itself, for the right-hand panel, which draws
@@ -16,6 +16,15 @@ import type { CreatePullRequestSlot } from './createPullRequest'
 // both the same way and knows nothing about which it is drawing. Nothing here
 // reads a transcript; `chatActivityStore` is the pattern, and holds what the
 // chat touched.
+
+export type ChatPanelMachine = { name: string; identity: MachineIdentity }
+export type ChatPanelBranch = { name: string; worktree: boolean; onOpen: (() => void) | null }
+export type ChatPanelChanges = {
+  added: number
+  removed: number
+  /** The counts in words: "3 files added, 2 removed". */
+  phrase: string
+}
 
 export type ChatPanelPermissions = {
   options: readonly PermissionModeOption[]
@@ -37,11 +46,11 @@ export type ChatPanelFacts = {
   harnessLabel: string | null
   modelLabel: string | null
   /** Where the chat runs, when that is not this computer. */
-  machine: ConversationStripMachine | null
+  machine: ChatPanelMachine | null
   /** The chat runs on a paired machine, so its checkout and terminals are over there. */
   remote: boolean
-  branch: ConversationStripBranch | null
-  changes: ConversationStripChanges | null
+  branch: ChatPanelBranch | null
+  changes: ChatPanelChanges | null
   /** The context reading; null while the runtime has reported none. */
   context: { used: number; total: number } | null
   contextBreakdown: ContextBreakdownSource | null
@@ -60,6 +69,8 @@ export type ChatPanelFacts = {
   usageLimitsElsewhere?: { machineName: string; state: UsageLimitsState }
   /** Null where this chat's preset cannot be changed. */
   permissions: ChatPanelPermissions | null
+  /** The preset in words, where this chat has one to say. */
+  permissionLabel: string | null
 }
 
 const published = new Map<string, ChatPanelFacts>()

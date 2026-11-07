@@ -14,7 +14,7 @@ import type {
   ConversationContextBreakdownResult,
 } from '../../../../../shared/conversation-runtime'
 import { ContextBreakdownPanel, resetContextBreakdownCache, type ContextBreakdownSource } from './ContextBreakdown'
-import { ConversationComposerStrip } from './conversationStrip'
+import { PanelFactRows } from '../../workspace/pane/panel/panelFactsFixture'
 
 const MEASURED = new Date(2026, 9, 21, 15, 12).getTime()
 
@@ -96,16 +96,14 @@ function source(
 const CONTEXT = { used: 61_000, total: 200_000 }
 
 async function openRing(strip: HTMLElement): Promise<HTMLElement> {
-  const trigger = strip.querySelector<HTMLButtonElement>('[data-strip-context-button]')!
+  const trigger = strip.querySelector<HTMLButtonElement>('[data-panel-context]')!
   await act(async () => trigger.click())
   return document.querySelector<HTMLElement>('[data-context-breakdown]')!
 }
 
 test('the ring is a button named by its share and counts, which opens a dialog', async () => {
-  const strip = await render(
-    <ConversationComposerStrip machine={null} branch={null} changes={null} context={CONTEXT} />,
-  )
-  const trigger = strip.querySelector<HTMLButtonElement>('[data-strip-context] [data-strip-context-button]')!
+  const strip = await render(<PanelFactRows context={CONTEXT} />)
+  const trigger = strip.querySelector<HTMLButtonElement>('[data-panel-context]')!
   expect(trigger.tagName).toBe('BUTTON')
   expect(trigger.getAttribute('aria-label')).toBe('Context 31% used, 61,000 / 200,000 tokens — show what fills it')
   expect(trigger.getAttribute('aria-haspopup')).toBe('dialog')
@@ -116,13 +114,7 @@ test('the ring is a button named by its share and counts, which opens a dialog',
 
 test('an agent with no breakdown opens on the total alone, said as such', async () => {
   const strip = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
-      context={CONTEXT}
-      contextBreakdown={source(null, { agentName: 'Codex' })}
-    />,
+    <PanelFactRows context={CONTEXT} contextBreakdown={source(null, { agentName: 'Codex' })} />,
   )
   const panel = await openRing(strip)
   expect(panel.textContent).toContain('31% · 61k of 200k')
@@ -134,15 +126,7 @@ test('an agent with no breakdown opens on the total alone, said as such', async 
 
 test('opening reads the breakdown and draws the bar, its rows and the heaviest item', async () => {
   const load = vi.fn(async (): Promise<ConversationContextBreakdownResult> => ({ ok: true, breakdown: breakdown() }))
-  const strip = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
-      context={CONTEXT}
-      contextBreakdown={source(load)}
-    />,
-  )
+  const strip = await render(<PanelFactRows context={CONTEXT} contextBreakdown={source(load)} />)
   expect(load).not.toHaveBeenCalled()
   const panel = await openRing(strip)
   expect(load).toHaveBeenCalledTimes(1)
@@ -209,13 +193,7 @@ test('an open panel reads again as a turn ends, and a failed read keeps the last
   let answer: ConversationContextBreakdownResult = { ok: true, breakdown: breakdown() }
   const load = vi.fn(async () => answer)
   const strip = (refreshKey: number) => (
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
-      context={CONTEXT}
-      contextBreakdown={source(load, { refreshKey })}
-    />
+    <PanelFactRows context={CONTEXT} contextBreakdown={source(load, { refreshKey })} />
   )
   const host = await render(strip(1))
   await openRing(host)
@@ -230,10 +208,7 @@ test('an open panel reads again as a turn ends, and a failed read keeps the last
 
 test('an agent that is not running and was never read says so', async () => {
   const strip = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
+    <PanelFactRows
       context={CONTEXT}
       contextBreakdown={source(async () => ({
         ok: false,
@@ -251,15 +226,9 @@ test('an agent that is not running and was never read says so', async () => {
 
 test('from the keyboard the dialog takes focus as it opens, and Escape gives it back to the ring', async () => {
   const strip = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
-      context={CONTEXT}
-      contextBreakdown={source(async () => ({ ok: true, breakdown: breakdown() }))}
-    />,
+    <PanelFactRows context={CONTEXT} contextBreakdown={source(async () => ({ ok: true, breakdown: breakdown() }))} />,
   )
-  const trigger = strip.querySelector<HTMLButtonElement>('[data-strip-context-button]')!
+  const trigger = strip.querySelector<HTMLButtonElement>('[data-panel-context]')!
   trigger.focus()
   await act(async () => trigger.click())
   await act(async () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))))

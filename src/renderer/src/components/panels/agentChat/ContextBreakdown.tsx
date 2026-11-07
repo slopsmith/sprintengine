@@ -10,12 +10,13 @@ import { formatTokenCount } from '../../../utils/tokenFormat'
 import { formatTimeOfDay } from '../../../utils/clockFormat'
 import {
   CONTEXT_RING_WARN_PERCENTAGE,
-  ContextRing,
   contextRingLabel,
   contextRingTokensLabel,
   GhostButton,
   IconButton,
   Popover,
+  type PopoverPlacement,
+  type PopoverTriggerArgs,
   RefreshIcon,
   Tooltip,
 } from '../../ui'
@@ -545,17 +546,21 @@ function focusIntoDialog(surface: HTMLElement): void {
 }
 
 /**
- * The strip's ring as a button: the tooltip says the counts, as the bare
- * ring's does, and a click or Enter opens what fills the window.
+ * What fills the window, opened from the panel's Context row. The row is the
+ * caller's: `renderTrigger` draws it, with the ring's words in hand.
  */
-export function ContextStripButton({
+export function ContextPopover({
   percentage,
   context,
   source,
+  placement = 'bottom-end',
+  renderTrigger,
 }: {
   percentage: number
   context: { used: number; total: number }
   source: ContextBreakdownSource | null
+  placement?: PopoverPlacement
+  renderTrigger: (args: PopoverTriggerArgs & { label: string; counts: string }) => React.ReactNode
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const reading = useContextBreakdown(source, open)
@@ -566,26 +571,12 @@ export function ContextStripButton({
       onOpenChange={setOpen}
       ariaLabel="Context window"
       popupRole="dialog"
-      placement="top-end"
+      placement={placement}
       surfaceClassName="w-[360px] max-h-[min(560px,70vh)] overflow-y-auto p-3"
       onOpenAutoFocus={focusIntoDialog}
-      renderTrigger={({ ref, triggerProps, togglePopover }) => (
-        // The tooltip says the counts, as the bare ring's does: the sweep
-        // already shows the share.
-        <Tooltip content={contextRingTokensLabel(context.used, context.total)} placement="top" wrapperClassName="flex">
-          <IconButton
-            ref={ref}
-            size="xs"
-            tone="subtle"
-            onClick={togglePopover}
-            {...triggerProps}
-            aria-label={`${label} — show what fills it`}
-            data-strip-context-button=""
-          >
-            <ContextRing usedPercentage={percentage} decorative />
-          </IconButton>
-        </Tooltip>
-      )}
+      renderTrigger={(args) =>
+        renderTrigger({ ...args, label, counts: contextRingTokensLabel(context.used, context.total) })
+      }
     >
       <ContextBreakdownPanel context={context} source={source} reading={reading} onRefresh={reading.refresh} />
     </Popover>

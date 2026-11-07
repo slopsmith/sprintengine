@@ -1,6 +1,6 @@
 import React from 'react'
 
-import { RowButton } from '../../../ui'
+import { RowButton, Tooltip } from '../../../ui'
 
 // One row of the panel: a glyph, a name and what there is to say about it. A
 // row that opens something is a `RowButton`; a row that can only say something
@@ -23,9 +23,24 @@ export type PanelRowProps = {
   buttonProps?: Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'children'> &
     Record<`data-${string}`, unknown>
   buttonRef?: React.Ref<HTMLButtonElement>
+  /** What the row says on hover and focus, beyond its words. */
+  tooltip?: React.ReactNode
+  /** Names the row for what reads it. */
+  dataBranch?: string
 }
 
-export function PanelRow({ glyph, label, detail, meta, onClick, ariaLabel, buttonProps, buttonRef }: PanelRowProps) {
+export function PanelRow({
+  glyph,
+  label,
+  detail,
+  meta,
+  onClick,
+  ariaLabel,
+  buttonProps,
+  buttonRef,
+  tooltip,
+  dataBranch,
+}: PanelRowProps) {
   const body = (
     <>
       <span className="flex shrink-0 items-center text-[color:var(--text-muted)]">{glyph}</span>
@@ -42,22 +57,35 @@ export function PanelRow({ glyph, label, detail, meta, onClick, ariaLabel, butto
   )
   if (!onClick)
     return (
-      <div className={`${ROW_LAYOUT} px-2 py-1.5`} data-panel-row="fact" aria-label={ariaLabel}>
+      <div
+        className={`${ROW_LAYOUT} px-2 py-1.5`}
+        data-panel-row="fact"
+        data-panel-branch={dataBranch}
+        aria-label={ariaLabel}
+      >
         {body}
       </div>
     )
-  return (
+  const row = (
     <RowButton
       ref={buttonRef}
       density="bleed"
       onClick={onClick}
       aria-label={ariaLabel}
       data-panel-row="action"
+      data-panel-branch={dataBranch}
       className={ROW_LAYOUT}
       {...buttonProps}
     >
       {body}
     </RowButton>
+  )
+  return tooltip ? (
+    <Tooltip content={tooltip} placement="left" wrapperClassName="flex">
+      {row}
+    </Tooltip>
+  ) : (
+    row
   )
 }
 

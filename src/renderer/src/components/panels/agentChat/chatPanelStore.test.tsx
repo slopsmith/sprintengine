@@ -33,6 +33,7 @@ const facts = (patch: Partial<ChatPanelFacts> = {}): ChatPanelFacts => ({
   localServers: null,
   usageLimits: null,
   permissions: null,
+  permissionLabel: null,
   ...patch,
 })
 

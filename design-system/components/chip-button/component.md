@@ -104,10 +104,9 @@ sliver. From 2026-10-01 to 2026-10-04 the conversation composer folded its
 secondary chips behind a chevron; it no longer needs to. Its row is now the New
 chat composer's — the "+", the attached tags, the engine chip and send — short
 enough to wrap only in a pane narrower than any it is drawn in, and its
-facts moved to the strip under the box, which keeps to one line by moving what
-does not fit into a "⋮" menu in a fixed order (the conversation strip in
-`src/renderer/src/components/panels/agentChat/conversationStrip.tsx`). The
-rules the fold kept still hold for whatever answers a narrow row next:
+facts moved to the right-hand panel beside the chat
+(`src/renderer/src/components/workspace/pane/panel/ChatPanel.tsx`). The rules
+the fold kept still hold for whatever answers a narrow row next:
 
 - **Measured against the row, not the window.** The same panel width is a
   different budget depending on what sits beside the panel.

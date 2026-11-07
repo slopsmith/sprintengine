@@ -4,6 +4,7 @@
 
 import { createContext, useContext, type JSX } from 'react'
 import { TruncatedText, type AgentGlyphState } from '../../ui'
+import { useWorkspaceStore } from '../../../store/workspaceStore'
 import { openAgentsPane } from '../../workspace/pane/agents/agentsPaneFocus'
 import { useConversationLinkContext } from './conversationLinks'
 import type { TranscriptToolEntry } from './conversationProjection'
@@ -240,6 +241,15 @@ export function AgentLaneSummary({ lane }: { lane: TranscriptToolEntry }): JSX.E
       ) : null}
     </span>
   )
+}
+
+/** Opens the right-hand panel on its menu, where this chat's subagents are listed. */
+export function useOpenSubagentsPanel(): (() => void) | null {
+  const context = useConversationLinkContext()
+  const showPaneMenu = useWorkspaceStore((state) => state.showPaneMenu)
+  if (!context?.workspaceId) return null
+  const { workspaceId } = context
+  return () => showPaneMenu(workspaceId)
 }
 
 /**

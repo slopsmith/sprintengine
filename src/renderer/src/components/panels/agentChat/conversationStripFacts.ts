@@ -15,15 +15,15 @@ import { resolveWorkspaceWorktree } from '../../../utils/workspaceWorktree'
 import { useCheckoutChanges } from '../../workspace/checkoutChanges'
 import { changedFileMarks, changedFilesPhrase } from '../../workspace/terminalLines'
 import type { ConversationTransport } from './conversationTransport'
-import type { ConversationStripBranch, ConversationStripChanges, ConversationStripMachine } from './conversationStrip'
+import type { ChatPanelBranch, ChatPanelChanges, ChatPanelMachine } from './chatPanelStore'
 
-// What the conversation's composer strip says about where the agent works,
-// read off the chat's binding and transport: the machine (when it is not this
-// computer), the branch of the checkout it works in, and how many files that
-// checkout has changed. Each answers null where the chat cannot know it — a
-// chat on a paired machine has no checkout here to ask, and its branch and
-// counts are the ones its machine lists — so the strip draws what is true and
-// leaves out what is not known, never a guess.
+// Where a conversation's agent works, read off the chat's binding and
+// transport: the machine (when it is not this computer), the branch of the
+// checkout it works in, and how many files that checkout has changed. Each
+// answers null where the chat cannot know it — a chat on a paired machine has
+// no checkout here to ask, and its branch and counts are the ones its machine
+// lists — so the panel draws what is true and leaves out what is not known,
+// never a guess.
 
 /** No pull requests to scope by: a chat runs no terminal that would carry one. */
 const NO_PULL_REQUESTS: never[] = []
@@ -55,15 +55,15 @@ export function useConversationStripFacts({
   /** Where a remote chat works, as the machine running it lists it. */
   listed?: Pick<NonNullable<ChatBinding['listed']>, 'branch' | 'worktree' | 'files'> | null
 }): {
-  machine: ConversationStripMachine | null
-  branch: ConversationStripBranch | null
-  changes: ConversationStripChanges | null
+  machine: ChatPanelMachine | null
+  branch: ChatPanelBranch | null
+  changes: ChatPanelChanges | null
 } {
   // ── The machine ───────────────────────────────────────────────────────────
   // A chat on a paired machine is named by its link; a local chat by the
   // machine its workspace runs on (an SSH machine, a WSL distribution, or the
   // paired machine a workspace was born on). This computer is no machine to
-  // mark: the strip says nothing about it.
+  // mark: the panel says nothing about it.
   const workspaceRef = useWorkspaceMachineRef(transport.kind === 'remote' ? null : workspace)
   const remoteName = transport.kind === 'remote' ? (transport.machineName ?? null) : null
   const ref = useMemo<MachineRef | null>(
@@ -101,9 +101,7 @@ export function useConversationStripFacts({
 
   const moduleOverrides = useWorkspaceStore((state) => state.appSettings.modules)
   const openPaneTab = useWorkspaceStore((state) => state.openPaneTab)
-  const togglePaneKind = useWorkspaceStore((state) => state.togglePaneKind)
   const filesEnabled = selectModuleEnabled(moduleOverrides, 'dev-tools')
-  const gitEnabled = selectModuleEnabled(moduleOverrides, 'git')
   const folderPath = workspace?.folderPath ?? null
   // The file explorer is the workspace pane's Files tab, rooted at the
   // workspace folder. A worktree inside that folder is revealed there; one
@@ -113,11 +111,6 @@ export function useConversationStripFacts({
     if (checkout && folderPath && checkout !== folderPath && isPathOrChild(checkout, folderPath))
       dispatchFileReveal({ workspaceId, path: checkout })
   }, [checkout, folderPath, openPaneTab, workspaceId])
-  // The same toggle the title bar's branch chip had: the Git panel's own
-  // open/close-on-second-click.
-  const openChanges = useCallback(() => {
-    togglePaneKind(workspaceId, 'git')
-  }, [togglePaneKind, workspaceId])
 
   // A chat on a paired machine has no checkout here; its machine names the
   // branch in its list, and there is no explorer here to open it in.
@@ -125,15 +118,14 @@ export function useConversationStripFacts({
     checkout && branchName ? branchName : transport.kind === 'remote' ? (listed?.branch ?? null) : null
   const shownWorktree = checkout && branchName ? inWorktree : (listed?.worktree ?? false)
   const onOpenBranch = checkout && branchName && filesEnabled && folderPath ? openFiles : null
-  const branch = useMemo<ConversationStripBranch | null>(
+  const branch = useMemo<ChatPanelBranch | null>(
     () =>
       shownBranch ? { name: displayBranchName(shownBranch), worktree: shownWorktree, onOpen: onOpenBranch } : null,
     [shownBranch, shownWorktree, onOpenBranch],
   )
 
   const counts = useCheckoutChanges(checkout, NO_PULL_REQUESTS, 'conversation-strip')
-  // A remote chat's counts are its machine's; there is no Git panel here on
-  // that checkout to open them in.
+  // A remote chat's counts are its machine's.
   const remoteFiles = transport.kind === 'remote' ? (listed?.files ?? null) : null
   const remoteMarks = remoteFiles ? changedFileMarks(remoteFiles) : null
   const localChanges = counts.hasCounts && counts.marks && counts.files ? counts : null
@@ -145,11 +137,9 @@ export function useConversationStripFacts({
     : remoteChanged
       ? changedFilesPhrase(remoteFiles)
       : null
-  const onOpenChanges = localChanges && gitEnabled ? openChanges : null
-  const changes = useMemo<ConversationStripChanges | null>(
-    () =>
-      added !== null && removed !== null && phrase !== null ? { added, removed, phrase, onOpen: onOpenChanges } : null,
-    [added, removed, phrase, onOpenChanges],
+  const changes = useMemo<ChatPanelChanges | null>(
+    () => (added !== null && removed !== null && phrase !== null ? { added, removed, phrase } : null),
+    [added, removed, phrase],
   )
 
   return { machine, branch, changes }

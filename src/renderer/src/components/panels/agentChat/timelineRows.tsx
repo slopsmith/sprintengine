@@ -74,6 +74,7 @@ import {
   laneOutcomeWords,
   laneTask,
   useOpenAgentsPane,
+  useOpenSubagentsPanel,
   useStopSubagent,
 } from './subagentStatus'
 import { StopGlyph } from './stopGlyph'
@@ -1327,7 +1328,7 @@ export function WorkingTimelineRow({
   const [detailsOpen, setDetailsOpen] = useState(false)
   const detailsId = useId()
   useLiveRowMotion(ref, true)
-  const openAgents = useOpenAgentsPane()
+  const openSubagents = useOpenSubagentsPanel()
   const context = useConversationLinkContext()
   // The same disclosure the running turn's fold keeps. Opened, the thinking
   // and the prose between steps are on screen in full, and the line under the
@@ -1364,9 +1365,9 @@ export function WorkingTimelineRow({
             />
           </GhostButton>
         ) : null}
-        {row.agents && openAgents ? (
-          <LinkButton ink="quiet" onClick={() => openAgents(null)}>
-            See agents
+        {row.agents && openSubagents ? (
+          <LinkButton ink="quiet" onClick={openSubagents}>
+            See subagents
           </LinkButton>
         ) : null}
       </div>
