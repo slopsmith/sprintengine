@@ -3,7 +3,7 @@ import { GhostButton, InlineNotice, LinkButton, OutlineButton, TruncatedText } f
 import { useChatViewActive } from './chatViewActivity'
 import { LaneChatView } from './LaneChatView'
 import { SubagentFamilyScope, type SubagentFamily } from './subagentFamily'
-import { usePublishSubagentFamily } from './subagentFamilyStore'
+import { usePublishSubagentFamily, useSubagentFamilyShown } from './subagentFamilyStore'
 import { harnessName } from './subagentIcon'
 import {
   popSubagentView,
@@ -183,7 +183,8 @@ export function SubagentChatHost({
   )
   const onBack = useCallback(() => popSubagentView(workspaceId, rootAgentId), [workspaceId, rootAgentId])
   const placeRef = useRef<HTMLDivElement | null>(null)
-  const active = useChatViewActive(placeRef)
+  const seen = useChatViewActive(placeRef)
+  const active = useSubagentFamilyShown(workspaceId, rootAgentId) && seen
   return (
     <SubagentStackProvider value={scope}>
       <SubagentFamilyScope workspaceId={workspaceId} rootAgentId={rootAgentId} active={active}>

@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, type JSX } from 'react'
+import { memo, useDeferredValue, useMemo, type JSX } from 'react'
 
 import { useConversationSessions } from '../../../hooks/conversationSessionsStore'
 import { InlineNotice } from '../../ui'
@@ -82,8 +82,17 @@ function WaitingChild({
   )
 }
 
-/** Every sub-agent of this chat that is waiting on the person, each with what it asks. */
-export function SubagentRequests({ workspaceId, agentId }: { workspaceId: string; agentId: string }): JSX.Element {
+/**
+ * Every sub-agent of this chat that is waiting on the person, each with what it
+ * asks. Memoized: the chat redraws on every keystroke, and has nothing to say here.
+ */
+export const SubagentRequests = memo(function SubagentRequests({
+  workspaceId,
+  agentId,
+}: {
+  workspaceId: string
+  agentId: string
+}): JSX.Element {
   const here = useStudioSubagents(workspaceId, agentId)
   const remote = useRemoteChat(workspaceId, agentId)
   const named = remote?.agentId === agentId ? remote.subagents : undefined
@@ -97,4 +106,4 @@ export function SubagentRequests({ workspaceId, agentId }: { workspaceId: string
         ))}
     </>
   )
-}
+})

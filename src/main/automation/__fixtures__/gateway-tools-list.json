@@ -194,7 +194,7 @@
     },
     {
       "name": "subagent.start",
-      "sha256": "f7594929278f95ad98484da5553f4a017d58a84866e484361576e03899bb7164"
+      "sha256": "72a3ab9b00d3fd32a6a7adc9a9490280cf00c7d7e651713c4a178290accd90ec"
     },
     {
       "name": "subagent.status",
@@ -636,7 +636,7 @@
     },
     {
       "name": "subagent.start",
-      "sha256": "f7594929278f95ad98484da5553f4a017d58a84866e484361576e03899bb7164"
+      "sha256": "72a3ab9b00d3fd32a6a7adc9a9490280cf00c7d7e651713c4a178290accd90ec"
     },
     {
       "name": "subagent.status",

@@ -8,7 +8,7 @@ import CliIcon from '../../../CliIcon'
 import { shortMachineName } from '../../../remote/machineRowModel'
 import { useChatActivity, type ChatActivityRow } from '../../../panels/agentChat/chatActivityStore'
 import { useChatPanelFacts, type ChatPanelFacts } from '../../../panels/agentChat/chatPanelStore'
-import { useSubagentFamily } from '../../../panels/agentChat/subagentFamilyStore'
+import { useShowSubagentFamily, useSubagentFamily } from '../../../panels/agentChat/subagentFamilyStore'
 import { subagentViewOwner, useSubagentViews } from '../../../panels/agentChat/subagentViewStack'
 import {
   DiffStatPill,
@@ -131,6 +131,7 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
   const { workspaceId, tabs } = openNow
   const tabAgentId = useChatPanelTarget(workspaceId)
   const top = useSubagentViews(workspaceId, tabAgentId ?? '').at(-1)
+  useShowSubagentFamily(workspaceId, tabAgentId)
   const family = useSubagentFamily(workspaceId, tabAgentId)
   const agentId = top ? subagentViewOwner(top) : tabAgentId
   const chatFacts = useChatPanelFacts(workspaceId, agentId)
