@@ -23,6 +23,10 @@ export type AgentReport = {
   progressSummary?: string;
   usage?: { totalTokens: number; toolUses: number; durationMs: number };
   error?: string;
+  /** The agent's own id, which a message to it is addressed by. */
+  taskId?: string;
+  /** False where its harness said it cannot be sent another message. */
+  canContinue?: boolean;
 };
 /** One agent the chat spawned: its Task/Agent call, and everything reported about it since. */
 export type AgentLane = {
@@ -43,6 +47,8 @@ export type AgentLane = {
   report?: string;
   /** What it said between its steps, in order. */
   messages: AgentMessage[];
+  /** What the person wrote to it, passed on through the chat, in order. */
+  sent?: AgentMessage[];
   /** The tool calls it made itself, in the order they started. */
   steps: MobileTool[];
 };
@@ -79,6 +85,8 @@ export function readSubagentStatus(
     ...(text("lastToolName") ? { lastToolName: text("lastToolName") } : {}),
     ...(text("progressSummary") ? { progressSummary: text("progressSummary") } : {}),
     ...(text("error") ? { error: text("error") } : {}),
+    ...(text("taskId") ? { taskId: text("taskId") } : {}),
+    ...(record.canContinue === false ? { canContinue: false } : {}),
     ...(typeof record.endedAt === "number" ? { endedAt: record.endedAt } : {}),
     ...(usage
       ? {
@@ -313,4 +321,29 @@ export function agentStopOffer(
   if (lane.status !== "running" || !chat.stopsAgents || !chat.chatCanStop) return null;
   if (chat.stopping) return { label: "Stopping…", disabled: true };
   return { label: "Stop this agent", disabled: !chat.live };
+}
+
+/**
+ * Whether the person can write to an agent, the phone's reading of the desktop's
+ * rule (subagentDelivery.ts): a box only where a message arrives, and otherwise
+ * no box, only the way to the chat and why. A running agent and a finished one
+ * take a message; one the person stopped is refused by its CLI, and nothing
+ * proved one that failed or whose end was not recorded.
+ */
+export function agentMessageOffer(
+  lane: Pick<AgentLane, "status" | "outcome" | "agent">,
+  chat: { messagesAgents: boolean; chatCanMessage: boolean | undefined },
+): { kind: "box" } | { kind: "bar"; why: string } {
+  if (!chat.messagesAgents) return { kind: "bar", why: "This desktop cannot pass a message to a subagent from here." };
+  if (chat.chatCanMessage === undefined)
+    return { kind: "bar", why: "The chat is at rest, and has not said whether it can pass a message on." };
+  if (!chat.chatCanMessage) return { kind: "bar", why: "This chat has no way to pass a message to a subagent." };
+  if (lane.agent?.canContinue === false) return { kind: "bar", why: "Its harness says it cannot be continued." };
+  if (!lane.agent?.taskId) return { kind: "bar", why: "Its harness gave no way to reach this one." };
+  if (lane.outcome === "declined") return { kind: "bar", why: "It was declined before it ran." };
+  const state = lane.agent.state;
+  if (state === "running" || state === "completed") return { kind: "box" };
+  if (state === "stopped") return { kind: "bar", why: "It was stopped, and a stopped agent cannot be continued." };
+  if (state === "failed") return { kind: "bar", why: "It failed, and nothing says it can be continued." };
+  return { kind: "bar", why: "How it ended was never recorded, so nothing says it can be continued." };
 }

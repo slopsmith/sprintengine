@@ -12,6 +12,12 @@
 
 ### Added
 
+- A lane carries `sent`, what the person wrote to its agent, and its agent state
+  `canContinue`. A user entry carries `subagentMessage`. `laneTranscript` reads a
+  lane as a conversation of its own for the timeline to draw, and
+  `collectAgentLanes`, `directAgentLanes`, `childAgentLanes`, `placeAgentMessages`
+  and `lanePrompt` are exported.
+
 - `stepShownToUser` also holds Studio's `plugin.offer` out of a turn's fold,
   so the plugin card it draws stands under the turn as a generated picture
   does. `isPluginOffer` recognises the call under any runtime's spelling.

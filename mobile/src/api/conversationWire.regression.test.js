@@ -310,6 +310,9 @@ test("a listed chat says whether one of its agents can be stopped only as a bool
   assert.equal(flagsOf({ images: true, stopSubagent: false }).stopSubagent, false);
   assert.equal("stopSubagent" in flagsOf({ images: true, stopSubagent: "yes" }), false, "a wrong shape reads as unknown, which offers no Stop");
   assert.equal("stopSubagent" in flagsOf({ images: true }), false, "an older desktop names nothing: unknown, not no");
+  assert.equal(flagsOf({ images: true, messageSubagent: true }).messageSubagent, true);
+  assert.equal("messageSubagent" in flagsOf({ images: true, messageSubagent: "yes" }), false);
+  assert.equal("messageSubagent" in flagsOf({ images: true }), false, "unknown draws no box");
 });
 test("a steer carries its words alone, and is refused before the outbox otherwise", () => {
   assert.equal(conversationSendProblem("c1", { kind: "send", message: "and add tests", steer: true }), null);

@@ -20,6 +20,7 @@ import { chatOpenedKey } from "../features/conversations/conversationListLogic";
 // every change, and sent when the turn ends; `cancelQueued` takes one back.
 // It takes a steer too (`conversation-steer-sends`): a send that says `steer`
 // lands in the running turn as the person's message, and the turn runs on.
+// It passes the person's words to one agent (`conversation-agent-message`).
 // And it stops one agent by itself (`conversation-stop-subagent`): the agent
 // reports itself stopped, and the turn and the other agents run on.
 //
@@ -121,6 +122,7 @@ export const verifyConversation: ConversationThread = {
     permissionPresets: ["manual", "none", "auto", "bypass"],
     steer: true,
     stopSubagent: true,
+    messageSubagent: true,
   },
   // Runs in a WSL distribution on the paired desktop, so it wears that
   // machine's mark; its pull request is open.
@@ -1112,6 +1114,19 @@ export const fakeConversationsApi: ConversationApi = {
             if (chat.turnOpen) endTurn("turn_failed");
           } else if (command.kind === "stopSubagent") {
             publish(event("subagent_status", { toolUseId: command.toolUseId, status: "stopped" }, 0, owner));
+          } else if (command.kind === "messageSubagent") {
+            publish(
+              event(
+                "user_message",
+                {
+                  text: "Pass this on.",
+                  origin: { kind: "studio", reason: "agent-message" },
+                  subagentMessage: { toolUseId: command.toolUseId, text: command.message },
+                },
+                0,
+                owner,
+              ),
+            );
           } else if (command.kind === "cancelQueued") {
             const before = chat.desktopHeld.length;
             chat.desktopHeld = chat.desktopHeld.filter((message) => message.id !== command.queuedId);

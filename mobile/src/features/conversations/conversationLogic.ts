@@ -383,13 +383,21 @@ export function projectConversation(events: ConversationEvent[]) {
       checkpointSeq = event.seq;
       const text = stringValue(p.text) || stringValue(p.message);
       const origin = readMessageOrigin(p.origin);
+      // What the person wrote to one agent: it shows on that agent, and the row
+      // says that in place of what the chat's model was asked.
+      const written = recordValue(p.subagentMessage);
+      const writtenText = stringValue(written.text);
+      const writtenLane = lanes.get(stringValue(written.toolUseId));
+      if (writtenLane && writtenText) (writtenLane.sent ??= []).push({ at: event.createdAt, text: writtenText });
       // Studio's own `/compact` is said by the divider its compaction draws.
       if (origin?.reason === "auto-compact") {
         const turnId = stringValue(p.turnId);
         if (turnId) autoCompactTurns.add(turnId);
       } else if (origin)
         rows.push({
-          kind: "studio", id: event.id, text: withoutStudioNoticePrefix(text), at: event.createdAt,
+          kind: "studio", id: event.id,
+          text: writtenText ? `You wrote to a subagent, and this chat was asked to pass it on: ${writtenText}` : withoutStudioNoticePrefix(text),
+          at: event.createdAt,
           ...(origin.reason ? { reason: origin.reason } : {}),
           ...(stringValue(p.turnId) ? { turn: stringValue(p.turnId) } : {}),
         });

@@ -13,6 +13,15 @@
 
 ### Added
 
+- `CONVERSATION_AGENT_MESSAGE_CAPABILITY` (`conversation-agent-message`) names a
+  desktop that takes the `messageSubagent` command (`toolUseId`, `message`):
+  the person's words for one agent a chat spawned, delivered by that chat's
+  model. `ConversationThread` says which chats can, as
+  `capabilities.messageSubagent`. `ConversationStudioMessageReason` gains
+  `agent-message`, a `user_message` may carry `subagentMessage`, read by
+  `readConversationSubagentMessage`, and `subagent_status` may say
+  `canContinue: false`.
+
 - **A chat's sub-agents, where it is followed.**
   `CONVERSATION_SUBAGENTS_CAPABILITY` (`conversation-subagents`) names a desktop
   that answers `ConversationWatchSubagentsRequest` (`watchSubagents`) with

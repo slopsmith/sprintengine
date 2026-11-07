@@ -18,7 +18,7 @@
 // that (the desktop's `lastUserMessageAt`, which the list orders by, leaves it
 // out the same way).
 
-export type StudioMessageReason = "agent-notice" | "usage-resume" | "auto-compact";
+export type StudioMessageReason = "agent-notice" | "usage-resume" | "auto-compact" | "agent-message";
 
 /** Who a `user_message` came from when it was not the person. */
 export type MessageOrigin = { kind: "studio"; reason?: StudioMessageReason };
@@ -27,6 +27,7 @@ const STUDIO_MESSAGE_REASONS: readonly string[] = [
   "agent-notice",
   "usage-resume",
   "auto-compact",
+  "agent-message",
 ] satisfies StudioMessageReason[];
 
 /** A `user_message` payload's `origin`, or null for the person's own message. */
