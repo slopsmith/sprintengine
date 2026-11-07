@@ -24,6 +24,12 @@ vi.mock('./WorkspacePaneBody', () => ({
   WorkspacePaneBody: () => null,
 }))
 
+// The panel's reading of the checkout watches git over the bridge; what it says
+// is the sidebar's own reading, tested with the sidebar.
+vi.mock('./panel/useWorkspaceCheckoutFacts', () => ({
+  useWorkspaceCheckoutFacts: () => ({ branch: null, changes: null }),
+}))
+
 const WS = 'ws-pane-strip'
 
 let dom: JSDOM
