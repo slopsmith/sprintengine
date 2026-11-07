@@ -402,7 +402,7 @@ export function CanvasBoardPicker({
             surface's own row: that row's target is named "Show details for …"
             and its trailing slot sits OUTSIDE the button, and a board's row
             opens a board and is clickable to its right edge. */}
-        <div className="group/board flex items-center gap-2 py-1.5 pl-2 pr-4 transition-colors hover:bg-[color:var(--bg-hover)]">
+        <div className="group/board flex flex-wrap items-center gap-x-2 py-1.5 pl-2 pr-4 transition-colors hover:bg-[color:var(--bg-hover)]">
           <RowButton
             density="flush"
             onClick={pick}
@@ -413,7 +413,9 @@ export function CanvasBoardPicker({
               open,
               ...(board.showsProject ? { project: board.project } : {}),
             })}
-            className="min-w-0 flex-1"
+            // Wide enough to keep the name: in a docked pane the actions below
+            // wrap under it rather than squeezing it to nothing.
+            className="min-w-60 flex-1"
           >
             <BoardMark name={board.name} />
             <span className="flex min-w-0 flex-1 flex-col">
@@ -463,7 +465,7 @@ export function CanvasBoardPicker({
               actions, on hover and on keyboard focus, so ten rows do not read as
               twenty buttons. The whole row already opens the board; "Open here"
               says what that does on a row that offers something else too. */}
-          <span className="hidden shrink-0 items-center gap-1 group-focus-within/board:flex group-hover/board:flex">
+          <span className="ml-auto hidden shrink-0 items-center gap-1 group-focus-within/board:flex group-hover/board:flex">
             <GhostButton onClick={pick}>Open here</GhostButton>
             <GhostButton
               onClick={() => continueBoard(board)}
