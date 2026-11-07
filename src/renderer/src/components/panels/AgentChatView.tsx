@@ -146,7 +146,6 @@ import type { ContextBreakdownSource } from './agentChat/ContextBreakdown'
 import { useConversationStripFacts } from './agentChat/conversationStripFacts'
 import { useChatActivityCard } from './agentChat/ChatActivityCard'
 import { usePublishChatPanelFacts, type ChatPanelPermissions } from './agentChat/chatPanelStore'
-import { usePublishChatSubagents } from './agentChat/chatSubagentsStore'
 import { useUsageLimitSnapshot } from './agentChat/usageLimits'
 import { HostUsageLimitNoticeRow, UsageLimitResumeRow } from './agentChat/usageLimitResume'
 import {
@@ -230,9 +229,11 @@ import {
 } from './agentChat/imageAttachments'
 import { ConversationPendingDock, coversComposer, type ApprovalModeSwitch } from './agentChat/pendingDock'
 import { SubagentStatusWords, useStudioSubagents } from './agentChat/chatSubagents'
+import { SubagentRequests } from './agentChat/subagentRequests'
 import {
   SubagentBlockedBar,
   SubagentChatHost,
+  SubagentEndNotice,
   subagentFacts,
   SubagentGone,
   SubagentViewHeader,
@@ -497,6 +498,7 @@ function LocalSubagentChat({
         status={row ? <SubagentStatusWords subagent={row} /> : undefined}
         onCrumb={onCrumb}
       />
+      <SubagentEndNotice error={row?.error ?? null} />
       <div className="min-h-0 flex-1">
         <ConversationChatBody
           key={`${workspaceId}:${agentId}`}
@@ -4237,7 +4239,6 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
       selectPanelPermission,
     ],
   )
-  usePublishChatSubagents(workspaceId, agentId, projection.entries)
   usePublishChatPanelFacts(workspaceId, agentId, {
     name: label,
     cli: chatCli,
@@ -4744,6 +4745,7 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
              * rather than unmounted, so its draft is still there when the
              * answer is in.
              */}
+            {binding.subagent ? null : <SubagentRequests workspaceId={workspaceId} agentId={agentId} />}
             {binding.subagent?.blocked ? (
               <SubagentBlockedBar
                 why={binding.subagent.blocked}

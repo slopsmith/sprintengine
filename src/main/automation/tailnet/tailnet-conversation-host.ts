@@ -305,7 +305,7 @@ export type ConversationGatewayHost = {
   ): () => void
   /**
    * Follow which sub-agents a chat has and how each stands, as this desktop's
-   * own Agents tab reads them. Told now, and again whenever the list reads
+   * own panel reads them. Told now, and again whenever the list reads
    * differently. Absent on a host built without `subagentChanges`; returns
    * what stops the following.
    */
@@ -1105,7 +1105,7 @@ export function createConversationGatewayHost(
         )
       : undefined
   }
-  // A chat's sub-agents, oldest first, read as this desktop's own Agents tab
+  // A chat's sub-agents, oldest first, read as this desktop's own panel
   // reads them: from their records, and each one's newest session. Each row
   // names what the list would name of it, so a device can draw it as a chat.
   const subagentsOf = (chat: { workspaceId: string; agentId: string }): ConversationSubagent[] => {

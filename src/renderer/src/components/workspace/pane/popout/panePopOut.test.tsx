@@ -218,12 +218,12 @@ test("the window's + brings the kind into the window, moving the pane's own tab 
   )
   assert.equal(last?.state.reveal?.tabId, 'files', 'in front')
 
-  send(popOutId, { type: 'add', kind: 'agents' })
+  send(popOutId, { type: 'add', kind: 'canvas' })
   tabs = (await pane())?.tabs ?? []
-  const agents = tabs.find((tab) => tab.kind === 'agents')
-  assert.equal(agents?.poppedOut, popOutId, 'a kind the pane lacked is opened in the window')
+  const canvas = tabs.find((tab) => tab.kind === 'canvas')
+  assert.equal(canvas?.poppedOut, popOutId, 'a kind the pane lacked is opened in the window')
   last = pushes.filter((push) => push.popOutId === popOutId).at(-1)
-  assert.equal(last?.state.reveal?.tabId, agents?.id)
+  assert.equal(last?.state.reveal?.tabId, canvas?.id)
 
   const before = (await pane())?.tabs.length
   send(popOutId, { type: 'add', kind: 'terminal' })
@@ -238,7 +238,7 @@ test("the window's + offers the pane's kinds less a terminal and the modal rows"
     { kind: 'browser', label: 'Browser', letter: 'B', Glyph: glyph },
     { kind: 'terminal', label: 'Terminal', letter: 'T', Glyph: glyph },
     { kind: 'files', label: 'Files', letter: 'F', Glyph: glyph },
-    { kind: 'agents', label: 'Subagents', letter: 'A', Glyph: glyph },
+    { kind: 'library', label: 'Library', letter: 'I', Glyph: glyph },
     { kind: 'reviews', label: 'Reviews', letter: 'R', Glyph: glyph, modalSurfaceId: 'reviews' },
   ])
   assert.deepEqual(
@@ -307,21 +307,16 @@ test("a brief gap in this window's membership closes nothing", async () => {
   assert.deepEqual(closed, [])
 })
 
-test("the window is told the owner's chat in focus and its requests for an agent lane", async () => {
+test("the window is told the owner's chat in focus, for a Library tab out there", async () => {
   await seed(structuredClone(TABS))
   const useWorkspaceStore = await store()
-  const { openAgentsPane } = await import('../agents/agentsPaneFocus')
   await mountHost(new Set([WS, OTHER]))
-  act(() => useWorkspaceStore.getState().openPaneTab(WS, { kind: 'agents', activate: false }))
-  const agentsTabId = (await pane())?.tabs.find((tab) => tab.kind === 'agents')?.id
-  assert.ok(agentsTabId)
-  const popOutId = await popOut([agentsTabId])
+  act(() => useWorkspaceStore.getState().openPaneTab(WS, { kind: 'library', activate: false }))
+  const libraryTabId = (await pane())?.tabs.find((tab) => tab.kind === 'library')?.id
+  assert.ok(libraryTabId)
+  const popOutId = await popOut([libraryTabId])
   act(() => useWorkspaceStore.getState().setFocusedAgent(WS, 'agent-1'))
   assert.equal(pushes.filter((push) => push.popOutId === popOutId).at(-1)?.state.focusedAgentId, 'agent-1')
-  act(() => openAgentsPane(WS, 'agent-2', 'lane-7'))
-  const last = pushes.filter((push) => push.popOutId === popOutId).at(-1)
-  assert.equal(last?.state.agentFocus?.agentId, 'agent-2')
-  assert.equal(last?.state.agentFocus?.laneId, 'lane-7')
 })
 
 test("the Diff tab's app-wide settings, changed in the window, are the owner's to write", async () => {
@@ -407,16 +402,15 @@ test('a popped-out tab asked for from elsewhere comes forward in its window, and
     tabs: [
       { id: 'files', kind: 'files' },
       { id: 'web', kind: 'browser', url: 'http://localhost:3000/' },
-      { id: 'agents', kind: 'agents' },
+      { id: 'library', kind: 'library' },
       { id: 'board', kind: 'canvas', canvas: { path: '/Users/dev/app/plan.canvas' } },
     ],
   })
   const useWorkspaceStore = await store()
   const { showPaneTab } = await import('./panePopOutHost')
-  const { openAgentsPane } = await import('../agents/agentsPaneFocus')
   const { openUrlInPane } = await import('../browser/openInPane')
   await mountHost(new Set([WS, OTHER]))
-  const popOutId = await popOut(['web', 'agents', 'board'])
+  const popOutId = await popOut(['web', 'library', 'board'])
   act(() => useWorkspaceStore.getState().setPaneOpen(WS, false))
   const reveal = () => pushes.filter((push) => push.popOutId === popOutId).at(-1)?.state.reveal?.tabId
 
@@ -426,8 +420,8 @@ test('a popped-out tab asked for from elsewhere comes forward in its window, and
   assert.deepEqual(focused, [], 'an agent never raises a window')
 
   // The person's clicks: forward, and the window raised.
-  act(() => openAgentsPane(WS, 'agent-1', null))
-  assert.equal(reveal(), 'agents')
+  act(() => showPaneTab(WS, 'library', { focus: true }))
+  assert.equal(reveal(), 'library')
   act(() => {
     assert.equal(openUrlInPane(WS, 'http://localhost:3000/docs'), true)
   })

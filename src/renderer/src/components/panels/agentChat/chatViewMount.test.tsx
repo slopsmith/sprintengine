@@ -2101,7 +2101,7 @@ test('a turn’s steps rest folded, the latest one included; its agents are card
       event('turn_completed', { turnId: 'fold-first' }),
     ],
   })
-  const openPaneTab = vi.fn(() => 'agents-tab')
+  const openPaneTab = vi.fn(() => 'a-tab')
   const { useWorkspaceStore } = await import('../../../store/workspaceStore')
   useWorkspaceStore.setState({ openPaneTab } as never)
   const fold = () => chat.button('Worked for')
@@ -2123,10 +2123,7 @@ test('a turn’s steps rest folded, the latest one included; its agents are card
       expect(readSubagentViews('workspace', 'agent'), 'the card opens the agent in the chat’s place').toEqual([
         { kind: 'lane', ownerAgentId: 'agent', laneId: 'fold-agent', label: 'Map the test suites' },
       ])
-      expect(openPaneTab, 'no tab is made for it').not.toHaveBeenCalledWith('workspace', {
-        kind: 'agents',
-        activate: false,
-      })
+      expect(openPaneTab, 'no tab is made for it').not.toHaveBeenCalled()
     } finally {
       await chat.act(async () => resetSubagentViews())
     }

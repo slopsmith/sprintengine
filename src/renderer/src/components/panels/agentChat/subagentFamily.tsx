@@ -7,7 +7,7 @@ import { useChatSource, type ChatSource } from './chatSource'
 import { projectConversation, type TranscriptEntry, type TranscriptToolEntry } from './conversationProjection'
 import { childAgentLanes, collectAgentLanes, directAgentLanes } from './conversationTimeline'
 import { ConversationTransportProvider } from './conversationTransport'
-import { useChatViewActive } from './chatViewActivity'
+import { subagentRunsOn } from './subagentResult'
 import { laneAgentState, laneName, laneOutcomeWords, LaneStatus } from './subagentStatus'
 import {
   popSubagentView,
@@ -19,10 +19,11 @@ import {
 import { useConversationSession } from './useConversationSession'
 import { useThrottledValue } from './useThrottledValue'
 
-// What sits beside a chat's tab needs of its family: for the chat being viewed,
+// What sits beside a chat's tab needs of its family: for the agent being viewed,
 // the way up to its parent and its direct children, and only those. A child's
-// own children are read by going into it. This is the seam the right-hand panel
-// reads; it draws nothing but a child's status words, which tick.
+// own children are read by going into it. `SubagentChatHost` reads this for its
+// tab and publishes it (`subagentFamilyStore`) to the right-hand panel; it draws
+// nothing but a child's status words, which tick.
 
 export type SubagentFamilyState = 'working' | 'waiting' | 'done' | 'failed' | 'stopped' | 'unknown'
 
@@ -50,15 +51,39 @@ export type SubagentFamilyParent = {
   open(): void
 }
 
+/**
+ * What a lane says of itself, for the agent in view being one: all there is, as
+ * it has no record or session of its own. What it does not say is its parent's
+ * to say, and is not said of it.
+ */
+export type SubagentFamilyLane = {
+  name: string
+  cli: AgentCli | null
+  /** The model and effort its spawn asked for, in words; null where it ran on the conversation's own. */
+  runsOn: string | null
+  /** What it has spent so far; null before it says. */
+  tokens: number | null
+}
+
 export type SubagentFamily = {
   parent: SubagentFamilyParent | null
+  /** The agent in view, when that is a lane that has been read. */
+  lane: SubagentFamilyLane | null
   children: readonly SubagentFamilyMember[]
   /** Older turns are not read yet, and may hold older children. */
   hasMore: boolean
+  loadingEarlier: boolean
   loadEarlier(): void
 }
 
-const NO_FAMILY: SubagentFamily = { parent: null, children: [], hasMore: false, loadEarlier: () => undefined }
+const NO_FAMILY: SubagentFamily = {
+  parent: null,
+  lane: null,
+  children: [],
+  hasMore: false,
+  loadingEarlier: false,
+  loadEarlier: () => undefined,
+}
 const NO_NAMED: readonly StudioSubagent[] = []
 const LANE_REFRESH_MS = 400
 const isEmpty = (events: readonly unknown[]): boolean => events.length === 0
@@ -86,6 +111,8 @@ const STATE_WORDS: Readonly<Record<SubagentFamilyState, string>> = {
 /** A family's members and parent from what is read of the chat in view. Pure, so it is tested without a view. */
 export function subagentFamilyOf(input: {
   views: readonly SubagentView[]
+  /** The chat being read: the one a lane in it opens from. */
+  viewedAgentId: string
   rootName: string
   rootCli: AgentCli | null
   viewedCli: AgentCli | null
@@ -95,12 +122,12 @@ export function subagentFamilyOf(input: {
   push: (view: SubagentView) => void
   pop: () => void
   hasMore: boolean
+  loadingEarlier?: boolean
   loadEarlier: () => void
 }): SubagentFamily {
-  const { views, entries, chats, viewedCli, push } = input
+  const { views, viewedAgentId, entries, chats, viewedCli, push } = input
   const top = views.at(-1)
   const under = views.at(-2)
-  const owner = top ? subagentViewOwner(top) : undefined
   const laneMembers = (lanes: readonly TranscriptToolEntry[], ownerAgentId: string): SubagentFamilyMember[] =>
     lanes.map((lane) => {
       const state = laneMemberState(lane)
@@ -117,11 +144,18 @@ export function subagentFamilyOf(input: {
       }
     })
   let children: SubagentFamilyMember[]
+  let lane: SubagentFamilyLane | null = null
   if (top?.kind === 'lane') {
-    const viewed = collectAgentLanes(entries).find((lane) => lane.id === top.laneId)
+    const viewed = collectAgentLanes(entries).find((candidate) => candidate.id === top.laneId)
     children = viewed ? laneMembers(childAgentLanes(viewed), top.ownerAgentId) : []
+    if (viewed)
+      lane = {
+        name: laneName(viewed),
+        cli: viewedCli,
+        runsOn: subagentRunsOn(viewed) || null,
+        tokens: viewed.agent?.usage?.totalTokens ?? null,
+      }
   } else {
-    const chatId = owner ?? ''
     children = [
       ...chats.map((subagent): SubagentFamilyMember => {
         const state = chatMemberState(subagent)
@@ -136,7 +170,7 @@ export function subagentFamilyOf(input: {
           source: { kind: 'chat', subagent },
         }
       }),
-      ...laneMembers(directAgentLanes(entries), chatId),
+      ...laneMembers(directAgentLanes(entries), viewedAgentId),
     ]
   }
   const parent: SubagentFamilyParent | null = !top
@@ -149,7 +183,26 @@ export function subagentFamilyOf(input: {
           cli: viewedCli,
           open: input.pop,
         }
-  return { parent, children, hasMore: input.hasMore, loadEarlier: input.loadEarlier }
+  return {
+    parent,
+    lane,
+    children,
+    // A lane's children are all in it; older turns can add none.
+    hasMore: top?.kind !== 'lane' && input.hasMore,
+    loadingEarlier: input.loadingEarlier === true,
+    loadEarlier: input.loadEarlier,
+  }
+}
+
+// What of a transcript the family says: a streamed token, or a step an agent
+// takes, moves none of it, so neither wakes the panel.
+function laneKey(lanes: readonly TranscriptToolEntry[]): string {
+  return lanes
+    .map(
+      (lane) =>
+        `${lane.id}:${lane.status}:${lane.outputStatus ?? ''}:${lane.completedAt ?? ''}:${lane.agent?.state ?? ''}:${laneName(lane)}:${lane.agent?.usage?.totalTokens ?? ''}`,
+    )
+    .join('\n')
 }
 
 /** How a member stands, with its clock while it works. */
@@ -180,12 +233,12 @@ function FamilyReader({
   active: boolean
   children: (family: SubagentFamily) => ReactNode
 }): JSX.Element {
-  const placeRef = useRef<HTMLDivElement | null>(null)
-  const placed = useChatViewActive(placeRef)
-  const seen = active && placed
-  const session = useConversationSession(viewed.root, workspaceId, viewedAgentId, { active: seen })
-  const events = useDeferredValue(useThrottledValue(session.events, LANE_REFRESH_MS, seen, isEmpty))
+  const session = useConversationSession(viewed.root, workspaceId, viewedAgentId, { active })
+  const sessionRef = useRef(session)
+  sessionRef.current = session
+  const events = useDeferredValue(useThrottledValue(session.events, LANE_REFRESH_MS, active, isEmpty))
   const { entries } = useMemo(() => projectConversation(events), [events])
+  const lanesKey = laneKey(collectAgentLanes(entries))
   const hereChats = useStudioSubagents(workspaceId, viewedAgentId)
   const named = viewed.remote?.agentId === viewedAgentId ? viewed.remote.subagents : undefined
   const chats = useMemo(
@@ -193,30 +246,47 @@ function FamilyReader({
     [viewed.remote, named, hereChats],
   )
   const rootBinding = root?.binding ?? viewed.binding
+  const rootName = rootBinding.agent.name
+  const rootProvider = rootBinding.agent.conversation.providerId
+  const viewedProvider = viewed.binding.agent.conversation.providerId
+  const rootSubagents = root?.remote?.subagents
+  const { hasMore, loadingEarlier } = session
   const family = useMemo(
     () =>
       subagentFamilyOf({
         views,
-        rootName: rootBinding.agent.name,
-        rootCli: cliForConversationProvider(rootBinding.agent.conversation.providerId) as AgentCli | null,
-        viewedCli: cliForConversationProvider(viewed.binding.agent.conversation.providerId) as AgentCli | null,
+        viewedAgentId,
+        rootName,
+        rootCli: cliForConversationProvider(rootProvider) as AgentCli | null,
+        viewedCli: cliForConversationProvider(viewedProvider) as AgentCli | null,
         nameOfChat: (agentId) =>
           chats.find((chat) => chat.id === agentId)?.name ??
-          root?.remote?.subagents.find((row) => row.agentId === agentId)?.title,
+          rootSubagents?.find((row) => row.agentId === agentId)?.title,
         chats: views.at(-1)?.kind === 'lane' ? NO_NAMED : chats,
         entries,
         push: (view) => pushSubagentView(workspaceId, rootAgentId, view),
         pop: () => popSubagentView(workspaceId, rootAgentId),
-        hasMore: session.hasMore,
-        loadEarlier: () => void session.loadEarlier().catch(() => undefined),
+        hasMore,
+        loadingEarlier,
+        loadEarlier: () => void sessionRef.current.loadEarlier().catch(() => undefined),
       }),
-    [views, rootBinding, viewed, root, chats, entries, workspaceId, rootAgentId, session],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `lanesKey` is what of `entries` the family says
+    [
+      views,
+      viewedAgentId,
+      rootName,
+      rootProvider,
+      viewedProvider,
+      rootSubagents,
+      chats,
+      lanesKey,
+      hasMore,
+      loadingEarlier,
+      workspaceId,
+      rootAgentId,
+    ],
   )
-  return (
-    <div ref={placeRef} className="contents">
-      {children(family)}
-    </div>
-  )
+  return <>{children(family)}</>
 }
 
 const NO_NAMED_ROWS: readonly never[] = []
@@ -224,7 +294,7 @@ const NO_NAMED_ROWS: readonly never[] = []
 /**
  * The family of the chat being viewed in a tab, for what is drawn beside it,
  * wherever that chat runs: it reads through the chat's own transport. `active`
- * is whether what it draws can be seen; hidden, it rests as a hidden chat does.
+ * is whether the tab can be seen; hidden, it rests as a hidden chat does.
  */
 export function SubagentFamilyScope({
   workspaceId,

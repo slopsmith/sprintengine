@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useSyncExternalStore } from 'react'
 
-import { openAgentsPane } from '../../workspace/pane/agents/agentsPaneFocus'
+import { useWorkspaceStore } from '../../../store/workspaceStore'
 import { useConversationLinkContext } from './conversationLinks'
 
 // What a chat's tab is showing in place of the chat: a stack of the subagents
@@ -105,34 +105,28 @@ export function useSubagentStackScope(): SubagentStackScope | null {
 }
 
 /**
- * The list of a chat's subagents: the Agents tab for now. One name for the app
- * shell to repoint, since every "See subagents" comes through here.
+ * The list of a chat's subagents: the right-hand panel, on its menu, which
+ * follows the agent in view. Every "See subagents" comes through here.
  */
-export function openSubagentList(workspaceId: string, agentId: string): void {
-  openAgentsPane(workspaceId, agentId, null)
+export function openSubagentList(workspaceId: string): void {
+  useWorkspaceStore.getState().showPaneMenu(workspaceId)
 }
 
 /**
  * Opens a subagent as a full chat in the main pane, from a row in a chat, in a
  * lane, or (with `scope`) from beside the tab. A lane is read from the chat the
- * row is in. A row with no tab to open in (the Agents tab's own thread) opens the
- * subagent there, as it always has.
+ * row is in.
  */
 export function useOpenSubagent(scope?: SubagentStackScope): ((target: SubagentTarget) => void) | null {
   const provided = useSubagentStackScope()
   const link = useConversationLinkContext()
   const stack = scope ?? provided
-  const workspaceId = stack?.workspaceId ?? link?.workspaceId
-  const chatAgentId = link?.agentId ?? stack?.rootAgentId
+  const workspaceId = stack?.workspaceId
   const rootAgentId = stack?.rootAgentId
+  const linkAgentId = link?.agentId
   return useMemo(() => {
-    if (!workspaceId || !chatAgentId) return null
+    if (!workspaceId || !rootAgentId) return null
     return (target: SubagentTarget) => {
-      if (!rootAgentId) {
-        openAgentsPane(workspaceId, chatAgentId, target.kind === 'chat' ? target.agentId : target.laneId)
-        return
-      }
-      const owner = viewedChatOf(workspaceId, rootAgentId)
       pushSubagentView(
         workspaceId,
         rootAgentId,
@@ -140,11 +134,11 @@ export function useOpenSubagent(scope?: SubagentStackScope): ((target: SubagentT
           ? target
           : {
               kind: 'lane',
-              ownerAgentId: link?.agentId ?? owner,
+              ownerAgentId: linkAgentId ?? viewedChatOf(workspaceId, rootAgentId),
               laneId: target.laneId,
               ...(target.label ? { label: target.label } : {}),
             },
       )
     }
-  }, [workspaceId, chatAgentId, rootAgentId, link?.agentId])
+  }, [workspaceId, rootAgentId, linkAgentId])
 }

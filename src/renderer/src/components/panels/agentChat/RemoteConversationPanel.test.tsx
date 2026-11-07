@@ -538,6 +538,8 @@ async function mountRemote({
     api,
     followed,
     emit: (frame: MeshConversationFrame) => receivers.at(-1)!(frame),
+    /** To the chat's own follow, when a sub-agent has been followed since. */
+    emitToChat: (frame: MeshConversationFrame) => receivers[0]!(frame),
     button: (label: string) =>
       Array.from(host.querySelectorAll('button')).find((item) => item.textContent?.trim() === label),
     type: (value: string) => {
@@ -552,6 +554,24 @@ async function mountRemote({
       composer().dispatchEvent(
         new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
       ),
+    /** Writes and sends in the box on top, for a sub-agent drawn over its hidden parent. */
+    sendInTopBox: async (value: string) => {
+      const editors = host.querySelectorAll<HTMLElement>('.cm-editor')
+      const top = editors[editors.length - 1]!
+      const view = EditorView.findFromDOM(top)!
+      await act(async () =>
+        view.dispatch({
+          changes: { from: 0, insert: value },
+          selection: { anchor: value.length },
+          userEvent: 'input.type',
+        }),
+      )
+      await act(async () =>
+        top
+          .querySelector('.cm-content')!
+          .dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })),
+      )
+    },
     composer,
     draft: () => editor().state.doc.toString(),
     async unmount() {
@@ -2217,7 +2237,7 @@ test('no Schedule for a machine that does not keep scheduled messages, or a pair
   }
 })
 
-test('the sub-agents a machine names reach the Agents tab, each read and answered as its own chat', async () => {
+test('the sub-agents a machine names reach the panel, each read and answered as its own chat', async () => {
   const chat = await mountRemote({ access: 'operate', permanentApprovals: true })
   const { readRemoteChat } = await import('./remoteChatRegistry')
   try {
@@ -2256,6 +2276,124 @@ test('the sub-agents a machine names reach the Agents tab, each read and answere
       decision: 'once',
     })
   } finally {
+    await chat.unmount()
+  }
+})
+
+const farChild = {
+  workspaceId: key.workspaceId,
+  agentId: 'remote-child',
+  title: 'Reviewer',
+  providerId: 'cursor-agent',
+  modelId: 'grok-4.7',
+  readOnly: false,
+  status: 'working' as const,
+  task: 'Review it',
+  startedAt: 1,
+}
+
+const panelRow = (host: HTMLElement, name: string) =>
+  [...host.querySelectorAll<HTMLElement>('[data-chat-panel] [data-panel-row]')].find((row) =>
+    row.textContent?.startsWith(name),
+  )
+
+const childEvent = (type: ConversationEventType, payload: Record<string, unknown>) => ({
+  ...event(type, payload),
+  sessionId: 'child-session',
+  agentId: 'remote-child',
+})
+
+test('a sub-agent over there opens from the panel as a chat of its own: its transcript, and its box goes to it', async () => {
+  const { resetSubagentViews } = await import('./subagentViewStack')
+  const chat = await mountRemote({ access: 'operate' })
+  try {
+    await chat.act(async () => chat.emit({ type: 'subagents', subagents: [farChild] }))
+    const row = panelRow(chat.host, 'Reviewer')
+    expect(row?.textContent).toContain('Working')
+    expect(row?.querySelector('svg')).not.toBeNull()
+    await chat.act(async () => row!.click())
+    expect(chat.followed.at(-1)).toEqual({ ...key, agentId: 'remote-child' })
+
+    await chat.act(async () => {
+      const events = [
+        childEvent('user_message', { turnId: 'c1', text: 'Review the calendar screen, closely' }),
+        childEvent('turn_started', { turnId: 'c1' }),
+        childEvent('content_delta', { turnId: 'c1', text: 'The week view overflows.' }),
+        childEvent('turn_completed', { turnId: 'c1' }),
+      ]
+      chat.emit({ type: 'snapshot', page: { events, hasMore: false, beforeCursor: null } } as MeshConversationFrame)
+      chat.emit({ type: 'synchronized', seq: events.at(-1)!.seq } as MeshConversationFrame)
+      chat.emit({ type: 'link', state: 'live', detail: 'Following on mac-mini.', access: 'operate' })
+    })
+    expect(chat.host.textContent).toContain('Review the calendar screen, closely')
+    expect(chat.host.textContent).toContain('The week view overflows.')
+
+    // The panel went with it: its name, a way back, and no children of its own.
+    const panel = chat.host.querySelector<HTMLElement>('[data-chat-panel]')!
+    expect(panel.querySelector('h2')?.textContent).toBe('Reviewer')
+    expect(panel.querySelector('[data-panel-parent]')?.textContent).toContain('Main chat')
+    expect(panel.querySelector('[data-panel-parent]')?.textContent).toContain('Fix the flaky upload test')
+    expect(panel.textContent).not.toContain('Subagents')
+
+    // A chat of its own takes a message directly, as `subagent.start`'s do.
+    expect(chat.host.querySelector('[data-subagent-blocked]')).toBeNull()
+    await chat.sendInTopBox('Check 320px too')
+    expect(chat.api.meshConversationSend).toHaveBeenCalledExactlyOnceWith({
+      key: { ...key, agentId: 'remote-child' },
+      message: 'Check 320px too',
+    })
+
+    await chat.act(async () => panel.querySelector<HTMLElement>('[data-panel-parent] button')!.click())
+    expect(chat.host.querySelector('[data-subagent-header]')).toBeNull()
+    expect(panel.querySelector('h2')?.textContent).toBe('Fix the flaky upload test')
+  } finally {
+    await chat.act(async () => resetSubagentViews())
+    await chat.unmount()
+  }
+})
+
+test('what a sub-agent over there asks is answered above its parent’s box, through its own chat', async () => {
+  const chat = await mountRemote({ access: 'operate' })
+  try {
+    await chat.act(async () =>
+      chat.emit({ type: 'subagents', subagents: [{ ...farChild, status: 'needs_input', sessionId: 'child-session' }] }),
+    )
+    expect(chat.followed.at(-1)).toEqual({ ...key, agentId: 'remote-child' })
+    await chat.act(async () => {
+      const events = [
+        childEvent('turn_started', { turnId: 'c1' }),
+        childEvent('approval_requested', { turnId: 'c1', requestId: 'child-ask', action: 'Bash', summary: 'npm test' }),
+      ]
+      chat.emit({ type: 'snapshot', page: { events, hasMore: false, beforeCursor: null } } as MeshConversationFrame)
+      chat.emit({ type: 'synchronized', seq: events.at(-1)!.seq } as MeshConversationFrame)
+    })
+    const asks = chat.host.querySelector<HTMLElement>('[data-subagent-request="remote-child"]')!
+    expect(asks.textContent).toContain('Reviewer is asking')
+    expect(asks.textContent).toContain('npm test')
+    const allow = [...asks.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Allow once')!
+    await chat.act(async () => allow.click())
+    expect(chat.api.meshConversationResolveApproval).toHaveBeenLastCalledWith({
+      key: { ...key, agentId: 'remote-child' },
+      requestId: 'child-ask',
+      decision: 'once',
+    })
+  } finally {
+    await chat.unmount()
+  }
+})
+
+test('a pairing that may only read has no box in a sub-agent over there, only the bar', async () => {
+  const { resetSubagentViews } = await import('./subagentViewStack')
+  const chat = await mountRemote({ access: 'read' })
+  try {
+    await chat.act(async () => chat.emit({ type: 'subagents', subagents: [farChild] }))
+    await chat.act(async () => panelRow(chat.host, 'Reviewer')!.click())
+    const bar = chat.host.querySelector('[data-subagent-blocked]')
+    expect(bar?.textContent).toContain('may follow this chat on mac-mini but not drive it')
+    await chat.act(async () => bar!.querySelector('button')!.click())
+    expect(chat.host.querySelector('[data-subagent-header]')).toBeNull()
+  } finally {
+    await chat.act(async () => resetSubagentViews())
     await chat.unmount()
   }
 })

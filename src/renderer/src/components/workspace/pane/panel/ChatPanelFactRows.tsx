@@ -12,6 +12,7 @@ import { localServersStripCopy } from '../../LocalServerMarks'
 import { LocalServersMenu, LocalServerStateWord } from '../../LocalServersMenu'
 import { PullRequestPanelButton } from '../../PullRequestMark'
 import { UsageGlyph } from '../../SidebarAccountBar'
+import { formatTokenCount } from '../../../../utils/tokenFormat'
 import { PanelRow } from './PanelRow'
 
 // The rows that are controls of their own, carried from the bar that used to
@@ -141,6 +142,18 @@ export function ContextRow({ facts }: { facts: ChatPanelFacts }) {
           buttonProps={{ ...triggerProps, 'data-panel-context': '' }}
         />
       )}
+    />
+  )
+}
+
+/** What an agent with no context reading of its own has spent. */
+export function TokensRow({ facts }: { facts: ChatPanelFacts }) {
+  if (!facts.tokens) return null
+  return (
+    <PanelRow
+      glyph={<UsageGlyph className="icon-sm" />}
+      label="Tokens"
+      meta={<span className="tabular-nums">{formatTokenCount(facts.tokens)}</span>}
     />
   )
 }

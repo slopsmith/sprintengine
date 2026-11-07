@@ -71,6 +71,8 @@ export type ChatPanelFacts = {
   permissions: ChatPanelPermissions | null
   /** The preset in words, where this chat has one to say. */
   permissionLabel: string | null
+  /** What it has spent, for an agent with no context reading of its own to say. */
+  tokens?: number | null
 }
 
 const published = new Map<string, ChatPanelFacts>()

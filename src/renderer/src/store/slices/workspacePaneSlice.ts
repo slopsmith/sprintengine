@@ -31,7 +31,6 @@ const WORKSPACE_PANE_TAB_KINDS: readonly WorkspacePaneTabKind[] = [
   'backlog',
   'canvas',
   'document',
-  'agents',
   'library',
 ]
 
@@ -47,7 +46,6 @@ const SINGLETON_PANE_TAB_KINDS: ReadonlySet<WorkspacePaneTabKind> = new Set([
   'diff',
   'git',
   'backlog',
-  'agents',
   'library',
 ])
 

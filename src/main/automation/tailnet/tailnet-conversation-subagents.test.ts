@@ -10,7 +10,7 @@ import { createMockConversationProvider } from '../../providers/mock-conversatio
 import { createConversationGatewayHost, type ConversationListWorkspace } from './tailnet-conversation-host'
 
 // A device following a chat here reads that chat's sub-agents as this machine's
-// own Agents tab does (`conversation-subagents`), and the list a device's
+// own panel does (`conversation-subagents`), and the list a device's
 // sidebar reads goes on leaving them out.
 
 const PARENT = { workspaceId: 'workspace', agentId: 'parent' }

@@ -36,12 +36,12 @@ function answerOf(tool: TranscriptToolEntry): { subagentId: string | null; resul
   }
 }
 
-/** "Started a sub-agent · Cursor · muse-wonder-1.0 · Read-only". */
+/** "Started a subagent · Cursor · muse-wonder-1.0 · Read-only". */
 export function subagentStartWords(tool: TranscriptToolEntry): string {
   const input = inputOf(tool)
   const cli = typeof input.cli === 'string' ? harnessName(input.cli) : null
   const model = typeof input.cliModel === 'string' ? input.cliModel.replace(/\[.*$/u, '') : null
-  return ['Started a sub-agent', cli, model, input.readOnly === true ? 'Read-only' : null].filter(Boolean).join(' · ')
+  return ['Started a subagent', cli, model, input.readOnly === true ? 'Read-only' : null].filter(Boolean).join(' · ')
 }
 
 export function SubagentStartRow({ tool }: { tool: TranscriptToolEntry }): JSX.Element {
@@ -60,7 +60,7 @@ export function SubagentStartRow({ tool }: { tool: TranscriptToolEntry }): JSX.E
         density="row"
         onClick={() => {
           if (subagentId) open?.({ kind: 'chat', agentId: subagentId })
-          else if (context) openSubagentList(context.workspaceId, context.agentId ?? '')
+          else if (context?.workspaceId) openSubagentList(context.workspaceId)
         }}
         aria-label={`${words}. Open it`}
       >

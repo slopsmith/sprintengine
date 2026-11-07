@@ -3,10 +3,10 @@ import { useRemoteChat } from '../../../panels/agentChat/remoteChatRegistry'
 import { useWorkspaceStore } from '../../../../store/workspaceStore'
 
 /**
- * The chat the panel is about: the workspace's focused chat, or, for a chat on
- * a paired machine, which has no record here and records no focus, the one its
- * pane says is open here. The Agents tab and the Library find their chat the
- * same way.
+ * The chat in the tab the panel is about: the workspace's focused chat, or, for
+ * a chat on a paired machine, which has no record here and records no focus, the
+ * one its pane says is open here. The Library finds its chat the same way. The
+ * panel then follows the agent in view in that tab.
  */
 export function useChatPanelTarget(workspaceId: string): string | null {
   const focusedAgentId = useWorkspaceStore((state) => state.focusedAgentByWorkspaceId[workspaceId] ?? null)

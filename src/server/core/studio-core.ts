@@ -942,7 +942,7 @@ export function createStudioCore(platform: StudioPlatform, options: StudioCoreOp
         // resume it sends a chat a limit stopped, for a paired machine's strip
         // and tray.
         usageLimits: studioConversationUsageLimits(() => usageLimitResumes),
-        // What moves a paired machine's Agents tab for a chat here.
+        // What moves a paired machine's panel for a chat here.
         subagentChanges: subagentChangesOf({
           onEvent: (listener) => conversations.onEvent(listener),
           onRecords: (listener) => workspaceRegistry.subscribe(listener),

@@ -86,7 +86,7 @@ export const CONVERSATION_STOP_SUBAGENT_CAPABILITY = 'conversation-stop-subagent
 export const CONVERSATION_AGENT_MESSAGE_CAPABILITY = 'conversation-agent-message' as const
 /**
  * The chats a chat started for one task may be read where it is followed, as
- * the desktop's own Agents tab reads them: `watchSubagents` has the desktop
+ * the desktop's own panel reads them: `watchSubagents` has the desktop
  * name the followed chat's sub-agents in `subagents` frames, and each is a chat
  * of its own, followed by its `agentId` and answered there. No listed chat is
  * one: the `list` leaves them out, so only a client that asks is told of them.

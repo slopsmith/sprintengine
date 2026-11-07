@@ -725,7 +725,7 @@ export function parseConversationWireHighlight(value: unknown): ConversationWire
   return { starred, ...(color ? { color } : {}) }
 }
 
-/** Where a sub-agent stands, as the desktop's Agents tab says it. */
+/** Where a sub-agent stands, as the desktop's panel says it. */
 export const CONVERSATION_SUBAGENT_STATUSES = [
   'starting',
   'working',

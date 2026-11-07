@@ -695,7 +695,7 @@ export type WorkspaceGitPanelState = {
 // tabset because the pane mixes kinds FlexLayout used to scatter across two
 // exclusive rails.
 export type WorkspacePaneTabKind =
-  'browser' | 'terminal' | 'files' | 'diff' | 'git' | 'backlog' | 'canvas' | 'document' | 'agents' | 'library'
+  'browser' | 'terminal' | 'files' | 'diff' | 'git' | 'backlog' | 'canvas' | 'document' | 'library'
 
 export type WorkspacePaneTab = {
   id: string

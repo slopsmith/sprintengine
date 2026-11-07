@@ -47,8 +47,8 @@ test('the start of a sub-agent reads as who was started, however the CLI spells 
   expect(isSubagentStart(start())).toBe(true)
   expect(isSubagentStart({ name: 'sprintengine-studio.subagent.start' })).toBe(true)
   expect(isSubagentStart({ name: 'mcp__other__subagent_start' })).toBe(false)
-  expect(subagentStartWords(start())).toBe('Started a sub-agent · Cursor · muse-wonder-1.0 · Read-only')
-  expect(subagentStartWords(start({ input: {} }))).toBe('Started a sub-agent')
+  expect(subagentStartWords(start())).toBe('Started a subagent · Cursor · muse-wonder-1.0 · Read-only')
+  expect(subagentStartWords(start({ input: {} }))).toBe('Started a subagent')
 })
 
 test('a finished wait offers the reply, collapsed; a cut answer leaves it to its own chat', () => {

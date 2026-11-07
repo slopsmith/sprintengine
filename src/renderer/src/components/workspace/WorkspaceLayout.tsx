@@ -57,6 +57,7 @@ import { getHighlightSwatch } from '../../utils/highlight'
 import { resolveWorkspaceWorktree } from '../../utils/workspaceWorktree'
 import { ChatGlyph, GitBranchGlyph } from '../AppIcons'
 import { AgentPill, MachineGlyph } from '../ui'
+import { ViewedAgentTabLogo, ViewedAgentTabName } from '../panels/agentChat/ViewedAgentTab'
 import { useAgentFileTrail } from '../panels/useAgentFileTrail'
 import { normalizePathKey } from '../../hooks/useGitStatus'
 import { resolveMachineIdentity, type MachineIdentity } from '../../../../shared/machine-identity'
@@ -1376,6 +1377,12 @@ function WorkspaceLayoutBody({
           (node.getConfig() as { machineName?: string } | undefined)?.machineName,
         )
 
+      // The chat a tab holds, whose stack of subagents it follows.
+      const tabChatAgentId =
+        tabComponentId === 'agent'
+          ? ((node.getConfig() as { agentId?: string } | undefined)?.agentId ?? node.getId())
+          : (meshConfig?.remoteAgentId ?? null)
+
       // The only tab in the layout is the band's pill (owner ruling 2026-11-07):
       // the chat's name, centred, which toggles the panel. It is the same tab
       // restyled, never a strip turned off: `enableTabStrip` persists through the
@@ -1394,7 +1401,13 @@ function WorkspaceLayoutBody({
           // rename: that is on the tab's menu.
           onDoubleClick={canRenameTab && !pill ? (event) => startRename(event, node) : undefined}
         >
-          {renderValues.content}
+          {tabChatAgentId ? (
+            <ViewedAgentTabName workspaceId={workspaceId} rootAgentId={tabChatAgentId}>
+              {renderValues.content}
+            </ViewedAgentTabName>
+          ) : (
+            renderValues.content
+          )}
         </span>
       )
 
@@ -1496,11 +1509,17 @@ function WorkspaceLayoutBody({
               title={runtimeLabel ?? 'Chat'}
               aria-label={runtimeLabel ?? 'Chat'}
             >
-              {cli ? (
-                <CliIcon cli={cli} className={TAB_CHIP_GLYPH_CLASS} />
-              ) : (
-                <ChatGlyph className={TAB_CHIP_GLYPH_CLASS} />
-              )}
+              <ViewedAgentTabLogo
+                workspaceId={workspaceId}
+                rootAgentId={tabChatAgentId ?? ''}
+                className={TAB_CHIP_GLYPH_CLASS}
+              >
+                {cli ? (
+                  <CliIcon cli={cli} className={TAB_CHIP_GLYPH_CLASS} />
+                ) : (
+                  <ChatGlyph className={TAB_CHIP_GLYPH_CLASS} />
+                )}
+              </ViewedAgentTabLogo>
             </span>
           )
           const identity = machineName
@@ -1598,7 +1617,9 @@ function WorkspaceLayoutBody({
             title={runtimeLabel}
             aria-label={runtimeLabel}
           >
-            <CliIcon cli={conversationCli} className={TAB_CHIP_GLYPH_CLASS} />
+            <ViewedAgentTabLogo workspaceId={workspaceId} rootAgentId={agentId} className={TAB_CHIP_GLYPH_CLASS}>
+              <CliIcon cli={conversationCli} className={TAB_CHIP_GLYPH_CLASS} />
+            </ViewedAgentTabLogo>
           </span>
         )
       } else if (agent?.runtimeKind === 'conversation') {

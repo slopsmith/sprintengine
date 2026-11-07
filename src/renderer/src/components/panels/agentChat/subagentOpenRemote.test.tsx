@@ -11,10 +11,10 @@ import {
   type ConversationTransport,
 } from './conversationTransport'
 import { SubagentLane } from './timelineRows'
-import { readAgentFocusRequest } from '../../workspace/pane/agents/agentsPaneFocus'
+import { readSubagentViews, resetSubagentViews, SubagentStackProvider } from './subagentViewStack'
 
-// An agent of a chat followed from a paired machine opens in the Agents tab,
-// as one of a chat here does: the tab reads that chat through its pane
+// An agent of a chat followed from a paired machine opens in the chat's place,
+// as one of a chat here does: it is read from that chat, through its pane
 // (`publishRemoteChat`), by its agent id on that machine.
 
 const lane: TranscriptToolEntry = {
@@ -41,6 +41,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await act(async () => root?.unmount())
+  resetSubagentViews()
   host?.remove()
   root = null
   host = null
@@ -56,21 +57,25 @@ function Remote({ children }: { children: React.ReactNode }) {
   return <ConversationTransportProvider value={remote}>{children}</ConversationTransportProvider>
 }
 
-test('an agent of a paired machine’s chat opens in the Agents tab', async () => {
+test('an agent of a paired machine’s chat opens in the chat’s place', async () => {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
   await act(async () =>
     root!.render(
       <Remote>
-        <ConversationLinkProvider workspaceId="w-followed" agentId="agent-there" cwd="" workspaceRoot="">
-          <SubagentLane tool={lane} />
-        </ConversationLinkProvider>
+        <SubagentStackProvider value={{ workspaceId: 'w-followed', rootAgentId: 'agent-there' }}>
+          <ConversationLinkProvider workspaceId="w-followed" agentId="agent-there" cwd="" workspaceRoot="">
+            <SubagentLane tool={lane} />
+          </ConversationLinkProvider>
+        </SubagentStackProvider>
       </Remote>,
     ),
   )
   const open = host.querySelector<HTMLButtonElement>('button[aria-label^="Open "]')
   expect(open).not.toBeNull()
   await act(async () => open!.click())
-  expect(readAgentFocusRequest('w-followed')).toMatchObject({ agentId: 'agent-there', laneId: 'toolu_agent' })
+  expect(readSubagentViews('w-followed', 'agent-there')).toMatchObject([
+    { kind: 'lane', ownerAgentId: 'agent-there', laneId: 'toolu_agent' },
+  ])
 })

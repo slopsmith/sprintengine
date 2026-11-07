@@ -1076,16 +1076,19 @@ conversation-files`, on `conversation:read`), the picker ranks the matches
   pairing that may only follow sees the notice without its buttons; a machine
   without the capability draws neither, as before.
 - **Its sub-agents are the other machine's** (2026-11-07). Where the machine
-  advertises `conversation-subagents`, the Agents tab lists a chat's sub-agents
-  as that machine's own tab does, each with its harness's logo, how it stands
-  and its task, and live (`watchSubagents`, `subagents` frames). The row in the
-  transcript opens the same one. Opened, a sub-agent is followed as a chat of its
-  own, over a socket of its own, so its steps, its report and what it asks are
-  read from it and answered there; a pairing that may only follow sees a
-  question without being able to answer it. It is stopped as it is on its own
-  machine, with its parent's Stop or by the parent's `subagent.cancel`, since
-  neither tab offers a Stop of its own. No list shows one: not the sidebar here,
-  and not a phone's. A machine without the capability shows only the agents the
+  advertises `conversation-subagents`, the right-hand panel's Subagents section
+  lists a chat's sub-agents as that machine's own panel does, each with its
+  harness's logo and how it stands, live (`watchSubagents`, `subagents` frames).
+  The row in the transcript opens the same one. Opened, a sub-agent is followed
+  as a chat of its own, over a socket of its own, in the main pane, so its steps,
+  its report and what it asks are read from it and answered there, and a message
+  in its box goes straight to it, resuming it if it is at rest. What it asks is
+  also answered above its parent's box. A pairing that may only follow sees a
+  question without being able to answer it, and has the bar in place of the box.
+  It is stopped as it is on its own machine, with its parent's Stop or by the
+  parent's `subagent.cancel`, since its chat offers no Stop of its own. No list
+  shows one: not the sidebar here, and not a phone's. A machine without the
+  capability shows only the agents the
   chat's CLI spawned, as before. The phone does not ask, and shows those too.
 
 ### Terminals stay on the machine

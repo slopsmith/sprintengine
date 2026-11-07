@@ -34,6 +34,7 @@ const family = (views: SubagentView[], entries: TranscriptEntry[], chats: Studio
     pop,
     result: subagentFamilyOf({
       views,
+      viewedAgentId: 'root',
       rootName: 'Calendar screen rebuild',
       rootCli: 'claude-code',
       viewedCli: 'claude-code',
@@ -57,7 +58,7 @@ test('the chat itself has no parent, and its children are its own, not theirs', 
 test('a child opens by being pushed, with its name, from the chat in view', () => {
   const { result, push } = family([], [lane('outer')])
   result.children[0]!.open()
-  expect(push).toHaveBeenCalledWith({ kind: 'lane', ownerAgentId: '', laneId: 'outer', label: 'outer' })
+  expect(push).toHaveBeenCalledWith({ kind: 'lane', ownerAgentId: 'root', laneId: 'outer', label: 'outer' })
 })
 
 test('from a lane, the parent is the main chat, and only that lane’s children are named', () => {

@@ -43,7 +43,6 @@ const PreviewTab = React.lazy(() => import('./browser/PreviewTab').then((module)
 // board it is on — and whether it is the one on screen, and a host panel is
 // handed neither; the same split dev-tools makes for its explorer.
 const CanvasTab = React.lazy(() => import('./canvas/CanvasTab').then((module) => ({ default: module.CanvasTab })))
-const AgentsTab = React.lazy(() => import('./agents/AgentsTab').then((module) => ({ default: module.AgentsTab })))
 const LibraryTab = React.lazy(() => import('./library/LibraryTab').then((module) => ({ default: module.LibraryTab })))
 const DocumentTab = React.lazy(() =>
   import('./document/DocumentTab').then((module) => ({ default: module.DocumentTab })),
@@ -333,8 +332,6 @@ function PaneTabPanel({ workspaceId, tab, active, onDiffCountChange }: PaneTabPa
       )
     case 'document':
       return <DocumentTab tab={tab} active={active} />
-    case 'agents':
-      return <AgentsTab workspaceId={workspaceId} active={active} />
     case 'library':
       return <LibraryTab workspaceId={workspaceId} active={active} />
     case 'diff': {

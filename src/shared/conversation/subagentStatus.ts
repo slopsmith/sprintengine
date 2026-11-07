@@ -2,7 +2,7 @@ import type { AgentState } from '../agent-state'
 import type { ConversationSessionSummary } from '../conversation-runtime'
 import { conversationSummaryPhase } from './phase'
 
-/** Where a sub-agent stands, as its parent's tools and the Agents tab say it. */
+/** Where a sub-agent stands, as its parent's tools and the panel say it. */
 export type SubagentStatus = 'starting' | 'working' | 'needs_input' | 'completed' | 'failed' | 'stopped'
 
 /** Whether a sub-agent's status is one it stays in until someone sends it a message. */

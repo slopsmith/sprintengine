@@ -567,17 +567,16 @@ export default function CommandPalette({
                 },
               ]
             : []),
-          // The agents the focused chat sent off to work: running, finished,
-          // and each one's own steps.
-          ...(panelCommandEnabled('panel.agents.toggle')
+          // The agents the focused chat sent off to work, on the right-hand panel.
+          ...(panelCommandEnabled('panel.subagents.show')
             ? [
                 {
-                  id: 'panel.agents.toggle',
-                  label: 'Toggle subagents',
+                  id: 'panel.subagents.show',
+                  label: 'Show subagents',
                   searchLabel: 'Subagents',
-                  shortcut: shortcutFor('panel.agents.toggle'),
+                  shortcut: shortcutFor('panel.subagents.show'),
                   run: () => {
-                    onRunCommand('panel.agents.toggle')
+                    onRunCommand('panel.subagents.show')
                     onClose()
                   },
                 },

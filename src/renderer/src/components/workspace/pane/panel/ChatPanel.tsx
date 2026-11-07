@@ -8,6 +8,8 @@ import CliIcon from '../../../CliIcon'
 import { shortMachineName } from '../../../remote/machineRowModel'
 import { useChatActivity, type ChatActivityRow } from '../../../panels/agentChat/chatActivityStore'
 import { useChatPanelFacts, type ChatPanelFacts } from '../../../panels/agentChat/chatPanelStore'
+import { useSubagentFamily } from '../../../panels/agentChat/subagentFamilyStore'
+import { subagentViewOwner, useSubagentViews } from '../../../panels/agentChat/subagentViewStack'
 import {
   DiffStatPill,
   FrontTruncatedText,
@@ -21,21 +23,27 @@ import {
 import { remoteProjectName } from '../../sidebar/folderGroups'
 import { dispatchFileReveal } from '../../../../utils/fileReveal'
 import { DiffGlyph, FilesGlyph, LibraryGlyph, CanvasGlyph, TerminalGlyph } from '../paneKinds'
-import { ContextRow, PermissionsRow, PullRequestRow, ServerRow, UsageRow } from './ChatPanelFactRows'
+import { ContextRow, PermissionsRow, PullRequestRow, ServerRow, TokensRow, UsageRow } from './ChatPanelFactRows'
 import { ChatPanelOpenNow, type OpenNowProps } from './ChatPanelOpenNow'
-import { ChatPanelSubagents } from './ChatPanelSubagents'
+import { ChatPanelParentLink, ChatPanelSubagents } from './ChatPanelSubagents'
+import { laneFacts } from './chatPanelLaneFacts'
 import { useChatPanelTarget } from './chatPanelTarget'
 import { PanelCard, PanelRow } from './PanelRow'
+import { useCanvasBoardCount } from './useCanvasBoardCount'
 import { useWorkspaceCheckoutFacts } from './useWorkspaceCheckoutFacts'
 
 // The right-hand panel: the pane column's menu (owner ruling 2026-11-07). A
-// head that says what the chat is and where it runs, then what can be opened
-// from here, by what it belongs to: the chat's subagents, what is open now, this
-// chat, its session and the project.
+// head that says what the agent in view is and where it runs, a card up to its
+// parent when it is a subagent, then what can be opened from here, by what it
+// belongs to: its subagents, what is open now, this chat, its session and the
+// project.
 //
-// It stands beside the chat rather than in it, and reads one chat through
-// `chatPanelStore`, which `ConversationChatBody` fills for a chat here and a
-// chat on a paired machine alike. A row that has nothing to act on over there
+// It stands beside the chat rather than in it, and follows the agent in view
+// (`useSubagentViews`): the tab's chat, or the subagent the person went into. It
+// reads a chat through `chatPanelStore`, which `ConversationChatBody` fills for
+// a chat here and a chat on a paired machine alike and for a sub-agent's chat as
+// for any other, and who it is related to through `subagentFamilyStore`. A lane
+// is no chat, and says only what `laneFacts` lets it. A row that has nothing to act on over there
 // (`farMachine`) says so in words rather than going dead: what this computer
 // cannot reach is a fact on the row, not a control that does nothing.
 //
@@ -121,9 +129,15 @@ export type ChatPanelProps = OpenNowProps & {
 
 export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
   const { workspaceId, tabs } = openNow
-  const agentId = useChatPanelTarget(workspaceId)
-  const facts = useChatPanelFacts(workspaceId, agentId)
-  const activity = useChatActivity(workspaceId, agentId)
+  const tabAgentId = useChatPanelTarget(workspaceId)
+  const top = useSubagentViews(workspaceId, tabAgentId ?? '').at(-1)
+  const family = useSubagentFamily(workspaceId, tabAgentId)
+  const agentId = top ? subagentViewOwner(top) : tabAgentId
+  const chatFacts = useChatPanelFacts(workspaceId, agentId)
+  const onLane = top?.kind === 'lane'
+  const facts = onLane && chatFacts ? laneFacts(chatFacts, family.lane, top.label) : chatFacts
+  // What a chat touched is its own, and no part of it is known to be a lane's.
+  const activity = useChatActivity(workspaceId, onLane ? null : agentId)
   const workspace = useWorkspaceStore((state) => state.workspaces.find((w) => w.id === workspaceId) ?? null)
   const moduleOverrides = useWorkspaceStore((state) => state.appSettings.modules)
   const openPaneTab = useWorkspaceStore((state) => state.openPaneTab)
@@ -133,6 +147,11 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
   const filesEnabled = selectModuleEnabled(moduleOverrides, 'dev-tools')
   const gitEnabled = selectModuleEnabled(moduleOverrides, 'git')
   const canvasEnabled = selectModuleEnabled(moduleOverrides, 'canvas')
+  const boardCount = useCanvasBoardCount(
+    workspace,
+    canvasEnabled,
+    `${tabs.filter((tab) => tab.kind === 'canvas').length}:${activity?.rows.find((row) => row.kind === 'canvas')?.meta ?? ''}`,
+  )
 
   // A chat on a paired machine works over there: its checkout and terminals
   // cannot be opened from here.
@@ -140,7 +159,7 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
   const onFarMachine = farMachine ? `On ${farMachine}` : null
 
   const record = agentId ? workspace?.agents?.[agentId] : undefined
-  const name = facts?.name ?? record?.name ?? workspace?.name ?? ''
+  const name = facts?.name ?? top?.label ?? record?.name ?? workspace?.name ?? ''
   const cli = facts?.cli ?? record?.cli ?? null
   const words = facts ? [facts.harnessLabel, facts.modelLabel].filter(Boolean).join(' · ') : null
   const origin = workspace?.remoteOrigin
@@ -183,7 +202,8 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
         project={project}
         onClose={onClose}
       />
-      <ChatPanelSubagents workspaceId={workspaceId} agentId={agentId} cli={cli} />
+      {family.parent ? <ChatPanelParentLink parent={family.parent} /> : null}
+      <ChatPanelSubagents family={family} />
       <ChatPanelOpenNow {...openNow} activity={activity} />
       <Section title="This chat" inset="flush">
         <PanelCard>
@@ -236,11 +256,12 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
           {facts?.localServers ? <ServerRow localServers={facts.localServers} /> : null}
         </PanelCard>
       </Section>
-      {facts && (facts.permissions || facts.permissionLabel || facts.context || facts.usageLimits) ? (
+      {facts && (facts.permissions || facts.permissionLabel || facts.context || facts.tokens || facts.usageLimits) ? (
         <Section title="Session" inset="flush">
           <PanelCard>
             <PermissionsRow facts={facts} />
             <ContextRow facts={facts} />
+            <TokensRow facts={facts} />
             <UsageRow facts={facts} />
           </PanelCard>
         </Section>
@@ -257,6 +278,7 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
             <PanelRow
               glyph={<CanvasGlyph className="icon-sm" />}
               label="Canvases"
+              meta={boardCount ? <span className="tabular-nums">{boardCount}</span> : null}
               onClick={() => openPaneTab(workspaceId, { kind: 'canvas' })}
             />
           ) : null}

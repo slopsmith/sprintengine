@@ -631,16 +631,15 @@ export const COMMAND_REGISTRY = [
     availability: ['activeWorkspace', 'backlogEnabled'],
     handlerPath: { kind: 'workspace-manager', handler: "togglePaneKind(windowActiveWorkspaceId, 'backlog')" },
   }),
-  // The Agents list is a pane tab like Git: showing → close it, behind → bring
-  // it forward, absent → open it. Unbound, like Canvas; the palette, the pane's
-  // "+" menu and a chat's own agent lanes open it.
+  // A chat's subagents are listed on the right-hand panel, so this opens it on
+  // its menu, and leaves it open if it is. Unbound, like Canvas.
   command({
-    id: 'panel.agents.toggle',
-    title: 'Toggle subagents',
+    id: 'panel.subagents.show',
+    title: 'Show subagents',
     category: 'panel',
     scopes: ['workspace'],
     availability: ['activeWorkspace'],
-    handlerPath: { kind: 'workspace-manager', handler: "togglePaneKind(windowActiveWorkspaceId, 'agents')" },
+    handlerPath: { kind: 'workspace-manager', handler: 'showPaneMenu(windowActiveWorkspaceId)' },
   }),
   // Canvas is a pane tab like Files and Git, so its toggle reads the same way:
   // showing → close it, present but behind → bring it forward, absent → open

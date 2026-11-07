@@ -676,6 +676,7 @@ export default function WorkspaceManager() {
   const openPaneTab = useWorkspaceStore((s) => s.openPaneTab)
   const setPaneOpen = useWorkspaceStore((s) => s.setPaneOpen)
   const togglePaneMenu = useWorkspaceStore((s) => s.togglePaneMenu)
+  const showPaneMenu = useWorkspaceStore((s) => s.showPaneMenu)
   const togglePaneKind = useWorkspaceStore((s) => s.togglePaneKind)
   const visibleWorkspaceIdSet = useMemo(
     () => new Set(currentWorkspaceWindow?.workspaceIds ?? workspaces.map((workspace) => workspace.id)),
@@ -4425,11 +4426,8 @@ export default function WorkspaceManager() {
         )
         return true
       }
-      if (commandId === 'panel.agents.toggle' && windowActiveWorkspaceId) {
-        keepFocusOutOfClosedPane(
-          () => togglePaneKind(windowActiveWorkspaceId, 'agents'),
-          paneOpenOf(windowActiveWorkspaceId),
-        )
+      if (commandId === 'panel.subagents.show' && windowActiveWorkspaceId) {
+        showPaneMenu(windowActiveWorkspaceId)
         return true
       }
       if (commandId === 'panel.canvas.toggle' && windowActiveWorkspaceId) {

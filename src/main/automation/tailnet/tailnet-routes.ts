@@ -326,7 +326,7 @@ export const TAILNET_CAPABILITIES = [
   'conversation-quote-tokens',
   // The sub-agents of a chat followed from a paired machine (2026-11-07):
   // `watchSubagents` has the socket say, in `subagents` frames, which a chat
-  // has and how each stands, as this machine's own Agents tab reads them. Each
+  // has and how each stands, as this machine's own panel reads them. Each
   // is a chat of its own, followed by its id. The list still leaves them out,
   // so a client that does not ask is told of none. A client shows only the
   // agents a chat's CLI spawned for a machine without it.

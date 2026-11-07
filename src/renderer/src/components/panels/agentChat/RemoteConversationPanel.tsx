@@ -26,7 +26,13 @@ import { hostUsageLimitsOf } from './hostUsageLimits'
 import { publishRemoteChat } from './remoteChatRegistry'
 import { cliForConversationProvider } from '../../../../../shared/conversation-harness'
 import { studioSubagentsOf, SubagentStatusWords } from './chatSubagents'
-import { SubagentChatHost, subagentFacts, SubagentGone, SubagentViewHeader } from './SubagentChatHost'
+import {
+  SubagentChatHost,
+  SubagentEndNotice,
+  subagentFacts,
+  SubagentGone,
+  SubagentViewHeader,
+} from './SubagentChatHost'
 import type { ChatBinding, ChatAgentFields } from './chatBinding'
 import type { ChatReadiness } from './chatStates'
 import {
@@ -311,7 +317,7 @@ export default function RemoteConversationPanel({
   const [usageLimits, setUsageLimits] = useState(false)
   const [hostUsage, setHostUsage] = useState<MeshConversationUsageLimits | null>(null)
   // The chat's sub-agents, as the machine last said. It says only where it
-  // advertises `conversation-subagents`; the Agents tab reads them from here.
+  // advertises `conversation-subagents`; the panel reads them from here.
   const [hostSubagents, setHostSubagents] = useState<MeshSubagent[]>([])
   const modelSwitch = listedModelSwitch && Boolean(thread?.models)
   // Bumped after an accepted model switch, so the list is read again and the
@@ -448,7 +454,7 @@ export default function RemoteConversationPanel({
   }, [key, machineName])
 
   // A sub-agent is a chat of its own over there, followed by its own ids: what
-  // the Agents tab reads of one, and the answer to what it asks, go through
+  // the panel reads of one, and the answer to what it asks, go through
   // this. Made once for each, as the pane's own is, and with the pane's word on
   // what this pairing may do.
   const subagentTransport = useMemo(() => {
@@ -670,18 +676,20 @@ export default function RemoteConversationPanel({
     ],
   )
 
-  // The Agents tab beside it reads the chat through this transport, as it
-  // reads a local chat through its record.
+  // The panel beside it reads the chat through this transport, as it reads a
+  // local chat through its record.
+  const subagentOf = subagent?.parentAgentId
   useEffect(
     () =>
       publishRemoteChat(workspaceId, {
         agentId: remoteAgentId,
+        ...(subagentOf ? { subagentOf } : {}),
         transport,
         binding,
         subagents: hostSubagents,
         subagentTransport,
       }),
-    [workspaceId, remoteAgentId, transport, binding, hostSubagents, subagentTransport],
+    [workspaceId, remoteAgentId, subagentOf, transport, binding, hostSubagents, subagentTransport],
   )
 
   const chat = (
@@ -716,6 +724,7 @@ export default function RemoteConversationPanel({
               status={shown ? <SubagentStatusWords subagent={shown} /> : undefined}
               onCrumb={onCrumb}
             />
+            <SubagentEndNotice error={row.error ?? null} />
             <div className="min-h-0 flex-1">
               <RemoteConversationPanel
                 workspaceId={workspaceId}

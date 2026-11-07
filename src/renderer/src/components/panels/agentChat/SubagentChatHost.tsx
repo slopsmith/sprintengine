@@ -1,6 +1,9 @@
-import { type JSX, type ReactNode, useCallback, useMemo } from 'react'
-import { GhostButton, LinkButton, OutlineButton, TruncatedText } from '../../ui'
+import { type JSX, type ReactNode, useCallback, useMemo, useRef } from 'react'
+import { GhostButton, InlineNotice, LinkButton, OutlineButton, TruncatedText } from '../../ui'
+import { useChatViewActive } from './chatViewActivity'
 import { LaneChatView } from './LaneChatView'
+import { SubagentFamilyScope, type SubagentFamily } from './subagentFamily'
+import { usePublishSubagentFamily } from './subagentFamilyStore'
 import { harnessName } from './subagentIcon'
 import {
   popSubagentView,
@@ -16,7 +19,8 @@ import {
 // hidden, as a tab that is not selected is: what such a view holds (a message
 // queued behind its turn) lives in that view, and its turn may end while it is
 // hidden. A lane is only a reading of its owner's transcript, so it has nothing
-// to keep and only the top one is mounted.
+// to keep and only the top one is mounted. The panel beside the tab reads who
+// the agent in view is related to from here.
 
 export type SubagentChatCrumb = { key: string; name: string; depth: number }
 
@@ -101,6 +105,12 @@ export function SubagentViewHeader({
   )
 }
 
+/** Why a sub-agent ended, where it failed: said under its header, as its transcript may not. */
+export function SubagentEndNotice({ error }: { error: string | null }): JSX.Element | null {
+  if (!error) return null
+  return <InlineNotice tone="error" title="Why it ended" detail={error} className="mx-3 mt-2 shrink-0" />
+}
+
 /**
  * Where a subagent cannot take a message there is no box at all, only this, in
  * the box's place (owner ruling 2026-11-07): that it has to go through the
@@ -133,6 +143,19 @@ export function SubagentBlockedBar({
   )
 }
 
+function FamilyPublisher({
+  workspaceId,
+  rootAgentId,
+  family,
+}: {
+  workspaceId: string
+  rootAgentId: string
+  family: SubagentFamily
+}): null {
+  usePublishSubagentFamily(workspaceId, rootAgentId, family)
+  return null
+}
+
 export function SubagentChatHost({
   workspaceId,
   rootAgentId,
@@ -159,36 +182,43 @@ export function SubagentChatHost({
     [workspaceId, rootAgentId],
   )
   const onBack = useCallback(() => popSubagentView(workspaceId, rootAgentId), [workspaceId, rootAgentId])
+  const placeRef = useRef<HTMLDivElement | null>(null)
+  const active = useChatViewActive(placeRef)
   return (
     <SubagentStackProvider value={scope}>
-      <div className={views.length > 0 ? 'hidden' : 'h-full min-h-0'}>{children}</div>
-      {views.map((view, depth) => {
-        const top = depth === views.length - 1
-        const under = views[depth - 1]
-        const crumbs = subagentCrumbs(rootName, views, depth, nameOf)
-        const parentName = crumbs.at(-1)!.name
-        const parentAgentId = under ? subagentViewOwner(under) : rootAgentId
-        if (view.kind === 'lane') {
-          if (!top) return null
+      <SubagentFamilyScope workspaceId={workspaceId} rootAgentId={rootAgentId} active={active}>
+        {(family) => <FamilyPublisher workspaceId={workspaceId} rootAgentId={rootAgentId} family={family} />}
+      </SubagentFamilyScope>
+      <div ref={placeRef} className="h-full min-h-0">
+        <div className={views.length > 0 ? 'hidden' : 'h-full min-h-0'}>{children}</div>
+        {views.map((view, depth) => {
+          const top = depth === views.length - 1
+          const under = views[depth - 1]
+          const crumbs = subagentCrumbs(rootName, views, depth, nameOf)
+          const parentName = crumbs.at(-1)!.name
+          const parentAgentId = under ? subagentViewOwner(under) : rootAgentId
+          if (view.kind === 'lane') {
+            if (!top) return null
+            return (
+              <div key={`lane:${view.ownerAgentId}:${view.laneId}`} className="flex h-full min-h-0 flex-col">
+                <LaneChatView
+                  workspaceId={workspaceId}
+                  view={view}
+                  parentName={parentName}
+                  crumbs={crumbs}
+                  onCrumb={onCrumb}
+                  onBack={onBack}
+                />
+              </div>
+            )
+          }
           return (
-            <div key={`lane:${view.ownerAgentId}:${view.laneId}`} className="flex h-full min-h-0 flex-col">
-              <LaneChatView
-                workspaceId={workspaceId}
-                view={view}
-                parentName={parentName}
-                crumbs={crumbs}
-                onCrumb={onCrumb}
-                onBack={onBack}
-              />
+            <div key={`chat:${view.agentId}`} className={top ? 'flex h-full min-h-0 flex-col' : 'hidden'}>
+              {renderChat({ agentId: view.agentId, parentAgentId, parentName, crumbs, active: top, onCrumb, onBack })}
             </div>
           )
-        }
-        return (
-          <div key={`chat:${view.agentId}`} className={top ? 'flex h-full min-h-0 flex-col' : 'hidden'}>
-            {renderChat({ agentId: view.agentId, parentAgentId, parentName, crumbs, active: top, onCrumb, onBack })}
-          </div>
-        )
-      })}
+        })}
+      </div>
     </SubagentStackProvider>
   )
 }

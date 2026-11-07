@@ -196,7 +196,7 @@ export function useChatActivityCard({
           return
         }
         case 'agents':
-          openSubagentList(workspaceId, agentId)
+          openSubagentList(workspaceId)
           return
         case 'library':
           openPaneTab(workspaceId, { kind: 'library' })

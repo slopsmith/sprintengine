@@ -5,7 +5,7 @@ import type { ChatBinding } from './chatBinding'
 import type { ConversationTransport } from './conversationTransport'
 
 // The chats on paired machines this window has open, by the workspace here
-// that holds each one's pane: what a surface beside the chat (the Agents tab)
+// that holds each one's pane: what a surface beside the chat (the panel)
 // needs to read it as the pane does. A local chat is found by its agent record
 // in the workspace store; a remote chat has no record here, only its pane, so
 // the pane says it is here. The surface reads through the pane's own
@@ -15,6 +15,8 @@ import type { ConversationTransport } from './conversationTransport'
 export type RemoteChatEntry = {
   /** The chat's agent id on its machine, which its session is keyed by here. */
   agentId: string
+  /** The chat it belongs to, for a sub-agent drawn in its parent's tab: never the chat a tab holds. */
+  subagentOf?: string
   transport: ConversationTransport
   binding: ChatBinding
   /** The chat's sub-agents, as its machine last said. Empty for a machine that does not say. */
@@ -61,7 +63,7 @@ function subscribe(listener: () => void): () => void {
 /**
  * The remote chat open in `workspaceId` that is `agentId`, or that has it as a
  * sub-agent, which has no pane of its own to be found by; with no agent asked
- * for, the one published last; null when none is open there.
+ * for, the tab's chat published last; null when none is open there.
  */
 export function readRemoteChat(workspaceId: string, agentId: string | null): RemoteChatEntry | null {
   const chats = registry.get(workspaceId)
@@ -74,7 +76,7 @@ export function readRemoteChat(workspaceId: string, agentId: string | null): Rem
     return null
   }
   let last: RemoteChatEntry | null = null
-  for (const entry of chats.values()) last = entry
+  for (const entry of chats.values()) if (!entry.subagentOf) last = entry
   return last
 }
 

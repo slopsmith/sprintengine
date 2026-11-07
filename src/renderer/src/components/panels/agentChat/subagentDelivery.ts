@@ -9,8 +9,9 @@ import { laneAgentState } from './subagentStatus'
 // What was proven, with the real Claude Code SDK, asking the parent to use
 // SendMessage to the agent's task id: a running background agent, named or not,
 // a foreground agent moved to the background first, a nested agent, an Explore
-// agent, a finished agent (it is resumed), and a finished agent after the CLI
-// process restarted, all received the message. An agent the person stopped did
+// agent, a finished agent (it is resumed), a finished agent after the CLI
+// process restarted, and a finished nested agent, in the same run and after a
+// restart, all received the message. An agent the person stopped did
 // not: the CLI refuses it as cancelled. Nothing proved a failed agent, or one
 // whose end was never recorded, so those get the bar too.
 

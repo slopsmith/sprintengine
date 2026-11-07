@@ -1,10 +1,9 @@
-// Where a spawned agent stands, as its lane and the Agents panel show it: the
+// Where a spawned agent stands, as its lane and the right-hand panel show it: the
 // model's mark beside it and the words that say working, done, failed or
 // stopped. The mark says who, so the words have to say how it is doing.
 
 import { createContext, useContext, type JSX } from 'react'
 import { TruncatedText, type AgentGlyphState } from '../../ui'
-import { useWorkspaceStore } from '../../../store/workspaceStore'
 import { useConversationLinkContext } from './conversationLinks'
 import type { TranscriptToolEntry } from './conversationProjection'
 import { flattenToolEntries, subagentLaneLabel, toolObject } from './conversationTimeline'
@@ -193,8 +192,7 @@ export function LaneStatus({ lane }: { lane: TranscriptToolEntry }): JSX.Element
 }
 
 /**
- * One agent at a glance, as the chat's agent cards and the Agents tab's list
- * draw it: who it is and what it was sent to do, how it is doing, and under
+ * One agent at a glance, as the chat's agent cards draw it: who it is and what it was sent to do, how it is doing, and under
  * that what it is doing now or the first line of what it found. The caller
  * supplies the pressable box around it.
  */
@@ -251,10 +249,9 @@ export function AgentLaneSummary({ lane }: { lane: TranscriptToolEntry }): JSX.E
 /** Opens the right-hand panel on its menu, where this chat's subagents are listed. */
 export function useOpenSubagentsPanel(): (() => void) | null {
   const context = useConversationLinkContext()
-  const showPaneMenu = useWorkspaceStore((state) => state.showPaneMenu)
   if (!context?.workspaceId) return null
   const { workspaceId } = context
-  return () => showPaneMenu(workspaceId)
+  return () => openSubagentList(workspaceId)
 }
 
 /**
@@ -266,10 +263,10 @@ export function useOpenSubagentsPanel(): (() => void) | null {
 export function useOpenAgentsPane(): ((laneId: string | null, label?: string) => void) | null {
   const context = useConversationLinkContext()
   const open = useOpenSubagent()
-  if (!context?.workspaceId || !context.agentId || !open) return null
-  const { workspaceId, agentId } = context
+  if (!context?.workspaceId || !open) return null
+  const { workspaceId } = context
   return (laneId, label) => {
     if (laneId) open({ kind: 'lane', laneId, ...(label ? { label } : {}) })
-    else openSubagentList(workspaceId, agentId)
+    else openSubagentList(workspaceId)
   }
 }

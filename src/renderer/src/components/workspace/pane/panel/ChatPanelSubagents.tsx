@@ -1,19 +1,21 @@
 import React from 'react'
 
-import { Section, TruncatedText } from '../../../ui'
-import { subagentLaneLabel } from '../../../panels/agentChat/conversationTimeline'
-import { useChatSubagents, type ChatSubagent } from '../../../panels/agentChat/chatSubagentsStore'
-import type { AgentCli } from '../../../../types/workspace'
+import { Badge, GhostButton, Section, TruncatedText } from '../../../ui'
+import {
+  SubagentFamilyStatus,
+  type SubagentFamily,
+  type SubagentFamilyMember,
+  type SubagentFamilyParent,
+} from '../../../panels/agentChat/subagentFamily'
 import { SubagentIcon } from '../../../panels/agentChat/subagentIcon'
-import { LaneGlyph, LaneStatus } from '../../../panels/agentChat/subagentStatus'
-import { SubagentStatusWords } from '../agents/studioSubagents'
-import { openAgentsPane } from '../agents/agentsPaneFocus'
+import { LaneGlyph } from '../../../panels/agentChat/subagentStatus'
 import { PanelCard, PanelRow } from './PanelRow'
 
-// The panel's Subagents section: the chat's own children, and nothing at all
-// when it has none. It reads `chatSubagentsStore`, which the chat fills from
-// its transcript and its records, so it knows nothing of how they are found;
-// `open` below is the one line that says where a row goes.
+// The panel's way around a family: a card up to the parent of the agent in view,
+// and Subagents, its own children, nothing at all when it has none. It reads
+// `subagentFamilyStore`, so it knows nothing of how they are found or where they
+// run; each row and the card carry where they go. Rows go into a subagent as a
+// full chat in the main pane, and the panel then follows it.
 
 function ChevronGlyph({ className }: { className?: string }) {
   return (
@@ -29,62 +31,91 @@ function ChevronGlyph({ className }: { className?: string }) {
   )
 }
 
-function SubagentRow({ subagent, cli, onOpen }: { subagent: ChatSubagent; cli: AgentCli | null; onOpen: () => void }) {
-  const name = subagent.kind === 'lane' ? subagentLaneLabel(subagent.lane) : subagent.subagent.name
+function SubagentRow({ member }: { member: SubagentFamilyMember }) {
   return (
     <PanelRow
       glyph={
-        subagent.kind === 'lane' ? (
-          // The panel stands outside the chat, so a lane cannot read the harness
-          // from the conversation around it: it runs on its parent's.
-          cli ? (
-            <SubagentIcon cli={cli} />
-          ) : (
-            <LaneGlyph tool={subagent.lane} />
-          )
+        member.cli || member.source.kind === 'chat' ? (
+          <SubagentIcon cli={member.cli} />
         ) : (
-          <SubagentIcon cli={subagent.subagent.cli} />
+          <LaneGlyph tool={member.source.lane} />
         )
       }
-      label={<TruncatedText as="span" text={name} />}
-      detail={
-        subagent.kind === 'lane' ? (
-          <LaneStatus lane={subagent.lane} />
-        ) : (
-          <SubagentStatusWords subagent={subagent.subagent} />
-        )
+      label={<TruncatedText as="span" text={member.name} />}
+      detail={<SubagentFamilyStatus member={member} />}
+      meta={
+        <>
+          {member.source.kind === 'chat' && member.source.subagent.readOnly ? (
+            <Badge tone="neutral" ariaLabel="Read-only: it cannot change anything" className="whitespace-nowrap">
+              Read-only
+            </Badge>
+          ) : null}
+          <ChevronGlyph className="icon-xs" />
+        </>
       }
-      meta={<ChevronGlyph className="icon-xs" />}
-      onClick={onOpen}
-      ariaLabel={name}
+      onClick={member.open}
+      ariaLabel={member.name}
     />
   )
 }
 
-export function ChatPanelSubagents({
-  workspaceId,
-  agentId,
-  cli,
-}: {
-  workspaceId: string
-  agentId: string | null
-  /** The harness of the chat being viewed. */
-  cli: AgentCli | null
-}) {
-  const subagents = useChatSubagents(workspaceId, agentId)
-  if (!agentId || subagents.length === 0) return null
+/** Those still at it first, each group in the order they started. */
+export function subagentsInOrder(children: readonly SubagentFamilyMember[]): SubagentFamilyMember[] {
+  const live = (member: SubagentFamilyMember) => member.state === 'working' || member.state === 'waiting'
+  return [...children.filter(live), ...children.filter((member) => !live(member))]
+}
+
+function LoadEarlier({ family }: { family: SubagentFamily }) {
+  return (
+    <GhostButton
+      size="inline"
+      tone="subtle"
+      align="start"
+      disabled={family.loadingEarlier}
+      onClick={family.loadEarlier}
+      className="mt-1"
+    >
+      {family.loadingEarlier ? 'Loading earlier turns…' : 'Load earlier turns to see older subagents'}
+    </GhostButton>
+  )
+}
+
+export function ChatPanelSubagents({ family }: { family: SubagentFamily }) {
+  // Older turns may hold some, but none is known: no section yet, only the way
+  // to find out.
+  if (family.children.length === 0) return family.hasMore ? <LoadEarlier family={family} /> : null
   return (
     <Section title="Subagents" inset="flush">
       <PanelCard>
-        {subagents.map((subagent) => (
-          <SubagentRow
-            key={subagent.id}
-            subagent={subagent}
-            cli={cli}
-            onOpen={() => openAgentsPane(workspaceId, agentId, subagent.id)}
-          />
+        {subagentsInOrder(family.children).map((member) => (
+          <SubagentRow key={member.key} member={member} />
         ))}
       </PanelCard>
+      {family.hasMore ? <LoadEarlier family={family} /> : null}
     </Section>
+  )
+}
+
+/** The way up from the agent in view: to the main chat, under the name it goes by, or to the agent that spawned it. */
+export function ChatPanelParentLink({ parent }: { parent: SubagentFamilyParent }) {
+  const main = parent.relation === 'Main chat'
+  const title = main ? 'Main chat' : parent.name
+  return (
+    <div className="mt-1.5" data-panel-parent="">
+      <PanelCard>
+        <PanelRow
+          glyph={
+            <span className="flex items-center gap-1.5">
+              <ChevronGlyph className="icon-xs -scale-x-100 text-[color:var(--text-subtle)]" />
+              <SubagentIcon cli={parent.cli} />
+            </span>
+          }
+          label={<TruncatedText as="span" text={title} />}
+          detail={<TruncatedText as="span" text={main ? parent.name : parent.relation} />}
+          onClick={parent.open}
+          ariaLabel={`Back to ${main ? `the main chat, ${parent.name}` : parent.name}`}
+        />
+      </PanelCard>
+    </div>
   )
 }
