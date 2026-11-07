@@ -753,7 +753,8 @@ export type WorkspacePaneTab = {
   // normalized (`normalizeCanvasPath`). Absent is a real state, not a broken
   // one — that tab shows the board picker. A workspace holds at most one tab
   // per board, so this doubles as the tab's identity for the opener.
-  canvas?: { path: string }
+  // `store`: the board is another project's, by its store's key (`CanvasBoardRef`).
+  canvas?: { path: string; store?: string }
   // Document only: the markdown file the tab reads, absolute. Required — a
   // document tab is always opened ON something (a plan an agent proposed), so
   // the normalizer drops one without it. One tab per file, like Canvas.

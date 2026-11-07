@@ -1,4 +1,4 @@
-import { normalizeCanvasPath } from './paths'
+import { isCanvasStoreKey, normalizeCanvasPath } from './paths'
 import { isRecord } from '../records'
 import { canvasFail, canvasOk, type CanvasBoardRef, type CanvasElement, type CanvasResult } from './types'
 
@@ -30,7 +30,12 @@ export function canvasRefOf(input: unknown): CanvasResult<CanvasBoardRef> {
   if (typeof input.path !== 'string') return canvasFail('invalid_path', 'A board path must be a string.')
   const path = normalizeCanvasPath(input.path)
   if (!path.ok) return path
-  return canvasOk({ workspaceId, path: path.value })
+  // Checked here as well as in the service: a store is a folder name on this
+  // machine, so nothing that is not one may travel any further.
+  if (input.store !== undefined && !isCanvasStoreKey(input.store)) {
+    return canvasFail('invalid_path', 'That is not a board store.')
+  }
+  return canvasOk({ workspaceId, path: path.value, ...(input.store ? { store: input.store } : {}) })
 }
 
 /**

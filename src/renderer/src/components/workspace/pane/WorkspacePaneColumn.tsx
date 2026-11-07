@@ -179,12 +179,16 @@ export function WorkspacePaneColumn({
   // strip's Maximise control widens the pane.
   useEffect(
     () =>
-      window.api.onCanvasOpenRequest(({ workspaceId, path }) => {
+      window.api.onCanvasOpenRequest(({ workspaceId, path, store }) => {
         if (workspaceId !== activeWorkspaceId) return
-        const store = useWorkspaceStore.getState()
+        const workspaces = useWorkspaceStore.getState()
         // A pane already at its tab cap takes nothing, and opening the column
         // on nothing new would be a window change with no answer in it.
-        const opened = store.openPaneTab(workspaceId, { kind: 'canvas', canvas: { path }, activate: false })
+        const opened = workspaces.openPaneTab(workspaceId, {
+          kind: 'canvas',
+          canvas: { path, ...(store ? { store } : {}) },
+          activate: false,
+        })
         if (opened === null) return
         // A board already out in a window of its own comes forward there.
         showPaneTab(workspaceId, opened)

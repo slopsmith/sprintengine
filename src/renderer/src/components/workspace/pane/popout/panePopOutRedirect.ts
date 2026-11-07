@@ -99,8 +99,10 @@ export function redirectPaneWrites({ workspaceId, act, select }: PanePopOutRedir
     },
     updatePaneTab: (id, tabId, patch) =>
       mine(id) ? act({ type: 'update', tabId, patch }) : own.updatePaneTab(id, tabId, patch),
-    setPaneTabBoard: (id, tabId, path) =>
-      mine(id) ? act({ type: 'set-board', tabId, path }) : own.setPaneTabBoard(id, tabId, path),
+    setPaneTabBoard: (id, tabId, path, store) =>
+      mine(id)
+        ? act({ type: 'set-board', tabId, path, ...(store ? { store } : {}) })
+        : own.setPaneTabBoard(id, tabId, path, store),
     notePaneRecentUrl: (id, url) => (mine(id) ? act({ type: 'recent-url', url }) : own.notePaneRecentUrl(id, url)),
     // No column here to open, close or toggle, no workspace to float a player
     // over, and no pane to pop out of: for this window's workspace these are

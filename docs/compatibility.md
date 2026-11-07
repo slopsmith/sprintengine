@@ -185,6 +185,21 @@ another `version` counts nothing from it and says the same. The desktop
 asking prices the rows itself, so two machines on different price lists
 still agree.
 
+`canvas-machine-boards` (2026-11-07) lets a paired desktop's Canvas pane see this
+machine's boards. `canvas.list` takes `scope: machine` and answers every board
+here with its `project` (null for a removed project), `here`, `workspaceId` and
+`id`, and `board` on the other canvas tools takes that `id`. A desktop that sees
+the capability asks for all of them. On a machine that lacks it, it calls
+`canvas.list` for the one workspace, with no `scope`, which an older machine has
+always answered, and the pane says in words that the list is that project's
+alone. Such a row has no `id`, so its picture and its new chat name the board by
+path, from that project. Neither end needs a version bump: every new member is
+optional. A machine offering no canvas tools (a server with no desktop open)
+answers "Unknown tool", and the desktop says to open Studio there. Every board
+name on a machine, removed projects included, is now readable on
+`workspace:read`: there is no per-project scope. The phone does not use any of
+this. It only learned to show a board named by `id` as its name.
+
 Bump the version instead when the change is not additive: a field that changes
 meaning or type, a field that is removed, a response whose shape a peer is
 already parsing. Nothing a capability flag can describe should bump the version,

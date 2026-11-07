@@ -201,6 +201,27 @@ test('canvas-ipc', async () => {
     assert.equal(noted?.call, 'noteHumanInput')
     assert.equal(noted?.args[1], 42)
 
+    // A store is a folder name on this machine, so only its exact shape gets through.
+    const open = ipcMain.handlers.get('canvas:open-board')!
+    const store = `ws_${'a'.repeat(24)}`
+    recorded.length = 0
+    await open(event, { ...goodRef, store })
+    assert.deepEqual((recorded.pop()?.args[0] as { store?: string }).store, store, 'the store reaches the service')
+    const badStore = (await open(event, { ...goodRef, store: '../elsewhere' })) as { ok: boolean }
+    assert.equal(badStore.ok, false)
+    assert.equal(recorded.length, 0, 'a bad store never reaches the service')
+    console.log('ok - a store survives the boundary, and only a real one')
+
+    const start = ipcMain.handlers.get('canvas:continue-in-new-chat')!
+    const refused = (await start(event, { workspaceId: 'workspace-1', id: 'arch' })) as { ok: boolean }
+    assert.equal(refused.ok, false, 'a bare name is not an id')
+    const unavailable = (await start(event, {
+      workspaceId: 'workspace-1',
+      id: `canvas://${store}/arch.excalidraw`,
+    })) as { ok: boolean; error?: { code: string } }
+    assert.equal(unavailable.error?.code, 'forbidden', 'no starter, no chat')
+    console.log('ok - a chat on a board is asked for by a real id')
+
     assert.equal(subscribers.gone.length, 1, 'the registry is asked to report windows that go away')
     subscribers.gone[0](99)
     assert.deepEqual(recorded.pop(), { call: 'dropSubscriber', args: [99] })

@@ -9,8 +9,10 @@ import type { WorkspacePaneTab } from '../../../../types/workspace'
 import { EmptyState, PrimaryButton } from '../../../ui'
 import { SuspenseFallback } from '../../../ui/SuspenseFallback'
 import { CanvasBoardPicker } from './CanvasBoardPicker'
+import { CanvasFarBoard } from './CanvasFarBoard'
 import { CanvasExportDialog } from './CanvasExportDialog'
 import { canvasExportedToast, type CanvasBoardExporter, type CanvasExportFormats } from './canvasExport'
+import { canvasBoardSourceOf } from './canvasBoardSource'
 import { canvasPushMatchesBoard, shouldApplyCanvasPush } from './canvasSync'
 import { StudioSkillSuggestion } from '../../../studioSkills/StudioSkillSuggestion'
 
@@ -43,23 +45,55 @@ type BoardState = { kind: 'loading' } | { kind: 'ready'; board: CanvasBoardState
 
 export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
   const path = tab.canvas?.path ?? null
+  // Another project's store, for a board reached from the list of every board.
+  const store = tab.canvas?.store
   const updatePaneTab = useWorkspaceStore((s) => s.updatePaneTab)
   const setPaneTabBoard = useWorkspaceStore((s) => s.setPaneTabBoard)
   // The boards this pane's OTHER tabs hold, so the picker can say which of its
   // rows would move the person rather than open something new. Selected as one
   // string and split below: a selector that built a fresh array every time
   // would re-render this tab on every store change. The separator is the one
-  // character a board path may never contain.
+  // character a board path may never contain, and a store never does.
   const openBoardPaths = useWorkspaceStore((s) => {
     const tabs = s.workspaces.find((w) => w.id === workspaceId)?.paneState?.tabs ?? []
     return tabs
       .filter((candidate) => candidate.kind === 'canvas' && candidate.id !== tab.id && candidate.canvas)
-      .map((candidate) => candidate.canvas!.path)
+      .flatMap((candidate) => [candidate.canvas!.store ?? '', candidate.canvas!.path])
       .join('\u0000')
   })
-  const openPaths = useMemo(() => (openBoardPaths ? openBoardPaths.split('\u0000') : []), [openBoardPaths])
+  const openBoards = useMemo(() => {
+    const parts = openBoardPaths ? openBoardPaths.split('\u0000') : []
+    return parts.flatMap((part, index) => (index % 2 === 1 ? [{ store: parts[index - 1] || null, path: part }] : []))
+  }, [openBoardPaths])
   const workspaceRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.folderPath ?? null)
+  // Selected as its three strings: the source is rebuilt from them, so a store
+  // change elsewhere does not read as a new source and list the boards again.
+  const originKey = useWorkspaceStore((s) => {
+    const origin = s.workspaces.find((w) => w.id === workspaceId)?.remoteOrigin
+    return origin ? JSON.stringify([origin.connectionId, origin.machineName, origin.workspaceId, origin.sessionId]) : ''
+  })
+  const source = useMemo(() => {
+    if (!originKey) return canvasBoardSourceOf(null)
+    const [connectionId, machineName, remoteWorkspaceId, sessionId] = JSON.parse(originKey) as string[]
+    return canvasBoardSourceOf({
+      remoteOrigin: {
+        connectionId,
+        machineName,
+        workspaceId: remoteWorkspaceId,
+        workspaceName: '',
+        workspaceRoot: null,
+        ...(sessionId ? { sessionId } : {}),
+      },
+    })
+  }, [originKey])
+  const far = source.kind === 'paired'
   const theme = useResolvedColorScheme()
+  // The ref every call names this board by. Memoised on its strings, so an
+  // effect that depends on it runs when the board changes and only then.
+  const board = useMemo(
+    () => ({ workspaceId, path: path ?? '', ...(store ? { store } : {}) }),
+    [path, store, workspaceId],
+  )
   const [state, setState] = useState<BoardState>({ kind: 'loading' })
   const [presence, setPresence] = useState<CanvasPresence | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -78,7 +112,7 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
   const miniature = tab.floating === true
 
   useLayoutEffect(() => {
-    if (sized || !path || miniature) return
+    if (sized || !path || miniature || far) return
     const host = hostRef.current
     if (!host) return
     const measure = (): boolean => {
@@ -93,19 +127,24 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
     })
     observer.observe(host)
     return () => observer.disconnect()
-  }, [miniature, path, sized])
+  }, [far, miniature, path, sized])
 
   // Open the board and subscribe this window to it; close it on the way out, so
   // main stops pushing scenes to a tab that is gone. Re-runs on `attempt` for
   // the retry, and on `path` when the person switches board.
+  //
+  // Only this project's own board is ever made here. A board of another project
+  // that is not there is an error the person is shown, never a new empty one.
   useEffect(() => {
-    if (!path) return
+    if (!path || far) return
     let cancelled = false
     setState({ kind: 'loading' })
     setPresence(null)
     void (async () => {
       try {
-        const result = await window.api.canvasOpenBoard({ workspaceId, path, create: true })
+        const result = await window.api.canvasOpenBoard(
+          store ? { ...board, create: false } : { ...board, create: true },
+        )
         if (cancelled) return
         setState(result.ok ? { kind: 'ready', board: result.value } : { kind: 'error', message: result.error.message })
       } catch {
@@ -118,12 +157,12 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
       // side, and skipping it after a failed open would leak the subscription
       // that a partially-successful open left behind.
       try {
-        void window.api.canvasCloseBoard({ workspaceId, path })
+        void window.api.canvasCloseBoard(board)
       } catch {
         // Main is already gone (the window is closing). Nothing to release.
       }
     }
-  }, [attempt, path, workspaceId])
+  }, [attempt, board, far, path, store])
 
   // Scenes from main are folded into the board this tab holds, whether or not
   // the editor is mounted yet. A push is the WHOLE board, so the newest one is
@@ -133,7 +172,7 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
   useEffect(() => {
     if (!path) return
     return window.api.onCanvasScene((push) => {
-      if (!canvasPushMatchesBoard(push, { workspaceId, path })) return
+      if (!canvasPushMatchesBoard(push, board)) return
       setState((previous) => {
         if (previous.kind !== 'ready') return previous
         if (!shouldApplyCanvasPush(push.revision, previous.board.revision)) return previous
@@ -148,12 +187,12 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
         }
       })
     })
-  }, [path, workspaceId])
+  }, [board, path])
 
   useEffect(() => {
     if (!path) return
     return window.api.onCanvasPresence((incoming) => {
-      if (!canvasPushMatchesBoard(incoming, { workspaceId, path })) return
+      if (!canvasPushMatchesBoard(incoming, board)) return
       setPresence({
         controller: incoming.controller,
         agentName: incoming.agentName,
@@ -161,14 +200,14 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
         selectedElementIds: incoming.selectedElementIds,
       })
     })
-  }, [path, workspaceId])
+  }, [board, path])
 
   const pickBoard = useCallback(
-    (next: string) => {
+    (next: string, nextStore?: string) => {
       // Through the slice, not `updatePaneTab`: a board another tab already
       // holds brings that tab forward and closes this picker, and the tab's
       // title follows its board either way.
-      setPaneTabBoard(workspaceId, tab.id, next)
+      setPaneTabBoard(workspaceId, tab.id, next, nextStore)
     },
     [setPaneTabBoard, tab.id, workspaceId],
   )
@@ -189,17 +228,18 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
   // would find it.
   const revealFile = useCallback(() => {
     if (!workspaceRoot || !path) return
-    void window.api.canvasRevealBoard({ workspaceId, path }).catch(() => {})
-  }, [path, workspaceId, workspaceRoot])
+    void window.api.canvasRevealBoard(board).catch(() => {})
+  }, [board, path, workspaceRoot])
 
   const copyPath = useCallback(() => {
     if (!path) return
-    // The board's own path — a bare file name for a store board, a
-    // project-relative one otherwise: the spelling the canvas tools take, and
-    // the one that means the same thing on another machine.
-    void window.api.clipboardWriteText(path)
-    showToast({ tone: 'good', title: 'Board path copied', description: path })
-  }, [path])
+    // The board's id where it has one: a bare name means another board in any
+    // other project, and an id is what a new chat anywhere on this machine can
+    // be handed. The path is what is left where the service knows no store.
+    const copied = (state.kind === 'ready' ? state.board.id : undefined) ?? path
+    void window.api.clipboardWriteText(copied)
+    showToast({ tone: 'good', title: 'Board path copied', description: copied })
+  }, [path, state])
 
   // Export: the editor hands up its half (flush, then render the pictures), the
   // dialog asks which files, and main shows the folder picker and writes them.
@@ -230,8 +270,7 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
       try {
         const images = await exporter(formats)
         const result = await window.api.canvasExportBoard({
-          workspaceId,
-          path,
+          ...board,
           ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
           images,
         })
@@ -250,11 +289,32 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
         setExportPending(false)
       }
     },
-    [path, workspaceId, workspaceRoot],
+    [board, path, workspaceRoot],
   )
 
   if (!path) {
-    return <CanvasBoardPicker workspaceId={workspaceId} onPick={pickBoard} openPaths={openPaths} />
+    return (
+      <CanvasBoardPicker
+        workspaceId={workspaceId}
+        source={source}
+        // A chat with no folder here has no project of its own to list.
+        initialScope={far || workspaceRoot ? 'project' : 'all'}
+        onPick={pickBoard}
+        openBoards={openBoards}
+      />
+    )
+  }
+
+  // A board on the chat's own machine, when that is not this one.
+  if (source.kind === 'paired') {
+    return (
+      <CanvasFarBoard
+        source={source}
+        workspaceId={workspaceId}
+        board={{ path, ...(store ? { store } : {}) }}
+        onSwitchBoard={switchBoard}
+      />
+    )
   }
 
   const name = canvasBoardName(path)
@@ -296,9 +356,10 @@ export function CanvasTab({ workspaceId, tab, active }: CanvasTabProps) {
           <div className="se-canvas absolute inset-0">
             <React.Suspense fallback={<SuspenseFallback label="Loading the canvas" />}>
               <CanvasEditor
-                key={path}
+                key={`${store ?? ''}/${path}`}
                 workspaceId={workspaceId}
                 path={path}
+                {...(store ? { store } : {})}
                 initial={state.board}
                 name={name}
                 theme={theme}

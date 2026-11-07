@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid'
 import { useEffect, useRef } from 'react'
 
+import { isCanvasStoreKey } from '../../../../../../shared/canvas/paths'
 import type { PanePopOutAction, PanePopOutState } from '../../../../../../shared/ipc/pane-popout'
 import { clientSupports } from '../../../../clientCapabilities'
 import { showToast } from '../../../../store/toastStore'
@@ -218,7 +219,12 @@ export function applyPanePopOutAction(popOutId: string, action: PanePopOutAction
     }
     case 'set-board':
       if (holds(action.tabId) && typeof action.path === 'string') {
-        store.setPaneTabBoard(workspaceId, action.tabId, action.path)
+        store.setPaneTabBoard(
+          workspaceId,
+          action.tabId,
+          action.path,
+          isCanvasStoreKey(action.store) ? action.store : undefined,
+        )
       }
       return
     case 'recent-url':

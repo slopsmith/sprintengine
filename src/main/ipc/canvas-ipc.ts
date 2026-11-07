@@ -1,8 +1,15 @@
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 
-import type { CanvasExportImages, CanvasExportResult, CanvasResult } from '../../shared/canvas/types'
+import type {
+  CanvasContinueInput,
+  CanvasContinueResult,
+  CanvasExportImages,
+  CanvasExportResult,
+  CanvasResult,
+} from '../../shared/canvas/types'
 import { canvasFail, canvasOk } from '../../shared/canvas/types'
 import { canvasCommitOf, canvasRefOf } from '../../shared/canvas/commit-checks'
+import { canvasBoardId, canvasBoardName, parseCanvasBoardId } from '../../shared/canvas/paths'
 import { isRecord } from '../../shared/records'
 import type { CanvasServiceInternal } from '../canvas/canvas-service'
 import type { CanvasSubscriberRegistry } from '../canvas/canvas-subscribers'
@@ -39,6 +46,24 @@ export type CanvasIpcOptions = {
   pickExportDirectory?: (sender: WebContents, defaultPath?: string) => Promise<string | null>
   /** Show a board file in the system file manager; absent, reveal answers `forbidden`. */
   revealFile?: (absolutePath: string) => void
+  /** Start a chat on a board; absent, "Continue in a new chat" answers `forbidden`. */
+  continueInNewChat?: (input: CanvasContinueInput) => Promise<CanvasResult<CanvasContinueResult>>
+}
+
+/** A request for a chat on a board, checked: strings where strings go, and the id whole. */
+function continueInputOf(input: unknown): CanvasResult<CanvasContinueInput> {
+  if (!isRecord(input)) return canvasFail('invalid_path', 'This call carried no board.')
+  const workspaceId = typeof input.workspaceId === 'string' ? input.workspaceId.trim() : ''
+  if (!workspaceId) return canvasFail('no_workspace', 'This call named no workspace.')
+  const id = typeof input.id === 'string' ? parseCanvasBoardId(input.id) : null
+  if (!id) return canvasFail('invalid_path', 'This call named no board.')
+  if (!id.ok) return id
+  return canvasOk({
+    workspaceId,
+    id: canvasBoardId(id.value.store, id.value.path),
+    name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : canvasBoardName(id.value.path),
+    ...(typeof input.boardWorkspaceId === 'string' ? { boardWorkspaceId: input.boardWorkspaceId } : {}),
+  })
 }
 
 export function registerCanvasIpc(
@@ -57,6 +82,20 @@ export function registerCanvasIpc(
     }
     return service.listBoards(workspaceId.trim())
   })
+
+  ipcMain.handle('canvas:list-all-boards', (_event, workspaceId: unknown) =>
+    service.listAllBoards(typeof workspaceId === 'string' ? workspaceId : undefined),
+  )
+
+  ipcMain.handle(
+    'canvas:continue-in-new-chat',
+    async (_event: IpcMainInvokeEvent, input: unknown): Promise<CanvasResult<CanvasContinueResult>> => {
+      const checked = continueInputOf(input)
+      if (!checked.ok) return checked
+      if (!options.continueInNewChat) return canvasFail('forbidden', 'A chat cannot be started from this window.')
+      return options.continueInNewChat(checked.value)
+    },
+  )
 
   ipcMain.handle('canvas:open-board', (event: IpcMainInvokeEvent, input: unknown) => {
     const ref = canvasRefOf(input)

@@ -16,6 +16,8 @@ import {
   MESH_CREATE_SCHEDULED_AGENT_CHANNEL,
   MESH_UPDATE_SCHEDULED_AGENT_CHANNEL,
   MESH_WORKSPACE_CHECKOUT_CHANNEL,
+  MESH_CANVAS_BOARDS_CHANNEL,
+  MESH_CANVAS_SCREENSHOT_CHANNEL,
   MESH_WORKSPACE_EXTENSIONS_CHANNEL,
   MESH_FORGET_CHANNEL,
   MESH_GET_LIVE_STATE_CHANNEL,
@@ -45,6 +47,8 @@ import {
   type MeshConversationChange,
   type MeshVisitConversationResult,
   type MeshWorkspaceCheckoutResult,
+  type MeshCanvasBoardsResult,
+  type MeshCanvasScreenshotResult,
   type MeshWorkspaceExtensionsResult,
   type MeshEvent,
   type MeshLiveState,
@@ -204,6 +208,19 @@ export const meshApi = {
     cli?: string
   }): Promise<MeshWorkspaceExtensionsResult> =>
     ipcRenderer.invoke(MESH_WORKSPACE_EXTENSIONS_CHANNEL, input) as Promise<MeshWorkspaceExtensionsResult>,
+  meshCanvasBoards: (input: {
+    connectionId: string
+    workspaceId: string
+    scope: 'workspace' | 'machine'
+  }): Promise<MeshCanvasBoardsResult> =>
+    ipcRenderer.invoke(MESH_CANVAS_BOARDS_CHANNEL, input) as Promise<MeshCanvasBoardsResult>,
+  meshCanvasScreenshot: (input: {
+    connectionId: string
+    workspaceId: string
+    board: string
+    dark: boolean
+  }): Promise<MeshCanvasScreenshotResult> =>
+    ipcRenderer.invoke(MESH_CANVAS_SCREENSHOT_CHANNEL, input) as Promise<MeshCanvasScreenshotResult>,
   // Whole-app mesh lifecycle (remote-sessions-ux): machine paired/forgotten,
   // reachability and pairing waits, broadcast to every window.
   meshGetLiveState: (): Promise<MeshLiveState> =>
@@ -447,6 +464,8 @@ export const meshApi = {
   | 'meshUpdateScheduledAgent'
   | 'meshWorkspaceCheckout'
   | 'meshWorkspaceExtensions'
+  | 'meshCanvasBoards'
+  | 'meshCanvasScreenshot'
   | 'meshGetLiveState'
   | 'onMeshEvent'
   | 'meshConversationList'

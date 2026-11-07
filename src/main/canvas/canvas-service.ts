@@ -29,6 +29,8 @@ import type {
   CanvasImage,
   CanvasImportRequest,
   CanvasLayoutRequest,
+  CanvasMachineBoard,
+  CanvasMachineListing,
   CanvasPresence,
   CanvasResult,
   CanvasScenePush,
@@ -36,11 +38,14 @@ import type {
 import { canvasFail, canvasOk } from '../../shared/canvas/types'
 import { isMachinePath } from '../../shared/machine-paths'
 import {
+  CANVAS_LEGACY_FOLDER,
   CANVAS_LIST_MAX_BOARDS,
+  canvasBoardId,
   canvasBoardIsInStore,
   canvasBoardKeyPath,
   canvasBoardName,
   canvasPathIsCaseInsensitive,
+  isCanvasStoreKey,
   normalizeCanvasPath,
   CANVAS_FILE_EXTENSION,
 } from '../../shared/canvas/paths'
@@ -165,6 +170,39 @@ export type CanvasPathApi = Pick<typeof nodePath, 'dirname' | 'join' | 'resolve'
 export type CanvasTimerHandle = { cancel(): void }
 export type CanvasSetTimer = (fn: () => void, ms: number) => CanvasTimerHandle
 
+/** One board store as the machine-wide list sees it. */
+export type CanvasStoreRecord = {
+  /** Its key, `ws_<24 hex>`. */
+  store: string
+  /** Where its boards are; null for a project with boards in `diagrams/` and no store. */
+  directory: string | null
+  /** The project folder whose `diagrams/` is scanned; null when there is none to scan. */
+  projectFolder: string | null
+  /** What a row calls the project; null when nothing remembers it. */
+  project: string | null
+  /** A workspace in that folder, or null when none is left. */
+  workspaceId: string | null
+}
+
+/**
+ * Every board store this service can reach, and what is known of each. Absent,
+ * the service only knows the workspaces it is handed: it lists nothing beyond
+ * them and opens no ref with a store.
+ */
+export type CanvasStoreCatalogue = {
+  list(): Promise<CanvasStoreRecord[]>
+  /** The key of the store a project folder is kept under. The one spelling of it. */
+  storeKeyOf(folder: string): string
+  /** Where a store's boards live, or null for a store this process cannot address. */
+  storeDirectory(store: string): string | null
+  /** The project folder a store is kept for, for a ref into its project files. */
+  projectFolder(store: string): string | null
+  /** A board was written in this store: time to say whose it is, if it does not yet. */
+  noteBoardWritten(store: string): void
+  /** Why `list` is not every board on the machine, or absent when it is. */
+  listNote?: string
+}
+
 export type CanvasServiceDeps = {
   fs: CanvasFs
   /**
@@ -189,6 +227,8 @@ export type CanvasServiceDeps = {
    * call about one says so.
    */
   resolveBoardStore?: (workspaceId: string, workspaceRoot: string) => string | null
+  /** Every store on this machine, for the machine-wide list and for refs with a `store`. */
+  storeCatalogue?: CanvasStoreCatalogue
   /** Push to every window that could host the workspace (`canvas:open-request`). */
   broadcast: (channel: string, payload: unknown) => void
   /** Push to one subscriber, by the id the IPC layer minted for it. */
@@ -215,6 +255,7 @@ export type CanvasServiceInternal = CanvasService & {
     ref: CanvasBoardRef,
     opts: { create?: boolean; subscriberId: number },
   ): Promise<CanvasResult<CanvasBoardState>>
+  /** Stop pushing this board to this subscriber under this ref. */
   closeBoard(ref: CanvasBoardRef, subscriberId: number): void
   commitScene(
     input: CanvasBoardRef & {
@@ -242,9 +283,17 @@ export type CanvasServiceInternal = CanvasService & {
   dropSubscriber(subscriberId: number): void
 }
 
+/** Who is watching a board, as they named it: a push goes out under their own ref. */
+type BoardSubscription = CanvasBoardRef
+
+/** The tab a change came from, which already has it. One tab, not its whole window. */
+type BoardSender = { subscriberId: number; key: string }
+
 type BoardEntry = {
+  /** The file, not the name: every project's chats that reach it share this one entry. */
   key: string
-  workspaceId: string
+  /** The store this file is kept under, when the service knows it: half of its global id. */
+  store: string | null
   /** Normalized, project-relative. The one spelling everything downstream compares. */
   path: string
   absolutePath: string
@@ -279,7 +328,12 @@ type BoardEntry = {
    * write itself.
    */
   lastWrite: { size: number; mtimeMs: number } | null
-  subscribers: Set<number>
+  /**
+   * By subscriber, then by the ref it holds the board under. One window may
+   * hold a board twice: a chat's own tab and another chat's foreign tab, each
+   * in a workspace layer that stays mounted, and each listening for its own ref.
+   */
+  subscribers: Map<number, Map<string, BoardSubscription>>
   presence: CanvasPresence
   presenceTimer: CanvasTimerHandle | null
   actions: CanvasActionEntry[]
@@ -351,6 +405,8 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
   const log = deps.log ?? (() => {})
   /** Resolved when a subscriber joins a board; how `requestOpen` learns it was answered. */
   const openWaiters = new Map<string, Set<() => void>>()
+  /** Per workspace as well as per board: another chat opening the same file answers nobody here. */
+  const openWaitKey = (workspaceId: string, boardKey: string): string => `${workspaceId}\u0000${boardKey}`
   let disposed = false
   /** The font warning is said on every write but written to the log once. */
   let fontWarningLogged = false
@@ -364,13 +420,27 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     const rel = paths.relative(paths.resolve(parent), paths.resolve(child))
     return rel !== '' && !rel.startsWith('..') && !paths.isAbsolute(rel)
   }
-  // Folded where the filesystem folds it: on darwin and win32 two spellings of
-  // one path name one file, and two registry entries over one file would each
-  // hold their own revision, their own watcher and their own idea of the scene.
-  const boardKey = (workspaceId: string, path: string): string =>
-    `${workspaceId}\u0000${canvasBoardKeyPath(path, platform)}`
+  // The file's absolute path, because that is what a board is: two chats on one
+  // folder, or a chat holding another project's board by its id, reach the same
+  // file under two refs, and two entries over one file would each hold their
+  // own revision, their own watcher and their own idea of the scene, each
+  // writing over the other. Folded where the filesystem folds it, for the same
+  // reason: on darwin and win32 two spellings of one path name one file.
+  const boardKey = (absolutePath: string): string => canvasBoardKeyPath(absolutePath, platform)
+  /** One subscriber's hold on one board. */
+  const subscriptionKey = (ref: CanvasBoardRef): string =>
+    `${ref.workspaceId}\u0000${ref.store ?? ''}\u0000${canvasBoardKeyPath(ref.path, platform)}`
 
-  type Located = { workspaceId: string; path: string; absolutePath: string; key: string }
+  type Located = {
+    workspaceId: string
+    path: string
+    absolutePath: string
+    key: string
+    /** The ref's own store, when it named one. */
+    foreignStore: string | null
+    /** The store the file is kept under, whoever asked. */
+    store: string | null
+  }
 
   /**
    * A caller's board reference as a place on disk.
@@ -384,8 +454,12 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
    */
   function locate(ref: CanvasBoardRef): CanvasResult<Located> {
     const workspaceId = typeof ref?.workspaceId === 'string' ? ref.workspaceId.trim() : ''
-    if (!workspaceId) return canvasFail('no_workspace', 'This call named no workspace.')
     const normalized = normalizeCanvasPath(ref?.path ?? '')
+    if (ref?.store !== undefined) {
+      if (!normalized.ok) return normalized
+      return locateForeign(workspaceId, ref.store, normalized.value)
+    }
+    if (!workspaceId) return canvasFail('no_workspace', 'This call named no workspace.')
     if (!normalized.ok) return normalized
     const root = deps.resolveWorkspaceRoot(workspaceId)
     if (!root) {
@@ -423,8 +497,39 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
       workspaceId,
       path: normalized.value,
       absolutePath,
-      key: boardKey(workspaceId, normalized.value),
+      key: boardKey(absolutePath),
+      foreignStore: null,
+      store: deps.storeCatalogue?.storeKeyOf(root) ?? null,
     })
+  }
+
+  /**
+   * A board named by its store rather than by the workspace asking.
+   *
+   * No workspace root is involved, which is what lets a board whose project is
+   * gone still open. The workspace, when there is one, only says who is looking.
+   * The same refusals stand: a store is a shape, not a path, and the join is
+   * still checked to be inside the folder it was made from.
+   */
+  function locateForeign(workspaceId: string, store: string, path: string): CanvasResult<Located> {
+    if (!isCanvasStoreKey(store)) return canvasFail('invalid_path', 'That is not a board store.')
+    const catalogue = deps.storeCatalogue
+    if (!catalogue) return canvasFail('forbidden', 'This Studio cannot reach the boards of another project.')
+    const inStore = canvasBoardIsInStore(path)
+    const base = inStore ? catalogue.storeDirectory(store) : catalogue.projectFolder(store)
+    if (!base) {
+      return canvasFail(
+        'not_found',
+        inStore
+          ? `There is no board store ${store} on this machine.`
+          : `The project of ${store} is not known on this machine, so ${path} cannot be found.`,
+      )
+    }
+    const absolutePath = paths.resolve(base, path)
+    if (!strictlyInside(base, absolutePath)) {
+      return canvasFail('forbidden', `A board must live inside the folder of its id: ${path}`)
+    }
+    return canvasOk({ workspaceId, path, absolutePath, key: boardKey(absolutePath), foreignStore: store, store })
   }
 
   function entryFor(located: Located): BoardEntry {
@@ -432,7 +537,7 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     if (existing) return existing
     const entry: BoardEntry = {
       key: located.key,
-      workspaceId: located.workspaceId,
+      store: located.store,
       path: located.path,
       absolutePath: located.absolutePath,
       directory: paths.dirname(located.absolutePath),
@@ -444,7 +549,7 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
       lastSeenHash: null,
       diskDirty: false,
       lastWrite: null,
-      subscribers: new Set(),
+      subscribers: new Map(),
       presence: { controller: 'none' },
       presenceTimer: null,
       actions: [],
@@ -586,15 +691,25 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     const located = locate(ref)
     if (!located.ok) return located
     const board = entryFor(located.value)
+    // Refused here, where every caller passes through, and not trusted to each
+    // of them: a ref with a store names a board that exists. One that does not
+    // is a mistake to be told about, and an empty board made in another
+    // project's store under that name is the one outcome nobody could notice.
+    const create = opts.create === true && located.value.foreignStore === null
     const loaded = await enqueue(board, async () => {
       if (board.loaded) return canvasOk(undefined)
-      return loadFromDisk(board, opts.create === true)
+      return loadFromDisk(board, create)
     })
     if (!loaded.ok) {
       // A board that never loaded and nobody holds leaves no trace: the next
       // call starts clean rather than inheriting a half-built registry entry.
       if (!board.loaded && board.subscribers.size === 0) dropBoard(board)
-      return loaded
+      return loaded.error.code === 'not_found' && located.value.foreignStore
+        ? canvasFail(
+            'not_found',
+            `There is no board ${canvasBoardId(located.value.foreignStore, located.value.path)}. A board named by its id is never created.`,
+          )
+        : loaded
     }
     startWatching(board)
     touch(board)
@@ -603,6 +718,7 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
 
   function stateOf(board: BoardEntry): CanvasBoardState {
     return {
+      ...(board.store ? { id: canvasBoardId(board.store, board.path) } : {}),
       path: board.path,
       revision: board.revision,
       elements: board.elements,
@@ -676,6 +792,7 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     }
     board.lastSeenHash = contentHash(text)
     await noteFileStamp(board)
+    if (board.store && canvasBoardIsInStore(board.path)) deps.storeCatalogue?.noteBoardWritten(board.store)
     return canvasOk(undefined)
   }
 
@@ -703,27 +820,44 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     }
   }
 
-  function pushScene(board: BoardEntry, origin: CanvasScenePush['origin'], exclude?: number): void {
-    const payload: CanvasScenePush = {
-      workspaceId: board.workspaceId,
-      path: board.path,
-      revision: board.revision,
-      elements: board.elements,
-      files: board.files,
-      origin,
-    }
-    for (const subscriberId of board.subscribers) {
-      if (subscriberId === exclude) continue
-      deps.sendTo(subscriberId, CANVAS_SCENE_CHANNEL, payload)
+  /**
+   * Every subscription to a board, each under the ref it holds the board by:
+   * the renderer matches a push against its own tab's ref, so one payload for
+   * everybody would reach one of two tabs and silently miss the other. The path
+   * is the file's own spelling where the two are one name, which they are
+   * unless one project's folder sits inside another's.
+   */
+  function forEachSubscription(
+    board: BoardEntry,
+    exclude: BoardSender | undefined,
+    send: (subscriberId: number, ref: CanvasBoardRef) => void,
+  ): void {
+    for (const [subscriberId, held] of board.subscribers) {
+      for (const [key, ref] of held) {
+        if (exclude && subscriberId === exclude.subscriberId && key === exclude.key) continue
+        const samePath = canvasBoardKeyPath(ref.path, platform) === canvasBoardKeyPath(board.path, platform)
+        send(subscriberId, { ...ref, path: samePath ? board.path : ref.path })
+      }
     }
   }
 
-  function pushPresence(board: BoardEntry, exclude?: number): void {
-    const payload = { workspaceId: board.workspaceId, path: board.path, ...board.presence }
-    for (const subscriberId of board.subscribers) {
-      if (subscriberId === exclude) continue
-      deps.sendTo(subscriberId, CANVAS_PRESENCE_CHANNEL, payload)
-    }
+  function pushScene(board: BoardEntry, origin: CanvasScenePush['origin'], exclude?: BoardSender): void {
+    forEachSubscription(board, exclude, (subscriberId, ref) => {
+      const payload: CanvasScenePush = {
+        ...ref,
+        revision: board.revision,
+        elements: board.elements,
+        files: board.files,
+        origin,
+      }
+      deps.sendTo(subscriberId, CANVAS_SCENE_CHANNEL, payload)
+    })
+  }
+
+  function pushPresence(board: BoardEntry, exclude?: BoardSender): void {
+    forEachSubscription(board, exclude, (subscriberId, ref) => {
+      deps.sendTo(subscriberId, CANVAS_PRESENCE_CHANNEL, { ...ref, ...board.presence })
+    })
   }
 
   /**
@@ -734,7 +868,7 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
    * action, or the person's last gesture. Without the timer a badge sticks on
    * screen for as long as the board is open.
    */
-  function claim(board: BoardEntry, presence: CanvasPresence, exclude?: number): void {
+  function claim(board: BoardEntry, presence: CanvasPresence, exclude?: BoardSender): void {
     board.presence = presence
     pushPresence(board, exclude)
     board.presenceTimer?.cancel()
@@ -1168,9 +1302,11 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     // minute ago behind two hundred they have not opened in a year.
     found.sort((a, b) => b.modifiedAt - a.modifiedAt || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
     const shown = found.slice(0, CANVAS_LIST_MAX_BOARDS)
+    const storeKey = deps.storeCatalogue?.storeKeyOf(root) ?? null
     return canvasOk(
       await Promise.all(
         shown.map(async (board) => ({
+          ...(storeKey ? { id: canvasBoardId(storeKey, board.path) } : {}),
           path: board.path,
           name: canvasBoardName(board.path),
           elementCount: await countElements(board.absolutePath, board.size),
@@ -1180,10 +1316,57 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     )
   }
 
+  /**
+   * Every board this machine holds, newest first: each store in full, and each
+   * known project's `diagrams/`. No walk of a project's tree, because hundreds
+   * of chat folders is what a walk cannot afford; a chat's own `listBoards` is
+   * still the full walk of its own project.
+   *
+   * Only the rows a tool would show have their elements counted. The picker
+   * pages through all of them and draws no count, and parsing two thousand
+   * files for a number nobody reads is not what opening a list should cost.
+   */
+  async function listAllBoards(workspaceId?: string): Promise<CanvasResult<CanvasMachineListing>> {
+    const catalogue = deps.storeCatalogue
+    if (!catalogue) return canvasFail('forbidden', 'This Studio cannot list the boards of other projects.')
+    const asker = typeof workspaceId === 'string' && workspaceId.trim() ? workspaceId.trim() : null
+    const askerRoot = asker ? deps.resolveWorkspaceRoot(asker) : null
+    const askerStore = askerRoot ? catalogue.storeKeyOf(askerRoot) : null
+    const found: Array<FoundBoard & { record: CanvasStoreRecord }> = []
+    const records = await catalogue.list()
+    for (const record of records) {
+      const before: FoundBoard[] = []
+      if (record.directory) await listStore(record.directory, before)
+      if (record.projectFolder) {
+        await listStore(paths.join(record.projectFolder, CANVAS_LEGACY_FOLDER), before, `${CANVAS_LEGACY_FOLDER}/`)
+      }
+      for (const board of before) if (found.length < LIST_MAX_SCANNED) found.push({ ...board, record })
+    }
+    found.sort((a, b) => b.modifiedAt - a.modifiedAt || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    const boards = await Promise.all(
+      found.map(async (board, index): Promise<CanvasMachineBoard> => ({
+        path: board.path,
+        name: canvasBoardName(board.path),
+        elementCount: index < CANVAS_LIST_MAX_BOARDS ? await countElements(board.absolutePath, board.size) : -1,
+        modifiedAt: board.modifiedAt,
+        id: canvasBoardId(board.record.store, board.path),
+        store: board.record.store,
+        project: board.record.project,
+        here: board.record.store === askerStore,
+        workspaceId: board.record.workspaceId,
+      })),
+    )
+    const note =
+      found.length >= LIST_MAX_SCANNED
+        ? `These are the most recent of more than ${LIST_MAX_SCANNED} boards.`
+        : (catalogue.listNote ?? null)
+    return canvasOk({ boards, note })
+  }
+
   /** A candidate from the walk: everything but the element count, which costs a parse. */
   type FoundBoard = { path: string; absolutePath: string; modifiedAt: number; size: number }
 
-  async function listStore(store: string, found: FoundBoard[]): Promise<void> {
+  async function listStore(store: string, found: FoundBoard[], prefix = ''): Promise<void> {
     let entries: CanvasDirEntry[]
     try {
       entries = await deps.fs.readdir(store)
@@ -1197,7 +1380,12 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
       const absolute = paths.join(store, entry.name)
       try {
         const stat = await deps.fs.stat(absolute)
-        found.push({ path: entry.name, absolutePath: absolute, modifiedAt: stat.mtimeMs, size: stat.size })
+        found.push({
+          path: `${prefix}${entry.name}`,
+          absolutePath: absolute,
+          modifiedAt: stat.mtimeMs,
+          size: stat.size,
+        })
       } catch {
         continue
       }
@@ -1497,19 +1685,30 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     // opened under the caller's spelling would be titled something the project
     // does not contain.
     const path = existing?.loaded ? existing.path : located.value.path
-    if (existing && existing.subscribers.size > 0) {
-      deps.broadcast(CANVAS_OPEN_REQUEST_CHANNEL, { workspaceId: located.value.workspaceId, path })
+    const opening = {
+      workspaceId: located.value.workspaceId,
+      path,
+      ...(located.value.foreignStore ? { store: located.value.foreignStore } : {}),
+    }
+    // A tab of THIS workspace. A board is one entry now, so another project's
+    // chat holding it open says nothing about the window this call asks to show.
+    const shown = [...(existing?.subscribers.values() ?? [])].some((held) =>
+      [...held.values()].some((subscription) => subscription.workspaceId === located.value.workspaceId),
+    )
+    if (shown) {
+      deps.broadcast(CANVAS_OPEN_REQUEST_CHANNEL, opening)
       return canvasOk({ revealed: true })
     }
+    const waitKey = openWaitKey(located.value.workspaceId, located.value.key)
     const revealed = await new Promise<boolean>((settle) => {
-      const waiters = openWaiters.get(located.value.key) ?? new Set<() => void>()
-      openWaiters.set(located.value.key, waiters)
+      const waiters = openWaiters.get(waitKey) ?? new Set<() => void>()
+      openWaiters.set(waitKey, waiters)
       let done = false
       const finish = (answer: boolean): void => {
         if (done) return
         done = true
         waiters.delete(waiter)
-        if (waiters.size === 0) openWaiters.delete(located.value.key)
+        if (waiters.size === 0) openWaiters.delete(waitKey)
         timer.cancel()
         settle(answer)
       }
@@ -1518,7 +1717,7 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
       const timer = setTimer(() => finish(false), OPEN_REQUEST_WAIT_MS)
       // Broadcast only once the waiter is in place: a window that answers in
       // the same tick must not find nobody listening.
-      deps.broadcast(CANVAS_OPEN_REQUEST_CHANNEL, { workspaceId: located.value.workspaceId, path })
+      deps.broadcast(CANVAS_OPEN_REQUEST_CHANNEL, opening)
     })
     // Never an error: "no window answered" is an answer, and a headless run is
     // a supported way to use every one of these tools.
@@ -1569,21 +1768,42 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     const board = await ensureBoard(ref, { create: opts.create === true })
     if (!board.ok) return board
     const entry = board.value
-    entry.subscribers.add(opts.subscriberId)
+    const located = locate(ref)
+    if (!located.ok) return located
+    const subscription: BoardSubscription = {
+      workspaceId: located.value.workspaceId,
+      path: located.value.path,
+      ...(located.value.foreignStore ? { store: located.value.foreignStore } : {}),
+    }
+    const held = entry.subscribers.get(opts.subscriberId) ?? new Map<string, BoardSubscription>()
+    held.set(subscriptionKey(subscription), subscription)
+    entry.subscribers.set(opts.subscriberId, held)
     entry.idleTimer?.cancel()
     entry.idleTimer = null
     touch(entry)
-    for (const waiter of [...(openWaiters.get(entry.key) ?? [])]) waiter()
+    for (const waiter of [...(openWaiters.get(openWaitKey(located.value.workspaceId, entry.key)) ?? [])]) waiter()
     return canvasOk(stateOf(entry))
   }
 
+  /**
+   * Found by the subscription rather than by locating the ref again: a board
+   * whose workspace has gone since it opened cannot be located, and its tab
+   * would go on being pushed to until the window closed.
+   */
   function closeBoard(ref: CanvasBoardRef, subscriberId: number): void {
-    const located = locate(ref)
-    if (!located.ok) return
-    const board = boards.get(located.value.key)
-    if (!board) return
-    board.subscribers.delete(subscriberId)
-    if (board.subscribers.size === 0) armIdleSweep(board)
+    const path = normalizeCanvasPath(ref?.path ?? '')
+    if (!path.ok) return
+    const key = subscriptionKey({
+      workspaceId: typeof ref?.workspaceId === 'string' ? ref.workspaceId.trim() : '',
+      path: path.value,
+      ...(ref?.store ? { store: ref.store } : {}),
+    })
+    for (const board of [...boards.values()]) {
+      const held = board.subscribers.get(subscriberId)
+      if (!held?.delete(key)) continue
+      if (held.size === 0) board.subscribers.delete(subscriberId)
+      if (board.subscribers.size === 0) armIdleSweep(board)
+    }
   }
 
   function dropSubscriber(subscriberId: number): void {
@@ -1605,6 +1825,7 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     const board = await ensureBoard(input, { create: true })
     if (!board.ok) return board
     const entry = board.value
+    const sender = senderOf(input, subscriberId)
     // `baseRevision` is not read, and that is the design rather than an
     // oversight: the merge is per element, so what the tab last saw does not
     // change what survives. It stays on the wire because the ANSWER is about
@@ -1647,12 +1868,26 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
       )
       // The sender already has what it sent; echoing it back would fight the
       // person's own cursor. Every OTHER window hears about it.
-      pushScene(entry, 'human', subscriberId)
+      pushScene(entry, 'human', sender)
       // Non-null only when the merge produced something other than what the
       // tab sent — that, and only that, is the tab's cue to reconcile.
       const differs = sceneVersionHash(entry.elements) !== sceneVersionHash(input.elements)
       return canvasOk({ revision: entry.revision, elements: differs ? entry.elements : null })
     })
+  }
+
+  /** The tab a call came from, under the same key its subscription was filed by. */
+  function senderOf(ref: CanvasBoardRef, subscriberId: number): BoardSender | undefined {
+    const located = locate(ref)
+    if (!located.ok) return undefined
+    return {
+      subscriberId,
+      key: subscriptionKey({
+        workspaceId: located.value.workspaceId,
+        path: located.value.path,
+        ...(located.value.foreignStore ? { store: located.value.foreignStore } : {}),
+      }),
+    }
   }
 
   function noteHumanInput(ref: CanvasBoardRef, subscriberId?: number): void {
@@ -1663,7 +1898,7 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
     touch(board)
     // The window the person is drawing in already knows; the others are the
     // ones that need to stop showing an agent holding the pen.
-    claim(board, { controller: 'human' }, subscriberId)
+    claim(board, { controller: 'human' }, subscriberId === undefined ? undefined : senderOf(ref, subscriberId))
   }
 
   /**
@@ -1763,6 +1998,7 @@ export function createCanvasService(deps: CanvasServiceDeps): CanvasServiceInter
 
   return {
     listBoards,
+    listAllBoards,
     readBoard,
     boardExists,
     edit,

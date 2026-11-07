@@ -24,6 +24,24 @@ bare name finds one when the store has no board of that name, and
 `canvas_list` shows both kinds (a store board by its file name, a project board
 by its project path). Do not move or copy one into the store.
 
+## A board from another project
+
+A bare name only ever means this project. Every board on this machine, whatever
+project or chat drew it, is listed by `canvas_list` with `scope: "machine"`,
+each with its `project` (null for a project that was removed) and an `id` such
+as `canvas://ws_0123456789abcdef01234567/architecture.excalidraw`.
+
+- When the person points you at a board drawn somewhere else, find it there and
+  pass its `id` as `board` to every canvas tool. It is the same file, not a
+  copy, so what you draw is what they see from the other chat.
+- Use an id only when the person points you at that board. Do not wander into
+  other projects' boards on your own.
+- An id is never created. One that names no board is an error, so read it from
+  `canvas_list` instead of composing one.
+- If a name is refused with `foreign_board`, this project has no such board and
+  another one does. Nothing was created. The refusal gives the board's id: use
+  it if that is the board the person means, or pick another name for a new one.
+
 **Getting a board into the repository is the person's call, and the Export
 action is the only way.** The Canvas tab's menu has **Export to folder…**,
 which writes the board file (and a PNG or SVG of it, if they tick those) into a

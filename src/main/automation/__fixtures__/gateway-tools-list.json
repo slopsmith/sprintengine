@@ -82,35 +82,35 @@
     },
     {
       "name": "canvas.list",
-      "sha256": "9223c8c4144fff6a57c2ea032c89990895f546f97cb5d8d407c87310429917cb"
+      "sha256": "685f6313230c5227d254906454a7addaefa3bf65d87b715b220400a127c2d79e"
     },
     {
       "name": "canvas.open",
-      "sha256": "32dc5891a3619adee647981dcce9bd8abd220fcd056067dd8c15b8593a9eae40"
+      "sha256": "7aaa5cba01ddb1b54c340f5446b3c8987667126a0c7c4bf9ac6bea0130e6bdfe"
     },
     {
       "name": "canvas.describe",
-      "sha256": "3ff3ae11762cba75912daaf4aaa7b19d5ae54afdbd90749d3cb8f9d8d69def60"
+      "sha256": "eed7a0182a4b985c9f4f6d8a655cf6703c7d4848343fb9283fb5e8524d510230"
     },
     {
       "name": "canvas.find",
-      "sha256": "dfb02daba034711165ced8bf6c993c8daf4c86901c071449a96dd69617bd8a3b"
+      "sha256": "62816da14e423483de7464bad7f0557759655e1f94dc64b67b7e6dc790b14bf6"
     },
     {
       "name": "canvas.edit",
-      "sha256": "2bfc8976391eaa24c3eefc4645ea6685c2e9c3303943d2862aed2e85bb024220"
+      "sha256": "cf4ad115852be317b44cbf314cf57f356bda4c2330315f44120d8a77322649a1"
     },
     {
       "name": "canvas.layout",
-      "sha256": "c31d821c9423dda67b77b1cd37caec856406b4e9f39d0159c29b56ee1cad5c39"
+      "sha256": "ce124e54dabed654e3b2a9c0703cc5b2a830589318e698c04326f0b08689fbfb"
     },
     {
       "name": "canvas.import",
-      "sha256": "02d527c134c62185f504d7af3f39fd30e01e3541dff7374793adcb377c284b43"
+      "sha256": "22421cd84b0586aad7c09f2356efae86052f406f36e9a1858298f43e0506c3cc"
     },
     {
       "name": "canvas.screenshot",
-      "sha256": "2d1d725859dbe6bd25bc6a4afbd0293ce70219417b0da299d087580c9cb0f2fd"
+      "sha256": "e781853a246fcd3259ca3f359259842838308dd9ece387315a663576d5882e1f"
     },
     {
       "name": "editor.open",
@@ -524,35 +524,35 @@
     },
     {
       "name": "canvas.list",
-      "sha256": "9223c8c4144fff6a57c2ea032c89990895f546f97cb5d8d407c87310429917cb"
+      "sha256": "685f6313230c5227d254906454a7addaefa3bf65d87b715b220400a127c2d79e"
     },
     {
       "name": "canvas.open",
-      "sha256": "32dc5891a3619adee647981dcce9bd8abd220fcd056067dd8c15b8593a9eae40"
+      "sha256": "7aaa5cba01ddb1b54c340f5446b3c8987667126a0c7c4bf9ac6bea0130e6bdfe"
     },
     {
       "name": "canvas.describe",
-      "sha256": "3ff3ae11762cba75912daaf4aaa7b19d5ae54afdbd90749d3cb8f9d8d69def60"
+      "sha256": "eed7a0182a4b985c9f4f6d8a655cf6703c7d4848343fb9283fb5e8524d510230"
     },
     {
       "name": "canvas.find",
-      "sha256": "dfb02daba034711165ced8bf6c993c8daf4c86901c071449a96dd69617bd8a3b"
+      "sha256": "62816da14e423483de7464bad7f0557759655e1f94dc64b67b7e6dc790b14bf6"
     },
     {
       "name": "canvas.edit",
-      "sha256": "2bfc8976391eaa24c3eefc4645ea6685c2e9c3303943d2862aed2e85bb024220"
+      "sha256": "cf4ad115852be317b44cbf314cf57f356bda4c2330315f44120d8a77322649a1"
     },
     {
       "name": "canvas.layout",
-      "sha256": "c31d821c9423dda67b77b1cd37caec856406b4e9f39d0159c29b56ee1cad5c39"
+      "sha256": "ce124e54dabed654e3b2a9c0703cc5b2a830589318e698c04326f0b08689fbfb"
     },
     {
       "name": "canvas.import",
-      "sha256": "02d527c134c62185f504d7af3f39fd30e01e3541dff7374793adcb377c284b43"
+      "sha256": "22421cd84b0586aad7c09f2356efae86052f406f36e9a1858298f43e0506c3cc"
     },
     {
       "name": "canvas.screenshot",
-      "sha256": "2d1d725859dbe6bd25bc6a4afbd0293ce70219417b0da299d087580c9cb0f2fd"
+      "sha256": "e781853a246fcd3259ca3f359259842838308dd9ece387315a663576d5882e1f"
     },
     {
       "name": "editor.open",
@@ -914,19 +914,19 @@
     },
     {
       "name": "canvas.list",
-      "sha256": "9223c8c4144fff6a57c2ea032c89990895f546f97cb5d8d407c87310429917cb"
+      "sha256": "685f6313230c5227d254906454a7addaefa3bf65d87b715b220400a127c2d79e"
     },
     {
       "name": "canvas.describe",
-      "sha256": "3ff3ae11762cba75912daaf4aaa7b19d5ae54afdbd90749d3cb8f9d8d69def60"
+      "sha256": "eed7a0182a4b985c9f4f6d8a655cf6703c7d4848343fb9283fb5e8524d510230"
     },
     {
       "name": "canvas.find",
-      "sha256": "dfb02daba034711165ced8bf6c993c8daf4c86901c071449a96dd69617bd8a3b"
+      "sha256": "62816da14e423483de7464bad7f0557759655e1f94dc64b67b7e6dc790b14bf6"
     },
     {
       "name": "canvas.screenshot",
-      "sha256": "2d1d725859dbe6bd25bc6a4afbd0293ce70219417b0da299d087580c9cb0f2fd"
+      "sha256": "e781853a246fcd3259ca3f359259842838308dd9ece387315a663576d5882e1f"
     },
     {
       "name": "editor.state",

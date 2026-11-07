@@ -154,6 +154,8 @@ const SERVER_IPC_CHANNEL_TABLE = {
   'mesh:visit-conversation': {},
   'mesh:workspace-checkout': {},
   'mesh:workspace-extensions': {},
+  'mesh:canvas-boards': {},
+  'mesh:canvas-screenshot': {},
   // The module kernel's own channel and the bundled modules' (scheduled agents).
   'modules:bridge:invoke': {},
   'modules:host-service:invoke': {},

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import type { McpConnectionContext, McpToolRegistration, McpToolResult } from '../../shared/modules/mcp-tools'
 import { DEFAULT_CANVAS_BOARD_PATH } from '../../shared/canvas/paths'
 import type {
+  CanvasBoardRef,
+  CanvasMachineBoard,
   CanvasActionEntry,
   CanvasBoardState,
   CanvasBoardSummary,
@@ -110,6 +112,10 @@ for (const through of ['direct', 'the shell'] as const)
       editResult: CanvasEditResult
       /** What the service says `canvas.layout` could not arrange. */
       layoutWarnings: string[]
+      /** Every board on the machine, as `listAllBoards` answers. */
+      machine: CanvasMachineBoard[]
+      /** The refs the service was asked about, store and all. */
+      refs: CanvasBoardRef[]
     }
 
     function harness(seedBoards: Array<[string, CanvasBoardState]> = []): Harness {
@@ -128,6 +134,8 @@ for (const through of ['direct', 'the shell'] as const)
         enabled: true,
         editResult: editResultOf(),
         layoutWarnings: [],
+        machine: [],
+        refs: [],
       }
 
       const failed = <T>(where: string) => {
@@ -140,13 +148,19 @@ for (const through of ['direct', 'the shell'] as const)
           state.calls.push(`listBoards:${workspaceId}`)
           return failed<CanvasBoardSummary[]>('listBoards') ?? canvasOk(state.summaries)
         },
+        listAllBoards: async (workspaceId) => {
+          state.calls.push(`listAllBoards:${workspaceId ?? '-'}`)
+          return canvasOk({ boards: state.machine, note: null })
+        },
         readBoard: async (ref, opts) => {
           state.calls.push(`readBoard:${ref.path}:${opts?.create ? 'create' : 'read'}`)
+          state.refs.push(ref)
           const known = failed<CanvasBoardState>('readBoard')
           if (known) return known
-          const existing = state.boards.get(ref.path)
+          const key = ref.store ? `${ref.store}/${ref.path}` : ref.path
+          const existing = state.boards.get(key)
           if (existing) return canvasOk(existing)
-          if (opts?.create) {
+          if (opts?.create && !ref.store) {
             const created = boardState(ref.path)
             state.boards.set(ref.path, created)
             return canvasOk(created)
@@ -287,6 +301,136 @@ for (const through of ['direct', 'the shell'] as const)
         assert.match(skeleton.startElementId.description, /ONLY way to attach/)
         assert.match(skeleton.y.description, /downward/i)
         assert.match(skeleton.text.description, /CENTRED/)
+      })
+
+      const STORE = `ws_${'a'.repeat(24)}`
+      const machineBoard = (name: string, overrides: Partial<CanvasMachineBoard> = {}): CanvasMachineBoard => ({
+        id: `canvas://${STORE}/${name}.excalidraw`,
+        path: `${name}.excalidraw`,
+        name,
+        elementCount: 3,
+        modifiedAt: 1_000,
+        store: STORE,
+        project: 'atlas',
+        here: false,
+        workspaceId: 'ws-2',
+        ...overrides,
+      })
+
+      await run(
+        'canvas.list scope machine lists every board, for a bound agent and a paired device alike',
+        async () => {
+          const h = harness()
+          h.machine = [machineBoard('arch'), machineBoard('orphan', { project: null, workspaceId: null })]
+          const list = h.tools.get('canvas.list')!
+          const fromAgent = structured(await list.handler({ scope: 'machine' }, bound)) as {
+            boards: Array<{ id: string; project: string | null }>
+          }
+          assert.deepEqual(
+            fromAgent.boards.map((board) => [board.id, board.project]),
+            [
+              [`canvas://${STORE}/arch.excalidraw`, 'atlas'],
+              [`canvas://${STORE}/orphan.excalidraw`, null],
+            ],
+          )
+          assert.ok(h.calls.includes('listAllBoards:ws-1'))
+          // A paired device is bound to nothing, and needs no workspace for this.
+          const fromDevice = await list.handler({ scope: 'machine' }, unbound)
+          assert.equal(fromDevice.isError, undefined)
+          assert.ok(h.calls.includes('listAllBoards:-'))
+          assert.equal(errorOf(await list.handler({ scope: 'galaxy' }, bound)).code, 'invalid')
+          assert.equal(
+            JSON.stringify(structured(await list.handler({ scope: 'machine' }, bound))).includes('/Users'),
+            false,
+          )
+        },
+      )
+
+      await run('a foreign name is refused in words and creates nothing, by every tool that creates', async () => {
+        const h = harness()
+        h.machine = [machineBoard('architecture')]
+        const tries: Array<[string, Record<string, unknown>]> = [
+          ['canvas.open', { board: 'architecture' }],
+          ['canvas.edit', { board: 'architecture', create: [] }],
+          ['canvas.import', { board: 'architecture', mermaid: 'flowchart LR' }],
+          ['canvas.layout', { board: 'architecture', op: 'group', elementIds: [] }],
+        ]
+        for (const [tool, args] of tries) {
+          const refused = await h.tools.get(tool)!.handler(args, bound)
+          assert.equal(errorOf(refused).code, 'foreign_board', tool)
+          assert.match(errorOf(refused).message, /Nothing was created/)
+          assert.ok(errorOf(refused).message.includes(`canvas://${STORE}/architecture.excalidraw`))
+          assert.match(errorOf(refused).message, /atlas/)
+        }
+        assert.equal(h.boards.size, 0, 'no board was made')
+        assert.equal(
+          h.calls.some((call) => call.endsWith(':create')),
+          false,
+          'and none was asked for',
+        )
+
+        // A read of the same name says where it is, too.
+        const read = await h.tools.get('canvas.describe')!.handler({ board: 'architecture' }, bound)
+        assert.equal(errorOf(read).code, 'foreign_board')
+
+        // A name nothing has is still how a new board is made, and the default
+        // name, in every store there is, is no foreign board.
+        const fresh = await h.tools.get('canvas.open')!.handler({ board: 'brand-new' }, bound)
+        assert.equal(fresh.isError, undefined)
+        assert.ok(h.boards.has('brand-new.excalidraw'))
+        h.machine = [machineBoard('canvas')]
+        const plain = await h.tools.get('canvas.open')!.handler({ board: 'canvas' }, bound)
+        assert.equal(plain.isError, undefined)
+      })
+
+      await run('a board this project has is not refused because another project has one too', async () => {
+        const h = harness([['arch.excalidraw', boardState('arch.excalidraw')]])
+        h.machine = [machineBoard('arch')]
+        const opened = await h.tools.get('canvas.open')!.handler({ board: 'arch' }, bound)
+        assert.equal(opened.isError, undefined)
+      })
+
+      await run('an id reaches the foreign board, for a bound agent too, and is never created', async () => {
+        const id = `canvas://${STORE}/arch.excalidraw`
+        const h = harness([[`${STORE}/arch.excalidraw`, boardState('arch.excalidraw')]])
+        const tools = h.tools
+        assert.equal((await tools.get('canvas.open')!.handler({ board: id }, bound)).isError, undefined)
+        assert.equal((await tools.get('canvas.describe')!.handler({ board: id }, bound)).isError, undefined)
+        assert.equal((await tools.get('canvas.edit')!.handler({ board: id, create: [] }, bound)).isError, undefined)
+        assert.equal(
+          (await tools.get('canvas.import')!.handler({ board: id, mermaid: 'flowchart LR' }, bound)).isError,
+          undefined,
+        )
+        assert.equal((await tools.get('canvas.screenshot')!.handler({ board: id }, bound)).isError, undefined)
+        assert.ok(h.refs.every((ref) => ref.store === STORE && ref.workspaceId === 'ws-1'))
+
+        // The same id without its scheme, because `ws_…/arch` would otherwise be
+        // a project path and write into the repository.
+        h.refs.length = 0
+        await tools.get('canvas.describe')!.handler({ board: `${STORE}/arch.excalidraw` }, bound)
+        assert.equal(h.refs[0].store, STORE)
+
+        const unknown = await tools.get('canvas.open')!.handler({ board: `canvas://${STORE}/nope` }, bound)
+        assert.equal(errorOf(unknown).code, 'not_found')
+        assert.equal(h.boards.has(`${STORE}/nope.excalidraw`), false)
+
+        const malformed = await tools.get('canvas.open')!.handler({ board: 'canvas://elsewhere/arch' }, bound)
+        assert.equal(errorOf(malformed).code, 'invalid_path')
+
+        // A paired device reads by id with no workspace at all.
+        const read = await tools.get('canvas.describe')!.handler({ board: id }, unbound)
+        assert.equal(read.isError, undefined)
+      })
+
+      await run("with no board named, the newest board stays this workspace's", async () => {
+        const h = harness()
+        h.summaries = [{ path: 'mine.excalidraw', name: 'mine', elementCount: 1, modifiedAt: 2_000 }]
+        h.machine = [machineBoard('newer', { modifiedAt: 9_000 })]
+        h.boards.set('mine.excalidraw', boardState('mine.excalidraw'))
+        const described = structured(await h.tools.get('canvas.describe')!.handler({}, bound)) as {
+          board: { path: string }
+        }
+        assert.equal(described.board.path, 'mine.excalidraw')
       })
 
       await run('workspace binding copies the browser family: bound, explicit, mismatched, unknown', async () => {

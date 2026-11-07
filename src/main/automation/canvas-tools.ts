@@ -6,11 +6,14 @@ import { lintScene } from '../../shared/canvas/lint'
 import {
   CANVAS_LIST_MAX_BOARDS,
   DEFAULT_CANVAS_BOARD_PATH,
+  canvasBoardIsInStore,
   canvasBoardName,
   canvasLegacyPathFor,
   normalizeCanvasPath,
+  parseCanvasBoardId,
 } from '../../shared/canvas/paths'
 import { CANVAS_SKELETON_TYPES, toSkeleton } from '../../shared/canvas/skeleton'
+import { canvasOk } from '../../shared/canvas/types'
 import type {
   CanvasBoardRef,
   CanvasBoardState,
@@ -18,6 +21,7 @@ import type {
   CanvasError,
   CanvasLayoutRequest,
   CanvasLintReport,
+  CanvasMachineBoard,
 } from '../../shared/canvas/types'
 import { canvasReaderKey } from '../canvas/canvas-service-types'
 import type { CanvasActor, CanvasService } from '../canvas/canvas-service-types'
@@ -38,6 +42,15 @@ import type { CanvasActor, CanvasService } from '../canvas/canvas-service-types'
 // recently changed board and falls back to the default path. The workspace is
 // the connection's own, as stamped by the gateway, or an explicit `workspaceId`
 // for connections without one — the browser family's rule, unchanged.
+//
+// A board in another project is named by its global id, from `canvas.list` with
+// `scope: machine`. An id is the only way across (owner ruling 2026-11-07, same
+// file, never a copy): a bare name still means this project, and a bound agent
+// may reach another project's board only by naming it exactly. A board named by
+// id is never created, and a bare name that only exists elsewhere is refused
+// with that board's id, because the alternative is what this used to do: make
+// an empty board of that name here, and leave an agent drawing on it believing
+// it had picked up the person's work.
 
 export const CANVAS_MUTATION_TOOL_NAMES: readonly string[] = [
   'canvas.open',
@@ -61,6 +74,8 @@ const MAX_SKELETON_JSON_BYTES = 150_000
 const DESCRIBE_LINT_ISSUES = 10
 const EDIT_LINT_ISSUES = 20
 const DESCRIBE_ACTIONS = 10
+/** How many same-named boards a refusal names; past this the agent wants `canvas.list`. */
+const ELSEWHERE_BOARDS = 5
 
 export type CanvasToolsDeps = {
   service: CanvasService
@@ -172,11 +187,16 @@ function lintLines(report: CanvasLintReport): string[] {
   return lines
 }
 
+/** A board from another project, as a tool's answer offers it. */
+function elsewhereLine(board: CanvasMachineBoard): string {
+  return `${board.id} (${board.project ?? 'a deleted project'})`
+}
+
 const SHARED_PROPERTIES = {
   board: {
     type: 'string',
     description:
-      'The board to act on. Normally a bare name such as "architecture" (or "architecture.excalidraw"): it names a board in the app\'s own board store, which the app keeps for this project outside the project folder, or, when the store has none of that name, an older board already in the project\'s diagrams/ folder. A path with a folder, such as "docs/architecture.excalidraw", names that file in the project exactly. Omitted, the workspace\'s most recently changed board, or the store board "canvas" when it has none. Always name a board this way, never by a filesystem path.',
+      'The board to act on. Normally a bare name such as "architecture" (or "architecture.excalidraw"): it names a board in the app\'s own board store, which the app keeps for this project outside the project folder, or, when the store has none of that name, an older board already in the project\'s diagrams/ folder. A path with a folder, such as "docs/architecture.excalidraw", names that file in the project exactly. A board in another project is named by its id from canvas.list with `scope: machine`, such as "canvas://ws_0123456789abcdef01234567/architecture.excalidraw"; use one only when the person points you at that board, and it is that same board, not a copy. An id is never created. Omitted, the workspace\'s most recently changed board, or the store board "canvas" when it has none. Always name a board this way, never by a filesystem path.',
   },
   workspaceId: { type: 'string', description: 'Only for connections not bound to a workspace.' },
 } as const
@@ -367,21 +387,69 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
   }
 
   /**
+   * The workspace a call by id runs under. An id needs none, so a connection
+   * bound to nothing (a paired device) may read a board by id alone; a bound
+   * one keeps its own, and one naming somebody else's is refused as ever.
+   */
+  function workspaceOfIdCall(args: Record<string, unknown>, context?: McpConnectionContext): string | McpToolResult {
+    if (context?.metadata.workspaceId || str(args, 'workspaceId')) return resolveWorkspace(args, context)
+    return ''
+  }
+
+  /** Boards of this name in other projects, for the answer that refuses the name here. */
+  async function boardsElsewhere(workspaceId: string, name: string): Promise<CanvasMachineBoard[]> {
+    const listed = await service.listAllBoards(workspaceId)
+    if (!listed.ok) return []
+    const wanted = name.toLowerCase()
+    return listed.value.boards.filter((board) => !board.here && board.name.toLowerCase() === wanted)
+  }
+
+  /**
+   * The refusal of a bare name that is not a board here and is one elsewhere,
+   * or null. Only a name that means a board: the default name is in every
+   * store, so it says nothing, and a folder path is this project's by its shape.
+   */
+  async function refusedForeignName(workspaceId: string, path: string): Promise<McpToolResult | null> {
+    if (!canvasBoardIsInStore(path) || path === DEFAULT_CANVAS_BOARD_PATH) return null
+    const name = canvasBoardName(path)
+    const elsewhere = await boardsElsewhere(workspaceId, name)
+    if (elsewhere.length === 0) return null
+    const shown = elsewhere.slice(0, ELSEWHERE_BOARDS).map(elsewhereLine).join('; ')
+    const more = elsewhere.length > ELSEWHERE_BOARDS ? ` and ${elsewhere.length - ELSEWHERE_BOARDS} more` : ''
+    return failure(
+      'foreign_board',
+      `This project has no board "${name}". Nothing was created, because another project has one: ${shown}${more}. To work on that board, name it by its id. To start a new board here, use another name.`,
+    )
+  }
+
+  /**
    * Which board the call is about.
    *
    * A named board is normalized and refused here rather than at the fs call. An
    * unnamed one is the workspace's most recently changed board, because an agent
    * that just drew something and came back is talking about that board; a
    * workspace with no boards at all gets the default path, which the mutating
-   * tools then create.
+   * tools then create. The newest board stays this workspace's: only an id
+   * reaches beyond it.
+   *
+   * `creates` is a call that makes the board when there is none, which is the
+   * one place a name that belongs to another project has to be stopped.
    */
   async function resolveBoard(
     args: Record<string, unknown>,
-    context?: McpConnectionContext,
+    context: McpConnectionContext | undefined,
+    options: { creates?: boolean } = {},
   ): Promise<{ workspaceId: string; ref: CanvasBoardRef } | McpToolResult> {
+    const named = str(args, 'board')
+    const id = named ? parseCanvasBoardId(named) : null
+    if (id) {
+      if (!id.ok) return canvasFailure(id.error)
+      const asker = workspaceOfIdCall(args, context)
+      if (typeof asker !== 'string') return asker
+      return { workspaceId: asker, ref: { workspaceId: asker, path: id.value.path, store: id.value.store } }
+    }
     const workspaceId = resolveWorkspace(args, context)
     if (typeof workspaceId !== 'string') return workspaceId
-    const named = str(args, 'board')
     if (named) {
       const normalized = normalizeCanvasPath(named)
       if (!normalized.ok) return canvasFailure(normalized.error)
@@ -398,6 +466,10 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
           const legacyRef = { workspaceId, path: legacy }
           const inProject = await service.boardExists(legacyRef)
           if (inProject.ok && inProject.value) return { workspaceId, ref: legacyRef }
+          if (options.creates) {
+            const refusal = await refusedForeignName(workspaceId, ref.path)
+            if (refusal) return refusal
+          }
         }
       }
       return { workspaceId, ref }
@@ -412,7 +484,9 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
   async function readBoard(ref: CanvasBoardRef): Promise<CanvasBoardState | McpToolResult> {
     const read = await service.readBoard(ref)
     if (read.ok) return read.value
-    if (read.error.code === 'not_found') {
+    if (read.error.code === 'not_found' && !ref.store) {
+      const elsewhere = await refusedForeignName(ref.workspaceId, ref.path)
+      if (elsewhere) return elsewhere
       return failure(
         'not_found',
         `There is no board at ${ref.path} yet. canvas.open creates it and shows it to the person, or canvas.edit creates it with your first shapes.`,
@@ -421,7 +495,7 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
     return canvasFailure(read.error)
   }
 
-  /** The board as a mutating tool needs it: created on demand. */
+  /** The board as a mutating tool needs it: created on demand, unless it is another project's. */
   async function ensureBoard(ref: CanvasBoardRef): Promise<CanvasBoardState | McpToolResult> {
     const read = await service.readBoard(ref, { create: true })
     return read.ok ? read.value : canvasFailure(read.error)
@@ -429,6 +503,7 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
 
   function boardInfo(ref: CanvasBoardRef, state: CanvasBoardState): Record<string, unknown> {
     return {
+      ...(state.id ? { id: state.id } : {}),
       path: state.path || ref.path,
       name: canvasBoardName(state.path || ref.path),
       revision: state.revision,
@@ -440,19 +515,62 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
     {
       name: 'canvas.list',
       description:
-        "List the Canvas boards in this workspace with their element count and when each last changed, most recently changed first. A board is an .excalidraw file. New boards live in the app's own board store, kept for this project outside the project folder, and are listed by bare file name (e.g. architecture.excalidraw); the person puts one into the repository with the Canvas tab's Export action. Boards an earlier version made in the project's diagrams/ folder are listed by their project path, and stay where they are. Capped at 200, with a note when the cap was reached. Read-only.",
+        "List the Canvas boards in this workspace with their element count and when each last changed, most recently changed first. A board is an .excalidraw file. New boards live in the app's own board store, kept for this project outside the project folder, and are listed by bare file name (e.g. architecture.excalidraw); the person puts one into the repository with the Canvas tab's Export action. Boards an earlier version made in the project's diagrams/ folder are listed by their project path, and stay where they are. `scope: machine` lists every board on this machine instead, whatever project or chat drew it, each with its project (null for a project that was removed) and the `id` the other canvas tools take to reach it. Capped at 200, with a note when the cap was reached. Read-only.",
       inputSchema: {
         type: 'object',
-        properties: { workspaceId: SHARED_PROPERTIES.workspaceId },
+        properties: {
+          scope: {
+            type: 'string',
+            enum: ['workspace', 'machine'],
+            description:
+              '"workspace" (the default) lists this workspace\'s boards. "machine" lists every board on this machine, for when the person means a board drawn somewhere else.',
+          },
+          workspaceId: SHARED_PROPERTIES.workspaceId,
+        },
         additionalProperties: false,
       },
       handler: async (args, context) => {
+        const scope = str(args, 'scope')
+        if (scope !== null && scope !== 'workspace' && scope !== 'machine') {
+          return failure('invalid', '`scope` must be "workspace" or "machine".')
+        }
+        if (scope === 'machine') {
+          const asker = workspaceOfIdCall(args, context)
+          if (typeof asker !== 'string') return asker
+          const listed = await service.listAllBoards(asker || undefined)
+          if (!listed.ok) return canvasFailure(listed.error)
+          const shown = listed.value.boards.slice(0, CANVAS_LIST_MAX_BOARDS)
+          const unshown = listed.value.boards.length - shown.length
+          const notes = [
+            ...(unshown > 0
+              ? [
+                  `These are the ${CANVAS_LIST_MAX_BOARDS} most recently changed of ${listed.value.boards.length} boards on this machine.`,
+                ]
+              : []),
+            ...(listed.value.note ? [listed.value.note] : []),
+          ]
+          return success({
+            scope: 'machine',
+            boards: shown.map((board) => ({
+              id: board.id,
+              path: board.path,
+              name: board.name,
+              project: board.project,
+              here: board.here,
+              workspaceId: board.workspaceId,
+              elementCount: board.elementCount,
+              modifiedAt: new Date(board.modifiedAt).toISOString(),
+            })),
+            ...(notes.length > 0 ? { note: notes.join(' ') } : {}),
+          })
+        }
         const workspaceId = resolveWorkspace(args, context)
         if (typeof workspaceId !== 'string') return workspaceId
         const listed = await service.listBoards(workspaceId)
         if (!listed.ok) return canvasFailure(listed.error)
         const ordered = newestFirst(listed.value)
         const boards = ordered.map((board) => ({
+          ...(board.id ? { id: board.id } : {}),
           path: board.path,
           name: board.name,
           elementCount: board.elementCount,
@@ -476,18 +594,19 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
     {
       name: 'canvas.open',
       description:
-        'Create the board if it does not exist and reveal its Canvas tab, docked, in the window showing this workspace — so the person can watch you draw. `revealed: false` is not a failure: it means no window is showing the workspace right now, and the board stays fully usable through the other canvas tools.',
+        "Create the board if it does not exist and reveal its Canvas tab, docked, in the window showing this workspace — so the person can watch you draw. A board named by its id is opened and never created; a name that is not a board here but is one in another project is refused with that board's id. `revealed: false` is not a failure: it means no window is showing the workspace right now, and the board stays fully usable through the other canvas tools.",
       inputSchema: {
         type: 'object',
         properties: { board: SHARED_PROPERTIES.board, workspaceId: SHARED_PROPERTIES.workspaceId },
         additionalProperties: false,
       },
       handler: async (args, context) => {
-        const resolved = await resolveBoard(args, context)
+        const resolved = await resolveBoard(args, context, { creates: true })
         if ('content' in resolved) return resolved
         const state = await ensureBoard(resolved.ref)
         if ('content' in state) return state
-        const opened = await service.requestOpen(resolved.ref)
+        // A paired device names no workspace, so there is no window to ask.
+        const opened = resolved.workspaceId ? await service.requestOpen(resolved.ref) : canvasOk({ revealed: false })
         if (!opened.ok) return canvasFailure(opened.error)
         return success({
           board: boardInfo(resolved.ref, state),
@@ -685,7 +804,7 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
         if (args.delete === undefined && args.update === undefined && args.create === undefined) {
           return failure('invalid_edit', 'An edit must name at least one of `delete`, `update` or `create`.')
         }
-        const resolved = await resolveBoard(args, context)
+        const resolved = await resolveBoard(args, context, { creates: true })
         if ('content' in resolved) return resolved
         const request: CanvasEditRequest = {}
         if (args.delete !== undefined) request.delete = args.delete as CanvasEditRequest['delete']
@@ -755,7 +874,7 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
           return failure('invalid', `\`op\` must be one of ${LAYOUT_OPS.join(', ')}.`)
         }
         if (!elementIds) return failure('invalid', '`elementIds` must be an array of element ids.')
-        const resolved = await resolveBoard(args, context)
+        const resolved = await resolveBoard(args, context, { creates: true })
         if ('content' in resolved) return resolved
         const request: CanvasLayoutRequest = { op, elementIds }
         const to = str(args, 'to')
@@ -815,7 +934,7 @@ export function createCanvasTools(deps: CanvasToolsDeps): McpToolRegistration[] 
           return failure('invalid', 'Give exactly one of `mermaid` or `scene`.')
         }
         const mode = str(args, 'mode') === 'replace' ? 'replace' : 'merge'
-        const resolved = await resolveBoard(args, context)
+        const resolved = await resolveBoard(args, context, { creates: true })
         if ('content' in resolved) return resolved
         const board = await ensureBoard(resolved.ref)
         if ('content' in board) return board
