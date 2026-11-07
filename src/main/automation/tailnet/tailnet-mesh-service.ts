@@ -1743,7 +1743,7 @@ export function createTailnetMeshService(options: TailnetMeshServiceOptions): Ta
     if (!answer.ok) return { ok: false, code: answer.code, message: canvasRefusal(connection, answer) }
     const image = answer.value.content.map(asRecord).find((block) => block?.type === 'image')
     const { width, height } = answer.value.structured
-    if (typeof image?.data !== 'string' || typeof image.mimeType !== 'string' || !/^image\//u.test(image.mimeType)) {
+    if (typeof image?.data !== 'string' || typeof image.mimeType !== 'string' || !image.mimeType.startsWith('image/')) {
       return { ok: false, code: 'unreadable_result', message: `${connection.machineName} answered without a picture.` }
     }
     return {
