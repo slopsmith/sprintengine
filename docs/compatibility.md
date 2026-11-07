@@ -400,16 +400,34 @@ the chat's agent asked the desktop to watch; a reader that does not know a
 reason still reads the message as Studio's, without one.
 A quote of an earlier reply (2026-11-02) rides inside a `user_message`'s
 `text` on the desktop, as a Markdown link with a scheme of its own
-(`src/shared/chat-quotes.ts`), and never on the wire: the conversation stream
-turns each one into its words — the passage as a blockquote, then
-`Comment: …` — before it rewrites host paths (`quotesForWire` in
-`tailnet-conversation-stream.ts`). So `text` still means the person's words
-alone, no version moves and no capability is needed, and a phone or a paired
-Studio of any release shows the quote as words. Nothing a client sends
-changed either: a chat on a paired machine quotes as a blockquote, so no
-desktop is handed a token an older release would pass to its agent raw. If a
-client is ever to draw quotes as chips, that is a capability it advertises
-and the stream keeps the token for it alone.
+(`src/shared/chat-quotes.ts`). By default it does not cross the wire: the
+conversation stream turns each one into its words — the passage as a
+blockquote, then `Comment: …` — before it rewrites host paths (`quotesForWire`
+in `tailnet-conversation-stream.ts`), so `text` means the person's words alone
+and a phone or a paired Studio of any release shows the quote as words. A held
+or scheduled message's `text`, in `queued` and `scheduled` frames, reads the
+same way.
+A quote crosses as its token only under the `conversation-quote-tokens`
+capability (2026-11-07), which has to be said from both ends, because each
+end's mistake is a different one. The desktop advertises it, saying that it
+expands a token in a message it is sent into what its agent reads
+(`expandQuotesForAgent`, on every path a send takes), so a client makes one
+only where it is listed; a machine that does not list it would hand its agent
+the address. The client names it in `clientCapabilities` on its `hello` (a new
+optional member, read for that socket alone), so a desktop keeps the token only
+for a client that will draw it; a client that said nothing would show the
+address. The `hello` goes ahead of the `subscribe`, whose replay it shapes, and
+nobody waits on its answer: a desktop without the member drops it, and one from
+before `conversation-hello` refuses the frame. Tokens that do leave have the
+words they carry rewritten as the frame around them is (`mapQuoteWords`),
+because a path percent-encoded inside an address is out of the rewrite's reach.
+A paired Studio asks by capability at both ends: it writes a blockquote for a
+machine without it, and turns any token that still reaches its send (a paste, a
+stashed prompt) into words there. The phone does not name the capability, so it
+reads words from any desktop, and writes what it always wrote; that it may draw
+chips one day needs only the name in its `hello`. A paired Studio's copy of a
+chat keeps the words it was first sent, so a quote from before this reads as a
+blockquote. No version moves.
 A chat's rest and read state are the `conversation-lifecycle` capability: a
 desktop that advertises it leaves the chats it has settled out of the list, sends it in its sidebar's order, names
 each chat's `chatTitle`, `lastUserMessageAt`, `lastTurnEndedAt` and
@@ -686,6 +704,32 @@ the phone's pinned copy, refuses the decision as `unsafe_remote_decision`, as
 it always did, and a client offers the rule only where it is advertised. The
 Studio RPC does not advertise it: `conversation.resolveApproval` there still
 refuses the decision.
+A chat's sub-agents are the `conversation-subagents` capability (2026-11-07):
+`{ type: 'watchSubagents', requestId }` has the desktop send a `subagents`
+frame (`ConversationSubagentsFrame`: the followed chat's `key` and its
+`subagents`, oldest first, the newest `CONVERSATION_MAX_SUBAGENTS` of them,
+whole each time) now and whenever one starts, moves or ends. A row
+(`ConversationSubagent`) names the chat a sub-agent is (`workspaceId`,
+`agentId`, `title`, `providerId`, `modelId`, `sessionId`, its preset and
+`capabilities`), as a listed chat names itself, beside what is its own:
+`readOnly`, `status`, `task`, `startedAt`, `endedAt` and `error`. The status
+is the desktop's own reading (`subagentStatusOf`), so a client does not work it
+out again. A sub-agent is a chat like any other on the wire: `subscribe` follows
+it by those ids on a socket of its own, and `resolveApproval` and
+`answerQuestion` there answer what it asks. That was always so, since
+`subscribe` never read the list; what a device lacked was the ids. The `list`
+still leaves sub-agents out, on purpose: it is what a paired sidebar and a phone
+draw as chats, and neither should draw one. That is why the rows are a request
+of their own and not a member of the list, and why they are no part of
+`ConversationThread`. The watch is `conversation:read`, and an answer
+`conversation:operate`, as for any chat. All of it is additive: a desktop without
+the capability answers the request `invalid_frame` under its id, which nobody
+waits on, and a client asks only where it is advertised, or where the machine
+has not said; its chat then shows the agents its CLI spawned, as before. A
+desktop sends `subagents` frames only to a client that asked, so a phone, which
+does not, sees exactly what it saw. One row a client cannot read is dropped
+alone. The Studio RPC does not advertise it: its conversation topic carries no
+`subagents` frames, and a window on it reads the records themselves.
 A `send` may say when it was written, `composedAt` (epoch ms, the client's
 clock), and that the person confirmed one written long ago, `confirmedStale`
 (2026-10-20). A desktop that reads them records `composedAt` on the

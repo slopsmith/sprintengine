@@ -9,6 +9,7 @@ import type {
   ConversationHighlightColor,
   ConversationQueuedMessage,
   ConversationScheduledMessage,
+  ConversationSubagent,
   ConversationThread,
   ConversationUsageLimitNotice,
   ConversationUsageLimitResumeAction,
@@ -669,12 +670,23 @@ export type MeshUsageLimitSnapshot = ConversationUsageLimitSnapshot
 /** What a paired machine's resume row asks of it. */
 export type MeshUsageLimitResumeAction = ConversationUsageLimitResumeAction
 
+/**
+ * The sub-agents of this conversation, oldest first, whole each time
+ * (`conversation-subagents`). The last list heard stands while the link is
+ * down, as the machine's agents work on there.
+ */
+export type MeshConversationSubagents = { type: 'subagents'; subagents: MeshSubagent[] }
+
+/** A chat of a paired machine that belongs to another: followed by its ids, as any chat is. */
+export type MeshSubagent = ConversationSubagent
+
 export type MeshConversationFrame =
   | ConversationSessionFrame
   | MeshConversationLink
   | MeshConversationQueued
   | MeshConversationScheduled
   | MeshConversationUsageLimits
+  | MeshConversationSubagents
 
 /**
  * `modelSwitch`: the machine advertises `conversation-models` — its list names
@@ -802,6 +814,11 @@ export type MeshConversationFrame =
  * `permanentApprovals`: the machine advertises
  * `conversation-permanent-approvals` — an approval in its chats may be
  * answered here with "Always allow … in this workspace", the rule saved there.
+ *
+ * `quotes`: the machine advertises `conversation-quote-tokens` — a quote made
+ * in its chats here may ride as a token, which it expands for its agent. False
+ * for a machine that would hand its agent the address, where Quote writes a
+ * blockquote.
  */
 export type MeshConversationListResult =
   | {
@@ -832,6 +849,7 @@ export type MeshConversationListResult =
       usageLimits?: boolean
       queuedAttachments?: boolean
       permanentApprovals?: boolean
+      quotes?: boolean
       createPullRequest?: boolean
       rowMenu?: boolean
       markUnread?: boolean

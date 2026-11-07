@@ -53,8 +53,9 @@ import type {
  * `conversation-lifecycle`, whose
  * settle and visit are gateway tools this socket has no method for, and
  * `conversation-queued-sends`, `conversation-scheduled-sends` and
- * `conversation-usage-limits`, whose `queued`, `scheduled` and `usageLimits`
- * frames its conversation topic does not carry.
+ * `conversation-usage-limits` and `conversation-subagents`, whose `queued`,
+ * `scheduled`, `usageLimits` and `subagents` frames its conversation topic
+ * does not carry.
  * Nor the lane's fork, side questions and context breakdown
  * (`conversation-fork`, `conversation-side-questions`,
  * `conversation-context-breakdown`): this socket forks by its own
@@ -70,6 +71,8 @@ import type {
  * socket does not take, nor `conversation-permanent-approvals`: its
  * `conversation.resolveApproval` reads its own validator, which still refuses
  * a rule that outlives the conversation.
+ * Nor `conversation-quote-tokens`, which is said in the tailnet socket's
+ * `hello`: this socket is the owner's, and reads a chat as it is kept.
  */
 export const STUDIO_RPC_CONVERSATION_CAPABILITIES: string[] = CONVERSATION_CAPABILITIES.filter(
   (capability) =>
@@ -87,7 +90,9 @@ export const STUDIO_RPC_CONVERSATION_CAPABILITIES: string[] = CONVERSATION_CAPAB
     capability !== 'conversation-commands' &&
     capability !== 'conversation-scheduled-sends' &&
     capability !== 'conversation-usage-limits' &&
+    capability !== 'conversation-subagents' &&
     capability !== 'conversation-queued-attachments' &&
+    capability !== 'conversation-quote-tokens' &&
     capability !== 'conversation-permanent-approvals',
 )
 

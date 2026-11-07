@@ -77,6 +77,14 @@ export const CONVERSATION_STEER_SENDS_CAPABILITY = 'conversation-steer-sends' as
  */
 export const CONVERSATION_STOP_SUBAGENT_CAPABILITY = 'conversation-stop-subagent' as const
 /**
+ * The chats a chat started for one task may be read where it is followed, as
+ * the desktop's own Agents tab reads them: `watchSubagents` has the desktop
+ * name the followed chat's sub-agents in `subagents` frames, and each is a chat
+ * of its own, followed by its `agentId` and answered there. No listed chat is
+ * one: the `list` leaves them out, so only a client that asks is told of them.
+ */
+export const CONVERSATION_SUBAGENTS_CAPABILITY = 'conversation-subagents' as const
+/**
  * A chat may be handed off to a fresh session instead of compacted, as its
  * Handoff does on the desktop: `handoff` writes the chat's messages to a file
  * there and lets the provider session go, and the next message starts a new
@@ -236,6 +244,18 @@ export const CONVERSATION_QUEUED_ATTACHMENTS_CAPABILITY = 'conversation-queued-a
  * refuses the decision as `unsafe_remote_decision`.
  */
 export const CONVERSATION_PERMANENT_APPROVALS_CAPABILITY = 'conversation-permanent-approvals' as const
+/**
+ * A quote of an earlier reply may cross the wire as the token the desktop
+ * keeps it in, a Markdown link with a scheme of its own, so a paired Studio's
+ * composer and transcript draw it as the desktop's own do. Both ends say so.
+ * The desktop advertises it: it expands a token in a message it is sent into
+ * what its agent reads, so a client makes one only where this is listed. The
+ * client names it in `clientCapabilities` on its `hello`: only then does the
+ * desktop leave tokens in the `text` of that socket's `user_message` events
+ * and held and scheduled messages. Every other client is sent the quote as
+ * words, and a client without it writes a quote as a blockquote.
+ */
+export const CONVERSATION_QUOTE_TOKENS_CAPABILITY = 'conversation-quote-tokens' as const
 
 /**
  * Every conversation capability this version of the package knows, in the
@@ -275,6 +295,8 @@ export const CONVERSATION_CAPABILITIES = [
   CONVERSATION_USAGE_LIMITS_CAPABILITY,
   CONVERSATION_QUEUED_ATTACHMENTS_CAPABILITY,
   CONVERSATION_PERMANENT_APPROVALS_CAPABILITY,
+  CONVERSATION_QUOTE_TOKENS_CAPABILITY,
+  CONVERSATION_SUBAGENTS_CAPABILITY,
 ] as const
 
 export type ConversationCapability = (typeof CONVERSATION_CAPABILITIES)[number]
@@ -291,14 +313,39 @@ export function conversationPeerSupports(
   return Array.isArray(capabilities) && capabilities.includes(capability)
 }
 
+/** The most capability names one `hello` may carry; a longer list is cut here. */
+const MAX_CLIENT_CAPABILITIES = 64
+
+const CAPABILITY_NAME = /^[a-z][a-z0-9.-]{0,63}$/
+
 /**
  * The `hello` request: a client's first frame, answered by a `result` under
  * its `requestId` whose `data` is a `ConversationHelloAnswer`. A desktop from
  * before `conversation-hello` answers it `ok: false` with `invalid_frame`,
  * which a client reads as protocol 1 with whatever capabilities the
  * transport's own handshake listed.
+ *
+ * `clientCapabilities` is the same vocabulary from the other end: what the
+ * client reads that the desktop must otherwise keep from it. It holds for the
+ * socket it was said on, and only frames sent after it, so a client says it
+ * ahead of its `subscribe` and need not wait for the answer. A desktop that
+ * does not know the member drops it, and a client that does not send it is
+ * sent what every client was.
  */
-export type ConversationHelloRequest = { type: 'hello'; requestId: string; protocolVersion?: number }
+export type ConversationHelloRequest = {
+  type: 'hello'
+  requestId: string
+  protocolVersion?: number
+  clientCapabilities?: string[]
+}
+
+/** The names a `hello` says its client reads: a member that does not read is no names, not a refused `hello`. */
+export function parseConversationClientCapabilities(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((name): name is string => typeof name === 'string' && CAPABILITY_NAME.test(name))
+    .slice(0, MAX_CLIENT_CAPABILITIES)
+}
 
 export type ConversationHelloAnswer = {
   protocolVersion: number
@@ -318,7 +365,7 @@ export function parseConversationHelloAnswer(value: unknown): ConversationHelloA
     protocolVersion: answer.protocolVersion,
     minProtocolVersion: answer.minProtocolVersion,
     capabilities: answer.capabilities.filter(
-      (name): name is string => typeof name === 'string' && /^[a-z][a-z0-9.-]{0,63}$/.test(name),
+      (name): name is string => typeof name === 'string' && CAPABILITY_NAME.test(name),
     ),
   }
 }

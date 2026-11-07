@@ -54,6 +54,7 @@ import type {
   MeshQueuedMessage,
   MeshScheduledMessage,
   MeshConversationUsageLimits,
+  MeshSubagent,
   MeshUsageLimitResumeAction,
 } from '../../../../../shared/tailnet-mesh'
 
@@ -86,6 +87,13 @@ export type ConversationTransportCapabilities = {
    * (`conversation-permanent-approvals`).
    */
   permanentApprovals: boolean
+  /**
+   * Make a quote as a token: a chip in the composer, marked in the reply, and
+   * expanded for the agent where the chat runs. A paired machine's chat does
+   * where that machine expands one (`conversation-quote-tokens`); any other
+   * quotes as a blockquote, whose words it can read.
+   */
+  quotes: boolean
   /**
    * Revert a turn's files from its checkpoint. A paired machine's chat does,
    * in that machine's checkout, where it advertises doing so
@@ -397,6 +405,7 @@ const LOCAL_CAPABILITIES: ConversationTransportCapabilities = {
   operate: true,
   startSession: true,
   permanentApprovals: true,
+  quotes: true,
   checkpointRevert: true,
   modelSwitch: true,
   composerContext: true,
@@ -574,8 +583,8 @@ const commandResult = (result: MeshConversationCommandResult): ConversationTrans
  * machine's idea of a workspace root, which means nothing over there.
  * `onLink` receives the connection state main narrates beside the frames, and
  * `onQueued` what the machine holds for the conversation's turn to end, and
- * `onScheduled` what it keeps for a time, and `onUsageLimits` what it knows
- * of its usage limits for it.
+ * `onScheduled` what it keeps for a time, `onUsageLimits` what it knows of
+ * its usage limits for it, and `onSubagents` which sub-agents the chat has.
  */
 export function createRemoteConversationTransport(input: {
   key: MeshConversationKey
@@ -585,6 +594,7 @@ export function createRemoteConversationTransport(input: {
   onQueued?: (messages: MeshQueuedMessage[]) => void
   onScheduled?: (messages: MeshScheduledMessage[]) => void
   onUsageLimits?: (said: MeshConversationUsageLimits) => void
+  onSubagents?: (subagents: MeshSubagent[]) => void
   /** The machine recorded a pull request Create PR opened there as the chat's. */
   onPullRequestRecorded?: () => void
 }): ConversationTransport {
@@ -598,6 +608,9 @@ export function createRemoteConversationTransport(input: {
       // Turned on from the machine's list, when it saves an "always allow"
       // rule a device chose (`conversation-permanent-approvals`).
       permanentApprovals: false,
+      // Turned on from the machine's list, when it expands a quote's token for
+      // its agent (`conversation-quote-tokens`).
+      quotes: false,
       // Turned on from the machine's list, when it reverts a turn's files
       // itself (`conversation-checkpoint-revert`): the checkpoint is on its disk.
       checkpointRevert: false,
@@ -644,6 +657,7 @@ export function createRemoteConversationTransport(input: {
         else if (frame.type === 'queued') input.onQueued?.(frame.messages)
         else if (frame.type === 'scheduled') input.onScheduled?.(frame.messages)
         else if (frame.type === 'usageLimits') input.onUsageLimits?.(frame)
+        else if (frame.type === 'subagents') input.onSubagents?.(frame.subagents)
         else cb(frame)
       }),
     loadEarlier: (page) =>

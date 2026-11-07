@@ -18,7 +18,9 @@ import {
 } from '../../../../packages/conversation-protocol/src/clientFrames'
 import {
   CONVERSATION_QUEUED_SENDS_CAPABILITY,
+  CONVERSATION_QUOTE_TOKENS_CAPABILITY,
   CONVERSATION_SCHEDULED_SENDS_CAPABILITY,
+  CONVERSATION_SUBAGENTS_CAPABILITY,
   CONVERSATION_USAGE_LIMITS_CAPABILITY,
   conversationPeerSupports,
 } from '../../../../packages/conversation-protocol/src/handshake'
@@ -53,6 +55,7 @@ import type {
   MeshQueuedMessage,
   MeshScheduledMessage,
   MeshConversationUsageLimits,
+  MeshSubagent,
 } from '../../../shared/tailnet-mesh'
 import { asRecord } from '../../../shared/records'
 import type { RemoteConversationCache, RemoteConversationCacheRecord } from './tailnet-remote-conversation-cache'
@@ -263,6 +266,8 @@ type Follow = {
   scheduled: MeshScheduledMessage[] | null
   /** What the machine last said of its usage limits for the conversation, for a window that joins later. */
   usageLimits: MeshConversationUsageLimits | null
+  /** The sub-agents the machine last said the conversation has, for a window that joins later. */
+  subagents: MeshSubagent[] | null
 }
 type SnapshotFrame = Extract<ConversationParsedServerFrame, { type: 'snapshot' }>
 
@@ -493,6 +498,7 @@ export function createRemoteConversations(options: RemoteConversationsOptions): 
     follow.socket = socket
     follow.synchronized = false
     options.onReachable?.(connection.id)
+    declareReads(follow)
     subscribe(follow)
   }
 
@@ -622,7 +628,8 @@ export function createRemoteConversations(options: RemoteConversationsOptions): 
       frame.type === 'synchronized' ||
       frame.type === 'queued' ||
       frame.type === 'scheduled' ||
-      frame.type === 'usageLimits'
+      frame.type === 'usageLimits' ||
+      frame.type === 'subagents'
         ? frame.key
         : frame.type === 'event'
           ? { workspaceId: frame.event.workspaceId, agentId: frame.event.agentId }
@@ -720,6 +727,7 @@ export function createRemoteConversations(options: RemoteConversationsOptions): 
         watchQueued(follow)
         watchScheduled(follow)
         watchUsageLimits(follow)
+        watchSubagents(follow)
         return
       }
       case 'queued': {
@@ -741,6 +749,11 @@ export function createRemoteConversations(options: RemoteConversationsOptions): 
         }
         follow.usageLimits = said
         emit(follow, said)
+        return
+      }
+      case 'subagents': {
+        follow.subagents = frame.subagents
+        emit(follow, { type: 'subagents', subagents: frame.subagents })
         return
       }
       case 'subscribeFailed': {
@@ -894,6 +907,24 @@ export function createRemoteConversations(options: RemoteConversationsOptions): 
   }
 
   /**
+   * Say what this client reads, ahead of the `subscribe` whose replay it
+   * shapes: a machine sends a quote's token only to a socket that asked. Said
+   * to a machine that has not said what it serves as well, whose copy of the
+   * chat would otherwise settle on words; one from before it drops the member
+   * or refuses the frame, and nobody waits on the answer. Never to one that
+   * said and left `conversation-quote-tokens` out.
+   */
+  function declareReads(follow: Follow): void {
+    const capabilities = options.capabilitiesOf?.(follow.key.connectionId)
+    if (capabilities && !conversationPeerSupports(capabilities, CONVERSATION_QUOTE_TOKENS_CAPABILITY)) return
+    send(follow, {
+      type: 'hello',
+      requestId: `hello-${++follow.requestSequence}`,
+      clientCapabilities: [CONVERSATION_QUOTE_TOKENS_CAPABILITY],
+    })
+  }
+
+  /**
    * Ask the machine to say what it holds for this conversation, after each
    * fence: a new socket, or the same one joined again, starts with no watch.
    * Asked of a machine that has not said what it serves as well, which answers
@@ -924,6 +955,13 @@ export function createRemoteConversations(options: RemoteConversationsOptions): 
     const capabilities = options.capabilitiesOf?.(follow.key.connectionId)
     if (capabilities && !conversationPeerSupports(capabilities, CONVERSATION_USAGE_LIMITS_CAPABILITY)) return
     send(follow, { type: 'watchUsageLimits', requestId: `usage-${++follow.requestSequence}` })
+  }
+
+  /** Ask the machine which sub-agents this conversation has, after each fence, as `watchScheduled` asks. */
+  function watchSubagents(follow: Follow): void {
+    const capabilities = options.capabilitiesOf?.(follow.key.connectionId)
+    if (capabilities && !conversationPeerSupports(capabilities, CONVERSATION_SUBAGENTS_CAPABILITY)) return
+    send(follow, { type: 'watchSubagents', requestId: `subagents-${++follow.requestSequence}` })
   }
 
   function dispatch(follow: Follow, command: PendingCommand): void {
@@ -1045,6 +1083,7 @@ export function createRemoteConversations(options: RemoteConversationsOptions): 
           queued: null,
           scheduled: null,
           usageLimits: null,
+          subagents: null,
         }
         created.loaded = options.cache.load(key).then(
           (record) => {
@@ -1092,6 +1131,7 @@ export function createRemoteConversations(options: RemoteConversationsOptions): 
       if (joined.queued) input.emit({ type: 'queued', messages: joined.queued })
       if (joined.scheduled) input.emit({ type: 'scheduled', messages: joined.scheduled })
       if (joined.usageLimits) input.emit(joined.usageLimits)
+      if (joined.subagents) input.emit({ type: 'subagents', subagents: joined.subagents })
       return { ok: true }
     },
 

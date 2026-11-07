@@ -13,6 +13,17 @@
 
 ### Added
 
+- **A chat's sub-agents, where it is followed.**
+  `CONVERSATION_SUBAGENTS_CAPABILITY` (`conversation-subagents`) names a desktop
+  that answers `ConversationWatchSubagentsRequest` (`watchSubagents`) with
+  `ConversationSubagentsFrame`s (`subagents`: the chat's `key` and its
+  `ConversationSubagent`s, oldest first, at most
+  `CONVERSATION_MAX_SUBAGENTS`, whole each time). A row is a chat a `subscribe`
+  follows by its ids, and names what a listed chat names of itself beside how
+  it stands (`CONVERSATION_SUBAGENT_STATUSES`). The `list` still leaves
+  sub-agents out. `parseConversationServerFrame` drops a row it cannot read
+  alone. A client asks; an older desktop refuses the request under its id. The
+  pinned files are unchanged.
 - **`subagent-task` among a Studio message's reasons.** The task a sub-agent
   was started with, which is Studio's message and not the person's. A reader
   that does not know the reason still reads it as Studio's.
@@ -30,6 +41,16 @@
   and `steer` beside `queue` are still refused. A client sends them beside
   `queue` only to a desktop that advertises the capability. The pinned files
   are unchanged.
+
+- **A quote can cross the wire as its token.**
+  `CONVERSATION_QUOTE_TOKENS_CAPABILITY` (`conversation-quote-tokens`) names a
+  desktop that expands a quote's token in a message it is sent into what its
+  agent reads. It leaves tokens in the `text` of a socket's `user_message`
+  events and `queued` and `scheduled` messages only for a client that named the
+  capability in `clientCapabilities`, a new optional member of
+  `ConversationHelloRequest` that `parseConversationClientMessage` keeps and
+  `parseConversationClientCapabilities` reads; every other client reads a quote
+  as words, as before. The pinned files are unchanged.
 
 - **A paired device can make an "always allow" rule.**
   `CONVERSATION_PERMANENT_APPROVALS_CAPABILITY`

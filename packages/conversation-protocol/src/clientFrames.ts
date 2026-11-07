@@ -18,10 +18,11 @@ import {
   type ConversationCommand,
   type ConversationWatchQueuedRequest,
   type ConversationWatchScheduledRequest,
+  type ConversationWatchSubagentsRequest,
   type ConversationWatchUsageLimitsRequest,
   type ConversationUsageLimitResumeAction,
 } from './commands.js'
-import type { ConversationHelloRequest } from './handshake.js'
+import { parseConversationClientCapabilities, type ConversationHelloRequest } from './handshake.js'
 import {
   parseConversationSideQuestionRequest,
   type ConversationAskSideQuestionRequest,
@@ -46,6 +47,7 @@ export type ConversationClientMessage =
   | ConversationContextBreakdownRequest
   | ConversationWatchScheduledRequest
   | ConversationWatchUsageLimitsRequest
+  | ConversationWatchSubagentsRequest
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -97,10 +99,12 @@ export function parseConversationClientMessage(value: unknown): ConversationClie
     const version = value.protocolVersion
     if (version !== undefined && !(typeof version === 'number' && Number.isSafeInteger(version) && version >= 1))
       return null
+    const clientCapabilities = parseConversationClientCapabilities(value.clientCapabilities)
     return {
       type: 'hello',
       requestId: value.requestId,
       ...(version === undefined ? {} : { protocolVersion: version as number }),
+      ...(clientCapabilities.length ? { clientCapabilities } : {}),
     }
   }
   if (value.type === 'watchQueued')
@@ -114,6 +118,8 @@ export function parseConversationClientMessage(value: unknown): ConversationClie
     return id(value.requestId) ? { type: 'watchScheduled', requestId: value.requestId } : null
   if (value.type === 'watchUsageLimits')
     return id(value.requestId) ? { type: 'watchUsageLimits', requestId: value.requestId } : null
+  if (value.type === 'watchSubagents')
+    return id(value.requestId) ? { type: 'watchSubagents', requestId: value.requestId } : null
   if (value.type === 'command' && record(value.command)) {
     const command = value.command
     // When the message was written, and whether the person confirmed one

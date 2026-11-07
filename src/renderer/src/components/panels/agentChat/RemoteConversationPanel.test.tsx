@@ -1,6 +1,7 @@
 import { JSDOM } from 'jsdom'
 import { forwardRef, Fragment, useImperativeHandle, useRef, type ReactNode } from 'react'
 import { expect, test, vi } from 'vitest'
+import { quoteToken } from '../../../../../shared/chat-quotes'
 import type { ConversationEvent, ConversationEventType } from '../../../../../shared/conversation-runtime'
 import type {
   MeshConversation,
@@ -125,6 +126,7 @@ async function mountRemote({
   queuedSends = false,
   queuedAttachments = false,
   permanentApprovals = false,
+  quotes = false,
   steerSends = false,
   stopSubagents = false,
   handoff = false,
@@ -168,6 +170,7 @@ async function mountRemote({
   queuedAttachments?: boolean
   /** The machine saves an "always allow" rule chosen here (`conversation-permanent-approvals`). */
   permanentApprovals?: boolean
+  quotes?: boolean
   steerSends?: boolean
   /** The machine stops one agent of a chat by itself (`conversation-stop-subagent`). */
   stopSubagents?: boolean
@@ -261,6 +264,7 @@ async function mountRemote({
       queuedSends,
       queuedAttachments,
       permanentApprovals,
+      quotes,
       steerSends,
       stopSubagents,
       handoff,
@@ -2150,6 +2154,60 @@ test('no Schedule for a machine that does not keep scheduled messages, or a pair
   }
 })
 
+test('the sub-agents a machine names reach the Agents tab, each read and answered as its own chat', async () => {
+  const chat = await mountRemote({ access: 'operate', permanentApprovals: true })
+  const { readRemoteChat } = await import('./remoteChatRegistry')
+  try {
+    const open = () => readRemoteChat('local-workspace', key.agentId)!
+    expect(open().subagents).toEqual([])
+    const subagent = {
+      workspaceId: key.workspaceId,
+      agentId: 'remote-child',
+      title: 'Reviewer',
+      providerId: 'cursor-agent',
+      modelId: 'grok-4.7',
+      readOnly: false,
+      status: 'working' as const,
+      task: 'Review it',
+      startedAt: 1,
+    }
+    await chat.act(async () => chat.emit({ type: 'subagents', subagents: [subagent] }))
+    expect(open().subagents).toEqual([subagent])
+    // A pane of its own it does not have, so nothing in the chat itself moved.
+    expect(chat.followed).toEqual([key])
+
+    const transport = open().subagentTransport('remote-child')
+    expect(open().subagentTransport('remote-child')).toBe(transport)
+    expect(transport.capabilities.operate).toBe(true)
+    expect(transport.capabilities.permanentApprovals).toBe(true)
+    const stop = transport.subscribe(
+      { key: { workspaceRoot: '', workspaceId: '', agentId: '' }, turnLimit: 10 },
+      () => undefined,
+    )
+    expect(chat.followed.at(-1)).toEqual({ ...key, agentId: 'remote-child' })
+    stop()
+    await transport.respond({ sessionId: 'remote:remote-child', requestId: 'approval-9', approved: true })
+    expect(chat.api.meshConversationResolveApproval).toHaveBeenLastCalledWith({
+      key: { ...key, agentId: 'remote-child' },
+      requestId: 'approval-9',
+      decision: 'once',
+    })
+  } finally {
+    await chat.unmount()
+  }
+})
+
+test('a sub-agent read from a pairing that may only read cannot be answered from here', async () => {
+  const chat = await mountRemote({ access: 'read' })
+  const { readRemoteChat } = await import('./remoteChatRegistry')
+  try {
+    const transport = readRemoteChat('local-workspace', key.agentId)!.subagentTransport('remote-child')
+    expect(transport.capabilities.operate).toBe(false)
+  } finally {
+    await chat.unmount()
+  }
+})
+
 /** What a machine says of its usage limits while the chat's session limit is used up. */
 function sessionLimitReached(resumeAt: number | null = null): MeshConversationFrame {
   const resetsAt = Date.now() + 2 * 60 * 60_000
@@ -2325,6 +2383,82 @@ test("the strip under a paired machine's chat names its agents' local servers, a
     // On that machine's own loopback: it opens there, not here, and nothing here acts on it.
     expect(chat.document.querySelector<HTMLButtonElement>('[data-local-server-action="open"]')?.disabled).toBe(true)
     expect(chat.document.querySelector('[data-local-server-action="remove"]')).toBeNull()
+  } finally {
+    await chat.unmount()
+  }
+})
+
+/** Selects a word of the reply and presses the toolbar's Quote, as the person does. */
+async function quoteReply(chat: Awaited<ReturnType<typeof mountRemote>>) {
+  // A chat's draft outlives its pane, and these tests share one chat.
+  await chat.act(async () => chat.type(''))
+  await chat.act(async () => {
+    chat.emit({ type: 'event', event: event('turn_started', { turnId: 'turn_reply' }) })
+    chat.emit({ type: 'event', event: event('content_delta', { turnId: 'turn_reply', text: 'What was merged' }) })
+    chat.emit({ type: 'event', event: event('turn_completed', { turnId: 'turn_reply' }) })
+  })
+  const reply = chat.document.querySelector('[data-quote-source="turn_reply"]')
+  const walker = chat.document.createTreeWalker(reply!, 4)
+  const words = walker.nextNode() as Text
+  const view = chat.document.defaultView!
+  const range = chat.document.createRange()
+  range.selectNodeContents(words)
+  const box = { left: 0, right: 10, top: 0, bottom: 10, width: 10, height: 10, x: 0, y: 0, toJSON: () => '' }
+  Object.assign(view.Range.prototype, {
+    getClientRects: () => [box],
+    getBoundingClientRect: () => box,
+  })
+  const selection = view.getSelection()!
+  selection.removeAllRanges()
+  selection.addRange(range)
+  await chat.act(async () => {
+    chat.document.dispatchEvent(new view.Event('selectionchange'))
+    await new Promise((resolve) => setTimeout(resolve, 40))
+  })
+  const toolbar = chat.document.querySelector('[data-quote-toolbar]')
+  await chat.act(async () => toolbar!.querySelector('button')!.click())
+}
+
+test('a machine that expands a quote gets a chip in the composer, as a chat here does', async () => {
+  const chat = await mountRemote({ access: 'operate', quotes: true })
+  try {
+    await quoteReply(chat)
+    expect(chat.draft()).toContain('sprintengine-quote:')
+    expect(chat.draft()).toContain('turn=turn_reply')
+    expect(chat.draft()).not.toContain('> What was merged')
+  } finally {
+    await chat.unmount()
+  }
+})
+
+test('a machine that does not say it expands a quote keeps the blockquote', async () => {
+  const chat = await mountRemote({ access: 'operate', quotes: false })
+  try {
+    await quoteReply(chat)
+    expect(chat.draft()).toContain('> What was merged')
+    expect(chat.draft()).not.toContain('sprintengine-quote:')
+  } finally {
+    await chat.unmount()
+  }
+})
+
+test('a sent message that comes back with its token is drawn as the chip', async () => {
+  const chat = await mountRemote({ access: 'operate', quotes: true })
+  try {
+    const token = quoteToken({
+      turnId: 'turn_reply',
+      n: 1,
+      quote: 'What was merged',
+      exact: 'What was merged',
+      prefix: '',
+      suffix: '',
+      comment: 'Which pull request?',
+    })
+    await chat.act(async () => {
+      chat.emit({ type: 'event', event: event('user_message', { turnId: 'turn_next', text: `Why ${token}` }) })
+    })
+    expect(chat.host.textContent).toContain('Which pull request?')
+    expect(chat.host.textContent).not.toContain('sprintengine-quote:')
   } finally {
     await chat.unmount()
   }
