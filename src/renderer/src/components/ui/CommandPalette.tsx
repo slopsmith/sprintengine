@@ -551,6 +551,22 @@ export default function CommandPalette({
               onClose()
             },
           },
+          // The Backlog has no switch in the window's top row any more: this
+          // row and its entry under Extensions are the ways in.
+          ...(panelCommandEnabled('panel.backlog.toggle')
+            ? [
+                {
+                  id: 'panel.backlog.toggle',
+                  label: 'Toggle backlog',
+                  searchLabel: 'Backlog',
+                  shortcut: shortcutFor('panel.backlog.toggle'),
+                  run: () => {
+                    onRunCommand('panel.backlog.toggle')
+                    onClose()
+                  },
+                },
+              ]
+            : []),
           // The agents the focused chat sent off to work: running, finished,
           // and each one's own steps.
           ...(panelCommandEnabled('panel.agents.toggle')

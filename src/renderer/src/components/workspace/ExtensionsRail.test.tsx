@@ -194,12 +194,12 @@ test('ExtensionsRail', async () => {
   assert.equal(dom.window.document.querySelector('[role="dialog"]'), null)
   assert.equal(
     dom.window.document.querySelectorAll('[role="listitem"]').length,
-    3,
-    'the drawer starts with the ruling’s three rows — a nav entry without a surface is not a destination',
+    4,
+    'the drawer starts with the ruling’s three rows and the Backlog — a nav entry without a surface is not a destination',
   )
   assert.deepEqual(
     rowLabels(),
-    ['Design', 'Plugins', 'Skills'],
+    ['Design', 'Plugins', 'Skills', 'Backlog'],
     'the ruling’s order survives whatever `order` the modules declared',
   )
   assert.ok(!rowLabels().includes('Automations'), 'Automations stands on the app rail, not in the drawer')
@@ -463,7 +463,7 @@ test('ExtensionsRail', async () => {
   render()
   assert.deepEqual(
     rowLabels(),
-    ['Plugins', 'Skills'],
+    ['Plugins', 'Skills', 'Backlog'],
     'rows for modules that are off are absent rather than dead, and the rest keep their order',
   )
 

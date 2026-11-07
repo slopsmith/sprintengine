@@ -82,6 +82,11 @@ test('availability', async () => {
   // to be on. The palette row and the keystroke read the same predicate, so this
   // is what keeps a stale binding from mounting a tab kind the launcher hides.
   assert.equal(
+    isCommandIdEnabled('panel.backlog.toggle', workspaceScopes, { activeWorkspace: true, backlogEnabled: true }),
+    true,
+  )
+  assert.equal(isCommandIdEnabled('panel.backlog.toggle', workspaceScopes, { activeWorkspace: true }), false)
+  assert.equal(
     isCommandIdEnabled('panel.canvas.toggle', workspaceScopes, { activeWorkspace: true, canvasEnabled: true }),
     true,
   )

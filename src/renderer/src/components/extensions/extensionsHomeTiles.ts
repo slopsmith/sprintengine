@@ -36,6 +36,7 @@
  * module adds to the drawer appears on the home rather than silently vanishing.
  */
 export const EXTENSIONS_HOME_TILE_SUMMARIES: Readonly<Record<string, string>> = {
+  'pane:backlog': 'What is planned for this project, and what is being worked on.',
   design: 'Design systems, rendered from disk',
   plugins: 'MCP servers your agents can call',
   skills: 'Reusable instructions agents pick up',

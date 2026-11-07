@@ -147,9 +147,9 @@ export function CanvasGlyph({ className }: { className?: string }) {
   )
 }
 
-// The header's Backlog switch draws this same mark (PanelSwitches): one glyph
-// for the surface on both ends of the gesture.
-function BacklogGlyph({ className }: { className?: string }) {
+// The Backlog's row under Extensions draws this same mark
+// (extensionsDrawerRows): one glyph for the surface on both ends of the gesture.
+export function BacklogGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
       <path d="M6 4.5h7M6 8h7M6 11.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />

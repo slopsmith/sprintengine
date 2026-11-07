@@ -219,6 +219,7 @@ import { reopenLastClosedTab } from './manager/reopenClosedTab'
 import { terminateWorkspaceTerminals } from './workspaceTerminalTermination'
 import { clientSupports } from '../../clientCapabilities'
 import { WindowControls, paneStripOwnsCaptionCorner, windowCaptionReserve } from './WindowControls'
+import { WorkspaceFolderReveal } from './WorkspaceFolderReveal'
 import { WorkspaceIdentity } from './WorkspaceIdentity'
 import { WorkspaceActions, type SessionGroup, type SessionItem } from './WorkspaceActions'
 import {
@@ -907,6 +908,7 @@ export default function WorkspaceManager() {
     // The Canvas tab is a pane tab the canvas module gates; with it off the
     // pane renders the unavailable surface, so the toggle is not offered.
     if (selectModuleEnabled(moduleEnablement, 'canvas')) context.canvasEnabled = true
+    if (selectModuleEnabled(moduleEnablement, 'backlog')) context.backlogEnabled = true
     // The Git panel mounts only while its pane tab is the one showing (the
     // pane unmounts a hidden Git tab) and the git module is on — a disabled
     // module renders the unavailable surface, whose handlers cannot act.
@@ -4391,6 +4393,14 @@ export default function WorkspaceManager() {
         )
         return true
       }
+      if (commandId === 'panel.backlog.toggle' && windowActiveWorkspaceId) {
+        if (!selectModuleEnabled(moduleEnablement, 'backlog')) return false
+        keepFocusOutOfClosedPane(
+          () => togglePaneKind(windowActiveWorkspaceId, 'backlog'),
+          paneOpenOf(windowActiveWorkspaceId),
+        )
+        return true
+      }
       if (commandId === 'panel.agents.toggle' && windowActiveWorkspaceId) {
         keepFocusOutOfClosedPane(
           () => togglePaneKind(windowActiveWorkspaceId, 'agents'),
@@ -5115,6 +5125,7 @@ export default function WorkspaceManager() {
       </React.Suspense>
       {/* The Studio server's state in words while it is not there (phase 6). */}
       <StudioServerBanner />
+      <WorkspaceFolderReveal activeWorkspace={activeWorkspace} activeWorkspaceId={windowActiveWorkspaceId} />
 
       <div className="relative flex min-h-0 flex-1 flex-row">
         {/* The app rail (app shell, 2026-09-05): the window's far-left

@@ -619,6 +619,18 @@ export const COMMAND_REGISTRY = [
     availability: ['activeWorkspace'],
     handlerPath: { kind: 'app-menu', command: 'panel.git.toggle' },
   }),
+  // The Backlog left the window's top row (owner ruling 2026-11-07), so this is
+  // its route from the keyboard and the palette, beside its row under
+  // Extensions. A pane tab like Git, and toggled like one. Unbound: it never had
+  // a chord, and a new command does not get to take one.
+  command({
+    id: 'panel.backlog.toggle',
+    title: 'Toggle backlog',
+    category: 'panel',
+    scopes: ['workspace'],
+    availability: ['activeWorkspace', 'backlogEnabled'],
+    handlerPath: { kind: 'workspace-manager', handler: "togglePaneKind(windowActiveWorkspaceId, 'backlog')" },
+  }),
   // The Agents list is a pane tab like Git: showing → close it, behind → bring
   // it forward, absent → open it. Unbound, like Canvas; the palette, the pane's
   // "+" menu and a chat's own agent lanes open it.
