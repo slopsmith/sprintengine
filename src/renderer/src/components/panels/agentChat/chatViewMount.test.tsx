@@ -140,6 +140,7 @@ async function mountChat({
   folderPath = '/Users/dev/project',
   worktree,
   beforeRender,
+  confirmDialogs = false,
 }: {
   events?: ConversationEvent[]
   capabilities?: Record<string, unknown>
@@ -161,6 +162,8 @@ async function mountChat({
   worktree?: Record<string, unknown>
   /** What happens once the store holds the chat and before it is drawn. */
   beforeRender?: () => void
+  /** Around the view, as the app has it: what "Edit from here" asks through. */
+  confirmDialogs?: boolean
 }) {
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'http://localhost', pretendToBeVisual: true })
   const previous = Object.getOwnPropertyDescriptors(globalThis)
@@ -260,7 +263,10 @@ async function mountChat({
   const host = dom.window.document.createElement('div')
   dom.window.document.body.appendChild(host)
   const root = createRoot(host)
-  const chatView = () => createElement(AgentChatView, { workspaceId: 'workspace', agentId: 'agent' })
+  const { ConfirmDialogProvider } = await import('../../ui/ConfirmDialog')
+  const bareChatView = () => createElement(AgentChatView, { workspaceId: 'workspace', agentId: 'agent' })
+  const chatView = () =>
+    confirmDialogs ? createElement(ConfirmDialogProvider, null, bareChatView()) : bareChatView()
   function FrontChat() {
     return useWorkspaceStore((state) => state.activeWorkspaceId) === 'workspace' ? chatView() : null
   }
@@ -2100,6 +2106,60 @@ test('a turn’s steps rest folded, the latest one included; its agents are card
       await chat.act(async () => resetSubagentViews())
     }
   } finally {
+    await chat.unmount()
+  }
+})
+
+test('a sub-agent’s chat offers nothing that takes it out of Studio or past its parent, and its parent stays mounted', async () => {
+  const gateEvents = [
+    event('user_message', { turnId: 'gate', text: 'Review the screen' }),
+    event('turn_started', { turnId: 'gate' }),
+    event('content_delta', { turnId: 'gate', text: 'It holds at 360px.' }),
+    event('turn_completed', { turnId: 'gate' }),
+  ]
+  const chat = await mountChat({
+    confirmDialogs: true,
+    capabilities: { fork: true, rewind: true, handoff: true, checkpoints: true, approvals: true },
+    events: gateEvents,
+  })
+  const { useWorkspaceStore } = await import('../../../store/workspaceStore')
+  const { pushSubagentView, resetSubagentViews } = await import('./subagentViewStack')
+  try {
+    expect(chat.host.textContent, 'the chat itself offers a fork').toContain('Fork from here')
+    await chat.act(async () => {
+      useWorkspaceStore.setState((state) => ({
+        workspaces: state.workspaces.map((workspace) => ({
+          ...workspace,
+          agents: {
+            ...workspace.agents,
+            sub: {
+              ...workspace.agents.agent!,
+              id: 'sub',
+              name: 'Design review',
+              subagentOf: { agentId: 'agent', startedAt: 1, task: 'Review the screen' },
+            },
+          },
+        })),
+      }))
+      pushSubagentView('workspace', 'agent', { kind: 'chat', agentId: 'sub' })
+    })
+    await chat.act(async () => {
+      chat.emit({ type: 'snapshot', page: { events: gateEvents, hasMore: false, beforeCursor: null } })
+      chat.emit({ type: 'synchronized', seq: gateEvents.at(-1)?.seq ?? 0 })
+    })
+    const header = chat.host.querySelector('[data-subagent-header]')
+    expect(header?.textContent).toContain('Design review')
+    const layer = header!.parentElement!
+    expect(layer.textContent, 'it reads as a chat').toContain('It holds at 360px.')
+    expect(layer.textContent).not.toContain('Fork from here')
+    expect(layer.querySelector('[aria-label*="Edit from here"]')).toBeNull()
+    expect(layer.querySelector('[data-chat-composer]'), 'it takes a message directly').not.toBeNull()
+    const hidden = Array.from(chat.host.querySelectorAll('.hidden')).find((element) =>
+      element.textContent?.includes('Fork from here'),
+    )
+    expect(hidden, 'the parent is hidden, not unmounted').toBeDefined()
+  } finally {
+    await chat.act(async () => resetSubagentViews())
     await chat.unmount()
   }
 })

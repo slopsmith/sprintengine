@@ -204,7 +204,7 @@ test('the list carries over from one turn to the next', () => {
 
 // A Claude chat's child as the provider starts it, with the options it was
 // started with kept for the test to read.
-function harness(baseEnv: Record<string, string> = { PATH: '/usr/bin' }) {
+function harness(baseEnv: Record<string, string> = { PATH: '/usr/bin' }, turnPatch: Partial<MockAdapterTurnInput> = {}) {
   const options: Record<string, unknown>[] = []
   const query = (params: { prompt: AsyncIterable<Record<string, unknown>>; options: Record<string, unknown> }) => {
     options.push(params.options)
@@ -244,16 +244,18 @@ function harness(baseEnv: Record<string, string> = { PATH: '/usr/bin' }) {
     requestId: 'approval_1',
     message: 'hello',
     permissionPreset: 'manual',
+    ...turnPatch,
   }
-  const firstTurn = async () => {
+  const firstTurn = async (whileLive?: (provider: typeof adapter) => void) => {
     await adapter.startSession(turn)
     for await (const _event of (await adapter.sendTurn(turn)) as AsyncIterable<ConversationEvent>) {
       // Drained to the result.
     }
+    whileLive?.(adapter)
     await adapter.disposeAll()
     return options.at(-1)!
   }
-  return { firstTurn }
+  return { firstTurn, sessionId: turn.sessionId }
 }
 
 test('a Claude chat starts its child with the task tools on', async () => {
@@ -279,4 +281,37 @@ test('Manual asks before no task tool call, as it asks before no todo write, nor
       hookSpecificOutput: { permissionDecision: 'ask' },
     },
   )
+})
+
+const preToolUseOf = (options: Record<string, unknown>) =>
+  (options.hooks as { PreToolUse: Array<{ hooks: Array<(input: Record<string, unknown>) => Promise<unknown>> }> })
+    .PreToolUse[0]!.hooks[0]!
+const send = (to: string) => ({
+  hook_event_name: 'PreToolUse',
+  tool_name: 'SendMessage',
+  tool_use_id: 'toolu_send',
+  tool_input: { to, message: 'Check the e2e too' },
+})
+
+test('Manual asks before the messaging tool, except the one call a person asked for by writing to an agent', async () => {
+  const chat = harness()
+  const preToolUse = preToolUseOf(
+    await chat.firstTurn((provider) => provider.expectSubagentMessage!(chat.sessionId, 'task-1')),
+  )
+  expect(await preToolUse(send('task-2')), 'another agent is not what was asked').toMatchObject({
+    hookSpecificOutput: { permissionDecision: 'ask' },
+  })
+  expect(await preToolUse(send('task-1')), 'the call that passes it on goes').toEqual({})
+  expect(await preToolUse(send('task-1')), 'it answers for that one call alone').toMatchObject({
+    hookSpecificOutput: { permissionDecision: 'ask' },
+  })
+})
+
+test('a read-only chat still passes on what a person wrote, and refuses the tool otherwise', async () => {
+  const chat = harness(undefined, { mode: 'ask' })
+  const preToolUse = preToolUseOf(
+    await chat.firstTurn((provider) => provider.expectSubagentMessage!(chat.sessionId, 'task-1')),
+  )
+  expect(await preToolUse(send('task-1'))).toEqual({})
+  expect(await preToolUse(send('task-1'))).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } })
 })
