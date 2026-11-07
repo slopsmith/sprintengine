@@ -144,16 +144,22 @@ export function laneTranscript(lane: TranscriptToolEntry): TranscriptEntry[] {
     const said = afterSteps.at(-1)?.text.trim()
     const reportSaysIt = Boolean(report && said && report.startsWith(said.slice(0, 200)))
     const spoken = reportSaysIt ? afterSteps.slice(0, -1) : afterSteps
-    const failed = last && lane.agent?.state === 'failed'
+    // A failed agent's turn is not a failed turn of a chat, whose card offers a
+    // retry and says the message is kept: nothing here can be retried. Why it
+    // ended is its last word, and the lane's status says that it failed.
+    const failure = last && lane.agent?.state === 'failed' ? lane.agent.error : undefined
     const stopped = last && lane.agent?.state === 'stopped'
     entries.push({
       kind: 'assistant',
       turnId,
-      text: [...spoken.map((message) => message.text), ...(report ? [report] : [])].join('\n\n'),
+      text: [
+        ...spoken.map((message) => message.text),
+        ...(report ? [report] : []),
+        ...(failure && failure !== report ? [failure] : []),
+      ].join('\n\n'),
       ...(beforeSteps.length ? { intermediateText: beforeSteps } : {}),
       reasoning: '',
-      status: last && running ? 'streaming' : failed ? 'failed' : stopped ? 'interrupted' : 'complete',
-      ...(failed && lane.agent?.error ? { failureDetail: lane.agent.error } : {}),
+      status: last && running ? 'streaming' : stopped ? 'interrupted' : 'complete',
       ...(stretch === 0 && lane.startedAt !== undefined ? { startedAt: lane.startedAt } : {}),
       ...(stretch > 0 ? { startedAt: from } : {}),
       ...(last && lane.completedAt !== undefined ? { completedAt: lane.completedAt } : {}),
