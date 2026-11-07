@@ -3,6 +3,8 @@ import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMe
 import { GhostButton, InlineNotice, SendButton, SendGlyph, Spinner } from '../../ui'
 import { COMPOSER_SURFACE_CLASS, FOCUS_RING_WITHIN_EDITOR_CLASS } from '../../ui/tokens'
 import { useConversationSessions } from '../../../hooks/conversationSessionsStore'
+import { useWorkspaceStore } from '../../../store/workspaceStore'
+import type { ConversationCliRuntimeOverrides } from '../../../../../shared/conversation-runtime'
 import type { AgentCli } from '../../../types/workspace'
 import { cliForConversationProvider } from '../../../../../shared/conversation-harness'
 import { ConversationLinkProvider } from './conversationLinks'
@@ -68,6 +70,30 @@ export function LaneChatView(props: LaneViewProps): React.JSX.Element {
   )
 }
 
+// What the chat's provider can do where the chat holds no session to say: after
+// a restart a chat has none until it is sent something, and its finished agents
+// can still be reached then.
+function useProviderRelays(providerId: string, needed: boolean): boolean | undefined {
+  const transport = useConversationTransport()
+  const cliRuntimes = useWorkspaceStore((state) => state.appSettings.cliRuntimes)
+  const [relays, setRelays] = useState<boolean | undefined>(undefined)
+  useEffect(() => {
+    if (!needed) return undefined
+    let cancelled = false
+    void transport.services.providers
+      .list({ cliRuntimes: cliRuntimes as ConversationCliRuntimeOverrides })
+      .then((list) => {
+        if (cancelled || !list.ok) return
+        setRelays(list.providers.find((entry) => entry.id === providerId)?.capabilities?.messageSubagent === true)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [needed, providerId, cliRuntimes, transport])
+  return relays
+}
+
 function LaneBody({
   workspaceId,
   view,
@@ -103,6 +129,7 @@ function LaneBody({
         : null,
     [stopEnabled, sessionId, ownerSession?.capabilities?.stopSubagent, transport],
   )
+  const listedRelays = useProviderRelays(providerId, ownerSession === undefined)
   const fileRoot = binding.workspaceRoot ?? ''
 
   return (
@@ -135,7 +162,7 @@ function LaneBody({
                 owner={owner}
                 parentName={parentName}
                 sessionId={sessionId}
-                relays={ownerSession?.capabilities?.messageSubagent === true}
+                relays={ownerSession?.capabilities?.messageSubagent ?? listedRelays}
                 onBack={onBack}
               />
             ) : (
@@ -190,7 +217,7 @@ function LaneConversation({
   owner: string
   parentName: string
   sessionId: string | undefined
-  relays: boolean
+  relays: boolean | undefined
   onBack: () => void
 }): React.JSX.Element {
   const transport = useConversationTransport()

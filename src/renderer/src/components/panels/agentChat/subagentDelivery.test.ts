@@ -47,6 +47,11 @@ test('a paired machine without the capability gets the bar, and it is named', ()
   expect(delivery.kind === 'bar' && delivery.why).toContain('mac-mini needs updating')
 })
 
+test('a chat that has not said what it can do gets the bar, and is not called incapable', () => {
+  const delivery = laneDelivery(lane(), { ...facts, providerRelays: undefined })
+  expect(delivery.kind === 'bar' && delivery.why).toContain('at rest')
+})
+
 test('a pairing that may only follow gets the bar', () => {
   expect(laneDelivery(lane(), { ...facts, operate: false }).kind).toBe('bar')
 })

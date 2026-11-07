@@ -19,8 +19,12 @@ export type SubagentDelivery = { kind: 'box' } | { kind: 'bar'; why: string }
 export type LaneDeliveryFacts = {
   /** This view may drive the chat: false for a pairing that may only follow it. */
   operate: boolean
-  /** The chat's provider relays a message to an agent (`capabilities.messageSubagent`). */
-  providerRelays: boolean
+  /**
+   * The chat's provider relays a message to an agent
+   * (`capabilities.messageSubagent`). Undefined where nothing has said: a chat
+   * at rest on a paired machine is listed without what it can do.
+   */
+  providerRelays: boolean | undefined
   /** The transport can ask: false for a machine older than `conversation-agent-message`. */
   transportRelays: boolean
   /** The harness, in words, for saying it cannot. */
@@ -38,6 +42,8 @@ export function laneDelivery(lane: TranscriptToolEntry, facts: LaneDeliveryFacts
         ? `${facts.machineName} needs updating before a message can reach a subagent from here.`
         : 'This window cannot pass a message to a subagent.',
     }
+  if (facts.providerRelays === undefined)
+    return { kind: 'bar', why: 'The main chat is at rest, and has not said whether it can pass a message on.' }
   if (!facts.providerRelays)
     return { kind: 'bar', why: `${facts.harnessName} has no way to pass a message to a subagent.` }
   if (lane.agent?.canContinue === false)
