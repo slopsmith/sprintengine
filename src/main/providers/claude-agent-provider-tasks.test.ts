@@ -204,7 +204,10 @@ test('the list carries over from one turn to the next', () => {
 
 // A Claude chat's child as the provider starts it, with the options it was
 // started with kept for the test to read.
-function harness(baseEnv: Record<string, string> = { PATH: '/usr/bin' }, turnPatch: Partial<MockAdapterTurnInput> = {}) {
+function harness(
+  baseEnv: Record<string, string> = { PATH: '/usr/bin' },
+  turnPatch: Partial<MockAdapterTurnInput> = {},
+) {
   const options: Record<string, unknown>[] = []
   const query = (params: { prompt: AsyncIterable<Record<string, unknown>>; options: Record<string, unknown> }) => {
     options.push(params.options)

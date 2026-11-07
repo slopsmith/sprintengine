@@ -74,7 +74,10 @@ test('two levels down, the parent is the agent between', () => {
     { kind: 'chat', agentId: 'sub-1' },
     { kind: 'lane', ownerAgentId: 'sub-1', laneId: 'outer' },
   ]
-  expect(family(views, [lane('outer')]).result.parent).toMatchObject({ name: 'Design review', relation: 'Parent agent' })
+  expect(family(views, [lane('outer')]).result.parent).toMatchObject({
+    name: 'Design review',
+    relation: 'Parent agent',
+  })
 })
 
 test('a child says how it stands in words', () => {

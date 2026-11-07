@@ -7,7 +7,17 @@ import { subagentLiveStatusOf, subagentStatusOf } from './subagentStatus'
 
 const ended = { subagentEnd: { at: 5, status: 'completed' as const } }
 const session = (over: Partial<ConversationSessionSummary>): ConversationSessionSummary =>
-  ({ sessionId: 's', workspaceId: 'w', agentId: 'a', providerId: 'p', modelId: 'm', status: 'ready', createdAt: 1, updatedAt: 2, ...over }) as ConversationSessionSummary
+  ({
+    sessionId: 's',
+    workspaceId: 'w',
+    agentId: 'a',
+    providerId: 'p',
+    modelId: 'm',
+    status: 'ready',
+    createdAt: 1,
+    updatedAt: 2,
+    ...over,
+  }) as ConversationSessionSummary
 
 test('a follow-up running over an ended task reads as working, and its parent still reads the end', () => {
   const running = session({ status: 'active', phase: 'running', turnStartedAt: 9 } as never)
