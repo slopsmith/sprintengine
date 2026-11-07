@@ -48,7 +48,15 @@ export function laneDelivery(lane: TranscriptToolEntry, facts: LaneDeliveryFacts
     return { kind: 'bar', why: `${facts.harnessName} has no way to pass a message to a subagent.` }
   if (lane.agent?.canContinue === false)
     return { kind: 'bar', why: `${facts.harnessName} says it cannot be continued.` }
-  if (!lane.agent?.taskId) return { kind: 'bar', why: `${facts.harnessName} gave no way to reach this one.` }
+  // Reported only once it starts, and a call waiting on the person has not.
+  if (!lane.agent?.taskId)
+    return {
+      kind: 'bar',
+      why:
+        lane.status === 'running'
+          ? 'It has not started yet, so a message has nowhere to go.'
+          : `${facts.harnessName} gave no way to reach this one.`,
+    }
   if (lane.outputStatus === 'declined') return { kind: 'bar', why: 'It was declined before it ran.' }
   switch (laneAgentState(lane)) {
     case 'working':

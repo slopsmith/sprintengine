@@ -118,7 +118,7 @@ export function SubagentBlockedBar({
   return (
     <div
       data-subagent-blocked=""
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--sem-radius-composer)] border border-dashed border-[color:var(--border-default)] bg-[color:var(--bg-surface)] px-5 py-3"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--radius-lg)] border border-dashed border-[color:var(--border-default)] bg-[color:var(--bg-surface)] px-5 py-3"
     >
       <p className="min-w-0 flex-1 basis-60 text-meta text-[color:var(--text-muted)]">
         <span className="font-medium text-[color:var(--text-default)]">

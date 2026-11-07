@@ -37,6 +37,12 @@ test.each([
   expect(delivery.kind === 'bar' && delivery.why).toContain(words)
 })
 
+test('an agent still waiting to start gets the bar, and says that is why', () => {
+  const waiting = lane({ status: 'running' }, { state: 'running', taskId: undefined })
+  const delivery = laneDelivery(waiting, facts)
+  expect(delivery.kind === 'bar' && delivery.why).toContain('has not started yet')
+})
+
 test('a harness with no relay gets the bar, in its own name', () => {
   const delivery = laneDelivery(lane(), { ...facts, providerRelays: false, harnessName: 'Codex' })
   expect(delivery).toEqual({ kind: 'bar', why: 'Codex has no way to pass a message to a subagent.' })
