@@ -69,7 +69,7 @@ test('an agent of a paired machine’s chat opens in the Agents tab', async () =
       </Remote>,
     ),
   )
-  const open = host.querySelector<HTMLButtonElement>('button[aria-label$="in Agents"]')
+  const open = host.querySelector<HTMLButtonElement>('button[aria-label^="Open "]')
   expect(open).not.toBeNull()
   await act(async () => open!.click())
   expect(readAgentFocusRequest('w-followed')).toMatchObject({ agentId: 'agent-there', laneId: 'toolu_agent' })

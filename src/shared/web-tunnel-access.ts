@@ -113,6 +113,7 @@ export const WEB_TUNNEL_ACCESS: { readonly [C in ServerIpcChannelName | WebTunne
   'conversation:sessions:set-model': DRIVE_CHAT,
   'conversation:sessions:mcp-action': DRIVE_CHAT,
   'conversation:sessions:stop-subagent': DRIVE_CHAT,
+  'conversation:sessions:message-subagent': DRIVE_CHAT,
   'conversation:sessions:side-question': DRIVE_CHAT,
   'conversation:sessions:cancel-side-question': READ_CHAT,
   'conversation:sessions:context-breakdown': READ_CHAT,

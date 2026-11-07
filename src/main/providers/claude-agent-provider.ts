@@ -250,6 +250,8 @@ type TrackedSubagent = {
   lastText?: string
   endedAt?: number
   error?: string
+  // False once the child says it cannot be sent another message.
+  canContinue?: boolean
 }
 
 // A task the child reported that is not an agent: a shell, a monitor, a
@@ -397,6 +399,9 @@ type SessionState = {
   worktreeLeaseRedirected?: boolean
   // Agents the child has running, by spawning tool call.
   subagents: Map<string, TrackedSubagent>
+  // Agents a person just wrote to, by task id: the call that passes each
+  // message on was asked for by them (relayedCall).
+  expectedAgentMessages?: Set<string>
   // The turn's foreground agents on their way to the background ahead of a
   // Stop or a steer (moveWaitedOnAgentsToBackground); null when none are.
   agentsMoving: Promise<void> | null
@@ -1208,6 +1213,7 @@ export function createClaudeAgentProvider(options: ClaudeAgentProviderOptions = 
             hooks: [
               async (input) => {
                 if (input.hook_event_name === 'PreToolUse') {
+                  if (relayedCall(state, input.tool_name, input.tool_input)) return {}
                   if (
                     state.mode === 'ask' &&
                     !['file_read', 'search', 'list', 'web'].includes(inferConversationToolKind(input.tool_name))
@@ -1377,6 +1383,18 @@ export function createClaudeAgentProvider(options: ClaudeAgentProviderOptions = 
   // or reaches out. Read-only lookups still run, and questions and plans reach
   // canUseTool anyway. Read from the session's preset, not the child's, so
   // choosing Manual mid-reply holds the very next call.
+  // A call the person asked for by writing to an agent: the messaging tool to
+  // that agent, and the lookup that loads the tool, which the child keeps
+  // deferred. Spent by the messaging call, so it answers for that one alone.
+  function relayedCall(state: SessionState, toolName: string, toolInput: unknown): boolean {
+    const expected = state.expectedAgentMessages
+    if (!expected?.size) return false
+    const input = asRecord(toolInput)
+    if (toolName === 'ToolSearch') return typeof input?.query === 'string' && input.query.includes('SendMessage')
+    if (toolName !== 'SendMessage' || typeof input?.to !== 'string') return false
+    return expected.delete(input.to)
+  }
+
   function manualAsks(state: SessionState, toolName: string): boolean {
     // Don't ask is at Manual's level and asks about nothing: what its rules do
     // not allow is refused, not carded.
@@ -1641,6 +1659,7 @@ export function createClaudeAgentProvider(options: ClaudeAgentProviderOptions = 
       fork: true,
       handoff: true,
       stopSubagent: true,
+      messageSubagent: true,
       sideQuestion: true,
       contextBreakdown: true,
     },
@@ -2211,6 +2230,11 @@ export function createClaudeAgentProvider(options: ClaudeAgentProviderOptions = 
     // The child then reports it `stopped`, which ends its lane as any agent's
     // end does (mapTaskMessage); a foreground one's call returns, and the turn
     // that made it carries on without it. A refusal or no answer is no stop.
+    expectSubagentMessage(sessionId: string, taskId: string): void {
+      const state = sessions.get(sessionId)
+      if (state) (state.expectedAgentMessages ??= new Set()).add(taskId)
+    },
+
     async stopSubagent(sessionId: string, toolUseId: string): Promise<boolean> {
       const state = sessions.get(sessionId)
       const q = state?.query
@@ -3476,6 +3500,13 @@ export function mapSdkMessage(
           ...(parentToolUseId ? { parentToolUseId } : {}),
           ...(images.length ? { images } : {}),
         }
+        // The child says here, on the call that spawned the agent, whether
+        // the agent can be sent another message.
+        const spawned = toolUseId ? state.subagents?.get(toolUseId) : undefined
+        if (spawned && asRecord(message.tool_use_result)?.canContinueAgent === false) {
+          spawned.canContinue = false
+          events.push(eventFor(state, 'subagent_status', subagentStatusFields(spawned, 'running')))
+        }
         const taskCall = toolUseId ? state.taskToolCalls?.get(toolUseId) : undefined
         if (taskCall) {
           state.taskToolCalls!.delete(toolUseId!)
@@ -3922,6 +3953,7 @@ function subagentStatusFields(
     ...optional('subagentType', agent.subagentType),
     ...optional('description', agent.description),
     ...(status !== 'running' ? optional('endedAt', agent.endedAt) : {}),
+    ...(agent.canContinue === false ? { canContinue: false } : {}),
   }
 }
 

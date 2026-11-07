@@ -4,7 +4,6 @@
 
 import { createContext, useContext, type JSX } from 'react'
 import { TruncatedText, type AgentGlyphState } from '../../ui'
-import { openAgentsPane } from '../../workspace/pane/agents/agentsPaneFocus'
 import { useConversationLinkContext } from './conversationLinks'
 import type { TranscriptToolEntry } from './conversationProjection'
 import { flattenToolEntries, subagentLaneLabel, toolObject } from './conversationTimeline'
@@ -12,6 +11,7 @@ import { LiveElapsed } from './liveElapsed'
 import { formatStepDuration } from './stepDuration'
 import { SubagentIcon, useLaneParentCli } from './subagentIcon'
 import { subagentResultPreview, subagentRunsOn } from './subagentResult'
+import { openSubagentList, useOpenSubagent } from './subagentViewStack'
 import { ToolKindGlyph } from './toolRows/ToolKindGlyph'
 import { formatTokenCount } from '../../../utils/tokenFormat'
 
@@ -39,6 +39,11 @@ export function laneTask(tool: TranscriptToolEntry): string {
       ? input.description.trim()
       : ''
   return described || tool.agent?.description || ''
+}
+
+/** What to call an agent where it stands alone: what it was sent to do, else its kind. */
+export function laneName(tool: TranscriptToolEntry): string {
+  return laneTask(tool) || subagentLaneLabel(tool)
 }
 
 /** How long the agent ran: from its spawn to its end, or what it reported. */
@@ -243,14 +248,18 @@ export function AgentLaneSummary({ lane }: { lane: TranscriptToolEntry }): JSX.E
 }
 
 /**
- * Opens this chat's Agents tab, on one agent when given its lane. A chat on
- * another machine is opened there too: its pane says it is open in this
- * workspace (`publishRemoteChat`), by its agent id on that machine, which is
- * the id its links carry, and the tab reads it through the pane's transport.
+ * Opens one of this chat's agents as a chat of its own in the main pane, by its
+ * lane; with none, the list of them. A chat on another machine opens the same
+ * way: its links carry its agent id on that machine, by which its pane found it
+ * (`publishRemoteChat`), and the lane is read through the pane's transport.
  */
 export function useOpenAgentsPane(): ((laneId: string | null) => void) | null {
   const context = useConversationLinkContext()
-  if (!context?.workspaceId || !context.agentId) return null
+  const open = useOpenSubagent()
+  if (!context?.workspaceId || !context.agentId || !open) return null
   const { workspaceId, agentId } = context
-  return (laneId) => openAgentsPane(workspaceId, agentId, laneId)
+  return (laneId) => {
+    if (laneId) open({ kind: 'lane', laneId })
+    else openSubagentList(workspaceId, agentId)
+  }
 }

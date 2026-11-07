@@ -8,6 +8,7 @@ import type {
   ConversationSetModelInput,
   ConversationMcpServerAction,
   ConversationMcpServerActionInput,
+  ConversationMessageSubagentInput,
   ConversationStopSubagentInput,
   ConversationCancelSideQuestionInput,
   ConversationSideQuestionExchange,
@@ -294,6 +295,20 @@ export function parseStopSubagentInput(
   const toolUseId = isRecord(input) && typeof input.toolUseId === 'string' ? input.toolUseId.trim() : ''
   if (!toolUseId || toolUseId.length > 200) return { ok: false, message: 'toolUseId is required.' }
   return { ok: true, input: { sessionId: session.input.sessionId, toolUseId } }
+}
+
+// As much as a message to a chat may hold: it reaches the agent as one.
+const SUBAGENT_MESSAGE_MAX_CHARS = 100_000
+
+export function parseMessageSubagentInput(
+  input: unknown,
+): { ok: true; input: ConversationMessageSubagentInput } | { ok: false; message: string } {
+  const lane = parseStopSubagentInput(input)
+  if (!lane.ok) return lane
+  const message = isRecord(input) && typeof input.message === 'string' ? input.message : ''
+  if (!message.trim()) return { ok: false, message: 'message is required.' }
+  if (message.length > SUBAGENT_MESSAGE_MAX_CHARS) return { ok: false, message: 'That message is too long.' }
+  return { ok: true, input: { ...lane.input, message } }
 }
 
 // A side question is a message's worth of text, and an aside holds a handful

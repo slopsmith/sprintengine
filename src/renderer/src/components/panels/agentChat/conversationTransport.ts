@@ -26,6 +26,7 @@ import type {
   ConversationSessionFrame,
   ConversationSessionSummary,
   ConversationSetModelInput,
+  ConversationMessageSubagentInput,
   ConversationStopSubagentInput,
   ConversationCancelSideQuestionInput,
   ConversationContextBreakdownInput,
@@ -353,6 +354,14 @@ export type ConversationTransport = {
    */
   stopSubagent?(input: ConversationStopSubagentInput): Promise<ConversationTransportResult>
   /**
+   * Pass the person's words to one agent the chat spawned, through the chat's
+   * model. Absent where the transport cannot, as `stopSubagent` is. A paired
+   * machine's chat has it, and its session declares `messageSubagent` only
+   * where that machine takes the command (`conversation-agent-message`).
+   * Offered only where the session declares `messageSubagent` as well.
+   */
+  messageSubagent?(input: ConversationMessageSubagentInput): Promise<ConversationTransportResult>
+  /**
    * Restart the chat's agent on the machine it runs on, as Restart agent
    * session does for a chat here (which suspends its session through the
    * conversation IPC itself): answered with a `notice` where it had none
@@ -456,6 +465,7 @@ const ipcConversationParts: Required<
   startSession: (input) => window.api.conversationSessionStart(input),
   revert: (input) => window.api.conversationRevertToTurn(input),
   stopSubagent: (input) => window.api.conversationSessionStopSubagent(input),
+  messageSubagent: (input) => window.api.conversationSessionMessageSubagent(input),
   askSideQuestion: (input) => window.api.conversationSessionAskSideQuestion(input),
   cancelSideQuestion: (input) => window.api.conversationSessionCancelSideQuestion(input),
   readContextBreakdown: (input) => window.api.conversationSessionContextBreakdown(input),
@@ -544,6 +554,9 @@ export const localConversationTransport: ConversationTransport = {
   // one has no way to do it.
   get stopSubagent() {
     return localParts().stopSubagent
+  },
+  get messageSubagent() {
+    return localParts().messageSubagent
   },
   get askSideQuestion() {
     return localParts().askSideQuestion
@@ -766,6 +779,16 @@ export function createRemoteConversationTransport(input: {
     // as able (the pane's session says `stopSubagent`).
     stopSubagent: async (input) =>
       commandResult(await window.api.meshConversationStopSubagent({ key, toolUseId: input.toolUseId })),
+    // Offered only where the machine takes it and lists the chat's provider
+    // as able (the pane's session says `messageSubagent`).
+    messageSubagent: async (input) =>
+      commandResult(
+        await window.api.meshConversationMessageSubagent({
+          key,
+          toolUseId: input.toolUseId,
+          message: input.message,
+        }),
+      ),
     // Offered only where the machine takes it and lists the chat's provider as
     // able (the pane's session says `handoff`). The file is written over
     // there, so its path means nothing here.

@@ -112,10 +112,12 @@ export type ConversationEvent = {
  * has reset (`usage-resume`), a pull request the chat's agent asked the
  * desktop to watch needs a look (`pull-request-watch`), or the chat sat idle
  * with its prompt cache about to expire and was compacted while it was still
- * warm (`auto-compact`, the message being `/compact` itself).
+ * warm (`auto-compact`, the message being `/compact` itself), or the person
+ * wrote to an agent the chat spawned, and the chat is asked to pass it on
+ * (`agent-message`, the `user_message` naming it in `subagentMessage`).
  */
 export type ConversationStudioMessageReason =
-  'agent-notice' | 'usage-resume' | 'pull-request-watch' | 'auto-compact' | 'subagent-task'
+  'agent-notice' | 'usage-resume' | 'pull-request-watch' | 'auto-compact' | 'subagent-task' | 'agent-message'
 
 /**
  * Who a `user_message` came from when it was not the person: the payload's
@@ -133,6 +135,7 @@ const STUDIO_MESSAGE_REASONS: readonly string[] = [
   'pull-request-watch',
   'auto-compact',
   'subagent-task',
+  'agent-message',
 ] satisfies ConversationStudioMessageReason[]
 
 /**
@@ -319,6 +322,26 @@ export type ConversationSubagentMessagePayload = {
 }
 
 /**
+ * What the person wrote to one spawned agent: a `user_message`'s `subagentMessage`,
+ * on a message whose `origin` reason is `agent-message`. The message's own text
+ * is what the chat's model was asked to pass on; this is what the person typed,
+ * and which agent it was for, so the agent's lane can show it. Optional and
+ * additive: a reader that does not know it draws the message as Studio's notice.
+ */
+export type ConversationSubagentMessage = {
+  /** The spawning tool call: the lane the words belong to. */
+  toolUseId: string
+  text: string
+}
+
+/** A `user_message` payload's `subagentMessage`, or null where it has none or a malformed one. */
+export function readConversationSubagentMessage(value: unknown): ConversationSubagentMessage | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const { toolUseId, text } = value as { toolUseId?: unknown; text?: unknown }
+  return typeof toolUseId === 'string' && toolUseId && typeof text === 'string' && text ? { toolUseId, text } : null
+}
+
+/**
  * Payload carried on `subagent_status`: the latest known state of one spawned
  * agent. Each event repeats what it knows; a field it leaves out keeps the
  * value an earlier event reported.
@@ -347,6 +370,11 @@ export type ConversationSubagentStatusPayload = {
    * arrive after the end.
    */
   resumed?: boolean
+  /**
+   * False where the harness says this agent cannot be sent another message
+   * (Claude Code's `canContinueAgent`). Absent means nothing was said.
+   */
+  canContinue?: boolean
 }
 
 /**

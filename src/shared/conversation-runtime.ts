@@ -9,6 +9,7 @@ import type {
   ConversationEvent,
   ConversationJsonValue,
   ConversationMessageOrigin,
+  ConversationSubagentMessage,
   ConversationPage,
   ConversationSessionStatus,
   ConversationToolKind,
@@ -30,6 +31,7 @@ export type {
   ConversationHandoffPayload,
   ConversationJsonValue,
   ConversationMessageOrigin,
+  ConversationSubagentMessage,
   ConversationPage,
   ConversationQuestion,
   ConversationQuestionOption,
@@ -269,6 +271,9 @@ export type ConversationPlanDocumentInput = ConversationKey & {
 export type ConversationPlanDocumentResult = { ok: true; path: string } | { ok: false; message: string }
 
 export type ConversationSendTurnInput = {
+  // What the person wrote to one of the chat's agents, for a message asking the
+  // chat to pass it on: recorded on the `user_message`, for the agent's lane.
+  subagentMessage?: ConversationSubagentMessage
   // What the command was, hashed by whoever named its id: a receipt keeps it,
   // and the same id coming back for a different command is refused rather
   // than answered with the first one's result. Never sent by a window's IPC.
@@ -391,6 +396,15 @@ export type ConversationMcpServerActionResult = { ok: true; authUrl?: string } |
 export type ConversationStopSubagentInput = {
   sessionId: string
   toolUseId: string
+}
+
+/** The person's words for one agent a chat spawned, named as `ConversationStopSubagentInput` names it. */
+export type ConversationMessageSubagentInput = {
+  sessionId: string
+  toolUseId: string
+  message: string
+  commandId?: string
+  commandFingerprint?: string
 }
 
 /**
@@ -617,6 +631,9 @@ export type ConversationCapabilities = {
   // One agent the chat spawned can be stopped by itself, leaving the chat,
   // its turn and its other agents running. Without it a lane offers no Stop.
   stopSubagent?: boolean
+  // The chat's model can be asked to pass a message to one agent it spawned.
+  // Without it an agent's chat draws no box, only a way to the parent.
+  messageSubagent?: boolean
   // A side question can be asked about the chat and answered from its
   // context without entering it, even while a turn runs. Without it the
   // action is not offered.

@@ -51,10 +51,10 @@ test('the start of a sub-agent reads as who was started, however the CLI spells 
   expect(subagentStartWords(start({ input: {} }))).toBe('Started a sub-agent')
 })
 
-test('a finished wait offers the reply, collapsed; a cut answer leaves it to the Agents tab', () => {
+test('a finished wait offers the reply, collapsed; a cut answer leaves it to its own chat', () => {
   const answered = start({ output: JSON.stringify({ subagentId: 'agent-1', result: 'Verdict: 68/100.' }) })
   const html = renderToStaticMarkup(<SubagentStartRow tool={answered} />)
-  expect(html).toContain('Open in Agents')
+  expect(html).toContain('Open it')
   expect(html).toContain('Show its reply')
   expect(html).not.toContain('Verdict: 68/100.')
   const cut = start({ output: '{"ok":true,"subagentId":"agent-1","result":"A very long' })

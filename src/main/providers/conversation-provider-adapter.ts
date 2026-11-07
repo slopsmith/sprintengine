@@ -140,6 +140,11 @@ export type ConversationProviderAdapter = {
   // finished does. False when no such agent is running. An adapter that
   // implements this declares `capabilities.stopSubagent`.
   stopSubagent?(sessionId: string, toolUseId: string): Promise<boolean>
+  // The next call to the session's messaging tool for this agent is one the
+  // person asked for: it needs no card of its own, and a read-only mode leaves
+  // it alone. An adapter that implements this declares
+  // `capabilities.messageSubagent`.
+  expectSubagentMessage?(sessionId: string, taskId: string): void
   // Answer a side question from what the session's agent knows, adding
   // nothing to it: the question and the answer reach neither the session's
   // events nor the provider's own record of the conversation, and a turn the

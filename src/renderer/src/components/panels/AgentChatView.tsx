@@ -222,6 +222,15 @@ import {
   readImageAttachment,
 } from './agentChat/imageAttachments'
 import { ConversationPendingDock, coversComposer, type ApprovalModeSwitch } from './agentChat/pendingDock'
+import { SubagentStatusWords, useStudioSubagents } from './agentChat/chatSubagents'
+import {
+  SubagentBlockedBar,
+  SubagentChatHost,
+  subagentFacts,
+  SubagentGone,
+  SubagentViewHeader,
+  type SubagentChatLayer,
+} from './agentChat/SubagentChatHost'
 import { heldMessageCarries, QueuedTurnRow, queuedTurnSendNow } from './agentChat/queuedTurnBubble'
 import { followUpSendPresentation, primaryClickModifier, resolveComposerDispatch } from './agentChat/followUpDispatch'
 import { FollowUpSendButton } from './agentChat/FollowUpSendButton'
@@ -432,12 +441,64 @@ export default function AgentChatView({ workspaceId, agentId }: Props) {
       </ChatShell>
     )
   return (
-    <ConversationChatBody
-      key={`${workspaceId}:${agentId}`}
+    <SubagentChatHost
       workspaceId={workspaceId}
-      agentId={agentId}
-      binding={binding}
-    />
+      rootAgentId={agentId}
+      rootName={binding.agent.name}
+      chatName={(id) => readAgentName(workspaceId, id)}
+      renderChat={(chat) => <LocalSubagentChat workspaceId={workspaceId} {...chat} />}
+    >
+      <ConversationChatBody
+        key={`${workspaceId}:${agentId}`}
+        workspaceId={workspaceId}
+        agentId={agentId}
+        binding={binding}
+      />
+    </SubagentChatHost>
+  )
+}
+
+function readAgentName(workspaceId: string, agentId: string): string | undefined {
+  return useWorkspaceStore.getState().workspaces.find((entry) => entry.id === workspaceId)?.agents[agentId]?.name
+}
+
+/** A sub-agent Studio started, as a chat of its own in its parent's place. */
+function LocalSubagentChat({
+  workspaceId,
+  agentId,
+  parentAgentId,
+  parentName,
+  crumbs,
+  onCrumb,
+  onBack,
+}: { workspaceId: string } & SubagentChatLayer) {
+  const local = useLocalChatBinding(workspaceId, agentId)
+  const subagents = useStudioSubagents(workspaceId, parentAgentId)
+  const row = subagents.find((candidate) => candidate.id === agentId)
+  const binding = useMemo(
+    () => (local ? { ...local, subagent: { parentAgentId, parentName, onGoToParent: onBack } } : null),
+    [local, parentAgentId, parentName, onBack],
+  )
+  if (!binding) return <SubagentGone words="This subagent is not here any more." onBack={onBack} />
+  const cli = cliForConversationProvider(binding.agent.conversation.providerId)
+  return (
+    <>
+      <SubagentViewHeader
+        crumbs={crumbs}
+        name={binding.agent.name}
+        facts={subagentFacts(cli, binding.agent.conversation.modelId)}
+        status={row ? <SubagentStatusWords subagent={row} /> : undefined}
+        onCrumb={onCrumb}
+      />
+      <div className="min-h-0 flex-1">
+        <ConversationChatBody
+          key={`${workspaceId}:${agentId}`}
+          workspaceId={workspaceId}
+          agentId={agentId}
+          binding={binding}
+        />
+      </div>
+    </>
   )
 }
 
@@ -1261,6 +1322,8 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
     }
     return started.sessionId
   }, [sessionId, startSession, workspaceId])
+  const ensureSessionRef = useRef(ensureSession)
+  ensureSessionRef.current = ensureSession
   // The session this view holds is gone where it ran: forget it, so the next
   // send starts the chat's session again. A view that cannot start a session
   // (a paired machine's chat) keeps the one it has.
@@ -2680,7 +2743,9 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
   // while the terminal opens, and so comes back to the composer.
   // Only a chat on this machine: a paired machine's session is not here.
   const pluginCatalogEntries = useWorkspaceStore((s) => s.pluginCatalogEntries)
-  const resumesInTerminal = transport.kind === 'local' && chatResumesInTerminal(agent, pluginCatalogEntries)
+  const isSubagent = binding.subagent !== undefined
+  const resumesInTerminal =
+    transport.kind === 'local' && !isSubagent && chatResumesInTerminal(agent, pluginCatalogEntries)
   const resumeInTerminalRef = useRef(() => {})
   resumeInTerminalRef.current = () => {
     if (!resumesInTerminal) {
@@ -2997,6 +3062,7 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
         restartSession: () => void restartSessionRef.current(),
         openFind: openChatFind,
         openSideQuestion: () => openSideQuestionRef.current(),
+        ensureSession: () => ensureSessionRef.current(),
         hasMessages: () => hasMessagesRef.current,
         // Main reads a local chat's transcript; a chat on another machine has
         // none here to read, so this window reads it from there and hands it on.
@@ -3451,10 +3517,12 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
       : checkpointSeqs
   // Offered where the provider can drop turns from its own context and this
   // view can operate the conversation.
-  const rewindEnabled = operate && capabilities?.rewind === true && typeof transport.rewind === 'function'
+  const rewindEnabled =
+    operate && !isSubagent && capabilities?.rewind === true && typeof transport.rewind === 'function'
   // Handoff, where the provider can start a fresh session pointed at a file
   // of the chat's messages and this view can operate the conversation.
-  const handoffEnabled = operate && capabilities?.handoff === true && typeof transport.handoff === 'function'
+  const handoffEnabled =
+    operate && !isSubagent && capabilities?.handoff === true && typeof transport.handoff === 'function'
   const handingOffRef = useRef(false)
   const handoff = async () => {
     if (handingOffRef.current || !transport.handoff) return
@@ -3505,7 +3573,9 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
   }
   const forkFromHere = useCallback((target: ForkFromHereTarget) => forkRef.current(target), [])
   const onFork =
-    operate && capabilities?.fork === true && typeof transport.fork === 'function' ? forkFromHere : undefined
+    operate && !isSubagent && capabilities?.fork === true && typeof transport.fork === 'function'
+      ? forkFromHere
+      : undefined
   // The Files and Folders setting is this Mac's, so only a chat that runs on
   // it, in a window that can reach System Settings, offers to open it.
   const onOpenPrivacySettings =
@@ -3542,7 +3612,7 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
     oldChrome.retryDisabled === composerDisabled &&
     oldChrome.onSignIn === onSignIn &&
     oldChrome.onOpenPrivacySettings === onOpenPrivacySettings &&
-    oldChrome.checkpointsEnabled === (capabilities?.checkpoints === true) &&
+    oldChrome.checkpointsEnabled === (capabilities?.checkpoints === true && !isSubagent) &&
     oldChrome.conversationRunning === projection.activeTurn &&
     oldChrome.checkpointSeqs === stableCheckpointSeqs &&
     oldChrome.rewindEnabled === rewindEnabled &&
@@ -3558,7 +3628,7 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
           onSignIn,
           onOpenPrivacySettings,
           platform: hostPlatform(),
-          checkpointsEnabled: capabilities?.checkpoints === true,
+          checkpointsEnabled: capabilities?.checkpoints === true && !isSubagent,
           conversationRunning: projection.activeTurn,
           checkpointSeqs: stableCheckpointSeqs,
           rewindEnabled,
@@ -3600,6 +3670,7 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
   // stays listed, dimmed, with the reason.
   const permissionsEditable =
     operate &&
+    !isSubagent &&
     (transport.capabilities.reportsPreset || session?.permissionPreset !== undefined) &&
     Boolean(capabilities?.approvals || capabilities?.permissionPresets?.length)
   const presetRefusals = chatPermissionRefusals({
@@ -4597,6 +4668,13 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
              * rather than unmounted, so its draft is still there when the
              * answer is in.
              */}
+            {binding.subagent?.blocked ? (
+              <SubagentBlockedBar
+                why={binding.subagent.blocked}
+                parentName={binding.subagent.parentName}
+                onGoToParent={binding.subagent.onGoToParent}
+              />
+            ) : null}
             {questionCoversComposer ? (
               <div
                 className={`relative overflow-hidden ${COMPOSER_SURFACE_CLASS} border-[color:var(--border-default)]`}
@@ -4619,7 +4697,7 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
               data-chat-composer=""
               className={`relative transition-colors ${COMPOSER_SURFACE_CLASS} ${FOCUS_RING_WITHIN_EDITOR_CLASS} ${
                 dropActive ? 'border-[color:var(--accent-primary)]' : 'border-[color:var(--border-default)]'
-              } ${questionCoversComposer ? 'hidden' : ''}`}
+              } ${questionCoversComposer || binding.subagent?.blocked ? 'hidden' : ''}`}
             >
               {dropActive ? <ComposerDropOverlay ground="surface" /> : null}
               {contextPicker.picker}

@@ -52,6 +52,7 @@ export function readSubagentStatus(payload: unknown): ConversationSubagentStatus
     ...(text('error') ? { error: text('error') } : {}),
     ...(typeof record.endedAt === 'number' ? { endedAt: record.endedAt } : {}),
     ...(record.resumed === true ? { resumed: true } : {}),
+    ...(record.canContinue === false ? { canContinue: false } : {}),
     ...(usage
       ? {
           usage: {

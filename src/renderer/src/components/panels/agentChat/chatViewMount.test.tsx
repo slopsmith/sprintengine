@@ -2049,7 +2049,7 @@ test('a sent picture’s bytes leave the view once the transcript has stored it,
   }
 })
 
-test('a turn’s steps rest folded, the latest one included; its agents are cards that open the Agents tab', async () => {
+test('a turn’s steps rest folded, the latest one included; its agents are cards that open as chats', async () => {
   // Turn ids of its own: a fold another test opened is remembered per turn.
   const chat = await mountChat({
     events: [
@@ -2071,9 +2071,8 @@ test('a turn’s steps rest folded, the latest one included; its agents are card
     ],
   })
   const openPaneTab = vi.fn(() => 'agents-tab')
-  const setActivePaneTab = vi.fn()
   const { useWorkspaceStore } = await import('../../../store/workspaceStore')
-  useWorkspaceStore.setState({ openPaneTab, setActivePaneTab } as never)
+  useWorkspaceStore.setState({ openPaneTab } as never)
   const fold = () => chat.button('Worked for')
   try {
     expect(fold()?.textContent, 'the agent is not one of the steps').toContain('1 step')
@@ -2081,15 +2080,25 @@ test('a turn’s steps rest folded, the latest one included; its agents are card
     expect(chat.host.textContent, 'its steps are not drawn').not.toContain('a.ts')
     expect(chat.host.textContent).toContain('It builds.')
     const card = Array.from(chat.host.querySelectorAll('button')).find((item) =>
-      item.getAttribute('aria-label')?.endsWith('Open in Agents'),
+      item.getAttribute('aria-label')?.endsWith('Open it'),
     )
     expect(card?.textContent).toContain('Explore agent')
     expect(card?.textContent).toContain('Map the test suites')
-    await chat.act(async () => card!.click())
-    expect(openPaneTab).toHaveBeenCalledWith('workspace', { kind: 'agents', activate: false })
-    expect(setActivePaneTab, 'a docked Agents tab is shown in the pane').toHaveBeenCalledWith('workspace', 'agents-tab')
     await chat.act(async () => fold()!.click())
     expect(chat.host.textContent, 'opened, the fold shows the steps').toContain('a.ts')
+    await chat.act(async () => card!.click())
+    const { readSubagentViews, resetSubagentViews } = await import('./subagentViewStack')
+    try {
+      expect(readSubagentViews('workspace', 'agent'), 'the card opens the agent in the chat’s place').toEqual([
+        { kind: 'lane', ownerAgentId: 'agent', laneId: 'fold-agent' },
+      ])
+      expect(openPaneTab, 'no tab is made for it').not.toHaveBeenCalledWith('workspace', {
+        kind: 'agents',
+        activate: false,
+      })
+    } finally {
+      await chat.act(async () => resetSubagentViews())
+    }
   } finally {
     await chat.unmount()
   }
