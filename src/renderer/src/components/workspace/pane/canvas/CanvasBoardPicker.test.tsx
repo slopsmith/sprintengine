@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { JSDOM } from 'jsdom'
 
-import type { CanvasBoardSummary, CanvasResult } from '../../../../../../shared/canvas/types'
+import type { CanvasBoardSummary, CanvasMachineListing, CanvasResult } from '../../../../../../shared/canvas/types'
 import { test } from 'vitest'
 
 test('CanvasBoardPicker', async () => {
@@ -83,9 +83,14 @@ test('CanvasBoardPicker', async () => {
 
     const document = dom.window.document
     let listBoards: () => Promise<CanvasResult<CanvasBoardSummary[]>> = async () => ({ ok: true, value: [] })
+    let allBoards: () => Promise<CanvasResult<CanvasMachineListing>> = async () => ({
+      ok: true,
+      value: { boards: [], note: null },
+    })
     ;(dom.window as unknown as { api: unknown }).api = {
       platform: 'darwin',
       canvasListBoards: () => listBoards(),
+      canvasListAllBoards: () => allBoards(),
     }
 
     function click(element: Element): Promise<void> {
@@ -108,13 +113,18 @@ test('CanvasBoardPicker', async () => {
       })
     }
 
-    async function mount(props: { onPick?: (path: string) => void; openPaths?: readonly string[] } = {}) {
+    async function mount(
+      props: {
+        onPick?: (path: string, store?: string) => void
+        openBoards?: readonly { path: string; store?: string | null }[]
+      } = {},
+    ) {
       const container = document.createElement('div')
       document.body.appendChild(container)
       const root = createRoot(container)
       await act(async () => {
         root.render(
-          <CanvasBoardPicker workspaceId="ws-1" onPick={props.onPick ?? (() => {})} openPaths={props.openPaths} />,
+          <CanvasBoardPicker workspaceId="ws-1" onPick={props.onPick ?? (() => {})} openBoards={props.openBoards} />,
         )
       })
       const buttons = () => [...container.querySelectorAll('button')]
@@ -285,11 +295,12 @@ test('CanvasBoardPicker', async () => {
       // the person rather than opening anything.
       const pair = [board('diagrams/arch.excalidraw', 'arch'), board('diagrams/flow.excalidraw', 'flow')]
       listBoards = async () => ({ ok: true, value: pair })
-      const view = await mount({ openPaths: ['diagrams/Arch.excalidraw'] })
+      const view = await mount({ openBoards: [{ path: 'diagrams/Arch.excalidraw' }] })
       run('a board another tab holds is marked open, whatever case its path is in', () => {
-        const rows = view.rows().map((row) => row.textContent ?? '')
-        assert.match(rows[0], /Open/)
-        assert.doesNotMatch(rows[1], /Open/)
+        // The row's own button: "Open here" beside it is on every row.
+        const target = (row: Element) => row.querySelector('button')?.textContent ?? ''
+        assert.match(target(view.rows()[0]), /Open/)
+        assert.doesNotMatch(target(view.rows()[1]), /Open/)
         assert.match(
           view.rows()[0].querySelector('button')!.getAttribute('aria-label') ?? '',
           /already open in another tab/,
@@ -389,6 +400,76 @@ test('CanvasBoardPicker', async () => {
         assert.match(view.container.querySelector('nav')!.textContent ?? '', /Showing 1–10 of 23/)
       })
       await view.unmount()
+    }
+
+    {
+      // Every board on the machine: each row says its project, one row of two
+      // same-named boards is not the other, and a name taken elsewhere stays free
+      // here, because the name helpers read this project's own list.
+      const STORE_A = `ws_${'a'.repeat(24)}`
+      const STORE_B = `ws_${'b'.repeat(24)}`
+      const row = (store: string, project: string | null, here = false) => ({
+        id: `canvas://${store}/arch.excalidraw`,
+        path: 'arch.excalidraw',
+        name: 'arch',
+        elementCount: 1,
+        modifiedAt: 1_000,
+        store,
+        project,
+        here,
+        workspaceId: null,
+      })
+      listBoards = async () => ({ ok: true, value: [] })
+      allBoards = async () => ({
+        ok: true,
+        value: { boards: [row(STORE_A, 'atlas'), row(STORE_B, null)], note: null },
+      })
+      const picked: Array<[string, string | undefined]> = []
+      const view = await mount({ onPick: (path, store) => picked.push([path, store]) })
+      const scope = (label: string) =>
+        [...view.container.querySelectorAll('[role="radio"]')].find((element) => element.textContent === label)!
+
+      await runAsync('All boards labels each row by project, or Deleted project', async () => {
+        await click(scope('All boards'))
+        const rows = view.rows().map((element) => element.textContent ?? '')
+        assert.equal(rows.length, 2, 'two stores with one board name are two rows')
+        assert.match(rows[0], /atlas/)
+        assert.match(rows[1], /Deleted project/)
+      })
+
+      await runAsync("Open here carries the row's own store", async () => {
+        await click(view.rows()[1].querySelector('button')!)
+        assert.deepEqual(picked, [['arch.excalidraw', STORE_B]])
+      })
+
+      await runAsync('a tab on one store marks that row alone', async () => {
+        await view.unmount()
+        const marked = await mount({ openBoards: [{ path: 'arch.excalidraw', store: STORE_A }] })
+        await click(
+          [...marked.container.querySelectorAll('[role="radio"]')].find(
+            (element) => element.textContent === 'All boards',
+          )!,
+        )
+        const target = (element: Element) => element.querySelector('button')?.textContent ?? ''
+        assert.match(target(marked.rows()[0]), /Open/)
+        assert.doesNotMatch(target(marked.rows()[1]), /Open/)
+        await marked.unmount()
+      })
+
+      await runAsync('a name used only in another project is free to create here', async () => {
+        const picks: string[] = []
+        const fresh = await mount({ onPick: (path) => picks.push(path) })
+        await click(
+          [...fresh.container.querySelectorAll('[role="radio"]')].find(
+            (element) => element.textContent === 'All boards',
+          )!,
+        )
+        await click(fresh.newBoard())
+        await type(fresh.field()!, 'arch')
+        await click(fresh.named('Create')!)
+        assert.deepEqual(picks, ['arch.excalidraw'])
+        await fresh.unmount()
+      })
     }
 
     if (failures > 0) {

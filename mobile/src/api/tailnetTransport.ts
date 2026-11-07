@@ -217,6 +217,15 @@ export function declaresStopSubagent(session: { tailnetCapabilities?: string[] }
 }
 
 /**
+ * Whether the desktop passes the person's words to one agent of a chat
+ * (`conversation-agent-message`). Absence is a NO: an older desktop refuses the
+ * command, so the phone draws no box for an agent there.
+ */
+export function declaresAgentMessage(session: { tailnetCapabilities?: string[] }): boolean {
+  return session.tailnetCapabilities?.includes("conversation-agent-message") ?? false;
+}
+
+/**
  * Whether the desktop said its chat list carries each chat's title and
  * clocks, leaves settled chats out, and takes `conversation.settle` and
  * `conversation.visit` (`conversation-lifecycle`). Absence is a NO: an older

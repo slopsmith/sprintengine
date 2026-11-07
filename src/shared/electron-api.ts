@@ -98,9 +98,12 @@ import type {
   CanvasBoardRef,
   CanvasBoardState,
   CanvasBoardSummary,
+  CanvasContinueInput,
+  CanvasContinueResult,
   CanvasElement,
   CanvasExportImages,
   CanvasExportResult,
+  CanvasMachineListing,
   CanvasPresence,
   CanvasResult,
   CanvasScenePush,
@@ -177,6 +180,8 @@ import type {
   MeshConversationChange,
   MeshVisitConversationResult,
   MeshWorkspaceCheckoutResult,
+  MeshCanvasBoardsResult,
+  MeshCanvasScreenshotResult,
   MeshWorkspaceExtensionsResult,
   MeshPullRequestCreateResult,
   MeshPullRequestDraftResult,
@@ -227,6 +232,7 @@ import type {
   ConversationSessionActionResult,
   ConversationSetModelInput,
   ConversationMcpServerActionInput,
+  ConversationMessageSubagentInput,
   ConversationStopSubagentInput,
   ConversationCancelSideQuestionInput,
   ConversationContextBreakdownInput,
@@ -749,12 +755,12 @@ export type ElectronApi = {
   // resolved against the workspace root on the main side, so a renderer cannot
   // name a file outside the project however it spells one.
   canvasListBoards: (workspaceId: string) => Promise<CanvasResult<CanvasBoardSummary[]>>
+  /** Every board on this machine, each with its project; `workspaceId` marks which rows are the asker's own. */
+  canvasListAllBoards: (workspaceId?: string) => Promise<CanvasResult<CanvasMachineListing>>
+  /** Start a chat whose first message names this board by id. The board's own tab is the caller's to open. */
+  canvasContinueInNewChat: (input: CanvasContinueInput) => Promise<CanvasResult<CanvasContinueResult>>
   /** Opens (optionally creating) a board and subscribes the calling window to it. */
-  canvasOpenBoard: (input: {
-    workspaceId: string
-    path: string
-    create?: boolean
-  }) => Promise<CanvasResult<CanvasBoardState>>
+  canvasOpenBoard: (input: CanvasBoardRef & { create?: boolean }) => Promise<CanvasResult<CanvasBoardState>>
   canvasCloseBoard: (input: CanvasBoardRef) => Promise<void>
   /**
    * The person's edit, debounced by the tab. `elements` is the full array
@@ -1113,6 +1119,19 @@ export type ElectronApi = {
     workspaceId: string
     cli?: string
   }) => Promise<MeshWorkspaceExtensionsResult>
+  /** A paired machine's Canvas boards: this chat's project there, or every board on it (`canvas-machine-boards`). */
+  meshCanvasBoards: (input: {
+    connectionId: string
+    workspaceId: string
+    scope: 'workspace' | 'machine'
+  }) => Promise<MeshCanvasBoardsResult>
+  /** A picture of a board on a paired machine, named by its id or, on an older machine, its path. */
+  meshCanvasScreenshot: (input: {
+    connectionId: string
+    workspaceId: string
+    board: string
+    dark: boolean
+  }) => Promise<MeshCanvasScreenshotResult>
   /**
    * The pairing requests still waiting and each machine's last reachability —
    * the initial read behind `onMeshEvent`, carrying the same revision the
@@ -1181,6 +1200,13 @@ export type ElectronApi = {
   meshConversationStopSubagent: (input: {
     key: MeshConversationKey
     toolUseId: string
+  }) => Promise<MeshConversationCommandResult>
+  // Pass the person's words to one agent a chat over there spawned, through
+  // that chat's model. Needs `conversation-agent-message` there.
+  meshConversationMessageSubagent: (input: {
+    key: MeshConversationKey
+    toolUseId: string
+    message: string
   }) => Promise<MeshConversationCommandResult>
   // Hand a chat over there off to a fresh session, as its Handoff does there.
   // Needs `conversation-handoff` there.
@@ -1522,6 +1548,9 @@ export type ElectronApi = {
   conversationSessionMcpAction: (input: ConversationMcpServerActionInput) => Promise<ConversationMcpServerActionResult>
   /** Stop one agent a live chat spawned, by its lane, leaving the chat and its turn running. */
   conversationSessionStopSubagent: (input: ConversationStopSubagentInput) => Promise<ConversationSessionActionResult>
+  conversationSessionMessageSubagent: (
+    input: ConversationMessageSubagentInput,
+  ) => Promise<ConversationSessionActionResult>
   /** Ask a side question about a live chat, answered from its context and added to nothing. */
   conversationSessionAskSideQuestion: (input: ConversationSideQuestionInput) => Promise<ConversationSideQuestionResult>
   /** Call off a side question still being answered, by the id it was asked under. */

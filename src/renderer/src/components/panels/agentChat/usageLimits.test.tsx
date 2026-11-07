@@ -11,7 +11,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest'
 
 import type { UsageLimitSnapshot, UsageLimitsState } from '../../../../../shared/usage-limits'
 import { useUsageLimitsStore } from '../../../store/usageLimitsStore'
-import { ConversationComposerStrip } from './conversationStrip'
+import { PanelFactRows } from '../../workspace/pane/panel/panelFactsFixture'
 import { headlineWindow, UsageLimitsPanel, usageReadingAge, usageStripLabel, usageWindowWords } from './usageLimits'
 
 const MINUTE = 60_000
@@ -156,20 +156,9 @@ test('with nothing reported the list says so rather than guess', async () => {
   expect(panel.querySelector('[data-usage-empty]')?.textContent).toMatch(/No usage limits reported yet/)
 })
 
-test('the strip draws the bar at its pinned end, before the ring, named in words', async () => {
-  const strip = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
-      context={{ used: 20_000, total: 200_000 }}
-      usageLimits={claude()}
-    />,
-  )
-  const slot = strip.querySelector('[data-strip-usage-limits-slot]')!
-  expect(slot.className).toContain('ml-auto')
-  expect(slot.nextElementSibling?.hasAttribute('data-strip-context')).toBe(true)
-  const trigger = strip.querySelector<HTMLButtonElement>('[data-strip-usage-limits="claude"]')!
+test('the row draws the bar, named in words', async () => {
+  const strip = await render(<PanelFactRows context={{ used: 20_000, total: 200_000 }} usageLimits={claude()} />)
+  const trigger = strip.querySelector<HTMLButtonElement>('[data-panel-usage-limits="claude"]')!
   expect(trigger.getAttribute('aria-label')).toBe('Claude usage limits: Weekly, 93% used · resets in 3d 4h')
   expect(trigger.getAttribute('aria-haspopup')).toBe('dialog')
   // The compact bar is the button's picture; the button carries the name.
@@ -177,15 +166,7 @@ test('the strip draws the bar at its pinned end, before the ring, named in words
   expect(trigger.querySelector('[data-meter]')?.getAttribute('data-meter')).toBe('warn')
 })
 
-test('with no reading the strip draws no bar', async () => {
-  const strip = await render(
-    <ConversationComposerStrip
-      machine={null}
-      branch={null}
-      changes={null}
-      context={{ used: 20_000, total: 200_000 }}
-      usageLimits={null}
-    />,
-  )
-  expect(strip.querySelector('[data-strip-usage-limits-slot]')).toBe(null)
+test('with no reading there is no row', async () => {
+  const strip = await render(<PanelFactRows context={{ used: 20_000, total: 200_000 }} usageLimits={null} />)
+  expect(strip.querySelector('[data-panel-usage-limits]')).toBe(null)
 })

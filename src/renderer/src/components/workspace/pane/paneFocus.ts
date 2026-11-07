@@ -13,7 +13,7 @@ export function isWorkspacePaneFocused(): boolean {
  * Make a change that may close the pane, and move focus out of it when it
  * did. A closed pane column is inert at once, so focus left inside it would
  * drop to the page and the next Tab would start from the top of the window;
- * it goes where reopening the pane lives, the header's pane switch.
+ * it goes where reopening the pane lives, the band's toggle.
  */
 export function keepFocusOutOfClosedPane(change: () => void, paneOpen: () => boolean): void {
   const focused = isWorkspacePaneFocused()

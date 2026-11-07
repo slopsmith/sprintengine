@@ -41,15 +41,23 @@ const labels = (host: HTMLElement): string[] =>
   [...host.querySelectorAll('button')].map((button) => button.getAttribute('aria-label') ?? '')
 
 test('on the rail, Usage comes first: above the account, which is above Settings', () => {
-  expect(labels(render({ collapsed: true, openUsage: () => {} }))).toEqual(['Usage', 'Sign in', 'Settings'])
+  expect(labels(render({ collapsed: true, openUsage: () => {} }))).toEqual([
+    'Usage',
+    'Account · Your account',
+    'Settings',
+  ])
 })
 
 test('in a row, Usage sits with the gear at the right edge', () => {
-  expect(labels(render({ collapsed: false, openUsage: () => {} }))).toEqual(['Sign in', 'Usage', 'Settings'])
+  expect(labels(render({ collapsed: false, openUsage: () => {} }))).toEqual([
+    'Account · Your account',
+    'Usage',
+    'Settings',
+  ])
 })
 
 test('the glyph is pressed while the dashboard is open, and absent with nothing to open', () => {
   const open = render({ collapsed: true, usageOpen: true, openUsage: () => {} })
   expect(open.querySelector('button[aria-label="Usage"]')?.getAttribute('aria-pressed')).toBe('true')
-  expect(labels(render({ collapsed: true }))).toEqual(['Sign in', 'Settings'])
+  expect(labels(render({ collapsed: true }))).toEqual(['Account · Your account', 'Settings'])
 })

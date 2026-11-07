@@ -78,6 +78,12 @@ export type ConversationThread = Omit<ConversationWireThread, 'capabilities'> & 
      */
     stopSubagent?: boolean
     /**
+     * The chat's provider passes a message to an agent it spawned (a
+     * `messageSubagent` command), from a desktop that advertises
+     * `conversation-agent-message`. Absent means unknown.
+     */
+    messageSubagent?: boolean
+    /**
      * The chat's provider hands a chat off to a fresh session (a `handoff`
      * command), from a desktop that advertises `conversation-handoff`.
      * Absent means unknown.
@@ -719,7 +725,7 @@ export function parseConversationWireHighlight(value: unknown): ConversationWire
   return { starred, ...(color ? { color } : {}) }
 }
 
-/** Where a sub-agent stands, as the desktop's Agents tab says it. */
+/** Where a sub-agent stands, as the desktop's panel says it. */
 export const CONVERSATION_SUBAGENT_STATUSES = [
   'starting',
   'working',
@@ -788,6 +794,7 @@ function threadCapabilities(value: unknown): ConversationThread['capabilities'] 
       : {}),
     ...(typeof flags.steer === 'boolean' ? { steer: flags.steer } : {}),
     ...(typeof flags.stopSubagent === 'boolean' ? { stopSubagent: flags.stopSubagent } : {}),
+    ...(typeof flags.messageSubagent === 'boolean' ? { messageSubagent: flags.messageSubagent } : {}),
     ...(typeof flags.handoff === 'boolean' ? { handoff: flags.handoff } : {}),
     ...(typeof flags.rewind === 'boolean' ? { rewind: flags.rewind } : {}),
     ...(typeof flags.fork === 'boolean' ? { fork: flags.fork } : {}),

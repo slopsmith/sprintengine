@@ -5,6 +5,23 @@ import type { AgentCli } from '../../../types/workspace'
 import CliIcon from '../../CliIcon'
 import { useConversationLinkContext } from './conversationLinks'
 
+const CLI_NAMES: Readonly<Record<string, string>> = {
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  cursor: 'Cursor',
+  grok: 'Grok',
+  opencode: 'OpenCode',
+  'kimi-code': 'Kimi Code',
+  'kimi-claude': 'Kimi Code',
+  muse: 'Muse',
+  zai: 'Z.AI',
+}
+
+/** A harness as a person reads its name. */
+export function harnessName(cli: string): string {
+  return CLI_NAMES[cli] ?? cli
+}
+
 // A sub-agent is drawn as the harness doing the work, whichever model that
 // harness is driving (owner ruling 2026-11-05): a reviewer on Cursor wears
 // Cursor's mark, even with Grok under it. The words beside it name the model.

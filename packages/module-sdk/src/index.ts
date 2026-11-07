@@ -1763,6 +1763,7 @@ export type CommandAvailability =
   | 'activeFile'
   | 'memoryGraphEnabled'
   | 'canvasEnabled'
+  | 'backlogEnabled'
   | 'gitPanelActive'
   | 'terminalActive'
   | 'diagnosticsEnabled'

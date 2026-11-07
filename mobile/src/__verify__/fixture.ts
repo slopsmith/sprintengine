@@ -53,6 +53,7 @@ export const verifySession: MobileSession = {
     "conversation-steer-sends",
     "conversation-message-files",
     "conversation-stop-subagent",
+    "conversation-agent-message",
   ],
   // How the desktop draws itself, from its identity: New's strip and "Run on" wear it.
   machineMark: { kind: "laptop", color: "blue" },

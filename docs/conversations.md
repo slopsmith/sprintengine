@@ -1076,16 +1076,19 @@ conversation-files`, on `conversation:read`), the picker ranks the matches
   pairing that may only follow sees the notice without its buttons; a machine
   without the capability draws neither, as before.
 - **Its sub-agents are the other machine's** (2026-11-07). Where the machine
-  advertises `conversation-subagents`, the Agents tab lists a chat's sub-agents
-  as that machine's own tab does, each with its harness's logo, how it stands
-  and its task, and live (`watchSubagents`, `subagents` frames). The row in the
-  transcript opens the same one. Opened, a sub-agent is followed as a chat of its
-  own, over a socket of its own, so its steps, its report and what it asks are
-  read from it and answered there; a pairing that may only follow sees a
-  question without being able to answer it. It is stopped as it is on its own
-  machine, with its parent's Stop or by the parent's `subagent.cancel`, since
-  neither tab offers a Stop of its own. No list shows one: not the sidebar here,
-  and not a phone's. A machine without the capability shows only the agents the
+  advertises `conversation-subagents`, the right-hand panel's Subagents section
+  lists a chat's sub-agents as that machine's own panel does, each with its
+  harness's logo and how it stands, live (`watchSubagents`, `subagents` frames).
+  The row in the transcript opens the same one. Opened, a sub-agent is followed
+  as a chat of its own, over a socket of its own, in the main pane, so its steps,
+  its report and what it asks are read from it and answered there, and a message
+  in its box goes straight to it, resuming it if it is at rest. What it asks is
+  also answered above its parent's box. A pairing that may only follow sees a
+  question without being able to answer it, and has the bar in place of the box.
+  It is stopped as it is on its own machine, with its parent's Stop or by the
+  parent's `subagent.cancel`, since its chat offers no Stop of its own. No list
+  shows one: not the sidebar here, and not a phone's. A machine without the
+  capability shows only the agents the
   chat's CLI spawned, as before. The phone does not ask, and shows those too.
 
 ### Terminals stay on the machine
@@ -1101,6 +1104,32 @@ paired device starts is a chat, through `conversation.create`, and the machine
 dropdown in New chat offers a paired machine only for a Chat agent. Scheduled
 agents stay on the machine too: the phone neither lists nor runs them. A tab left open on a remote terminal by an earlier build reopens as
 an unavailable panel.
+
+
+## Subagents as full chats
+
+Clicking a subagent opens it as a full chat in the main pane, in the chat's
+place, with the way back up in a band over it. What a tab is showing is a
+session-only stack keyed by the workspace and the chat the tab holds
+(`subagentViewStack.ts`), never a layout tab, which would be a sidebar line. The
+chat beneath stays mounted and hidden, since a queued message lives in its view.
+
+- A sub-agent Studio started is a chat of its own, and takes messages directly.
+  It works for its parent, so it offers no resume in terminal, handoff, fork,
+  rewind or checkpoint revert, and its preset cannot be raised past its parent's,
+  which the runtime refuses by any path (`subagentPresetCeiling`). A row reads its
+  live status, so a person's follow-up does not say Done.
+- An agent a chat's CLI spawned is a lane, read through its owner's session as a
+  conversation (`laneTranscript`). What it asks the person is answered in the
+  normal dock.
+- A message box appears only where a message arrives (`subagentDelivery.ts`,
+  owner ruling 2026-11-07). A Claude Code lane that is running or finished takes
+  one, relayed through the parent's model, which costs that model a turn. One the
+  person stopped, one that failed, one whose end was not recorded and one the
+  harness says cannot go on get no box, only a bar that says why and leads to the
+  parent, as does every lane of a harness with no working relay and a paired
+  machine without `conversation-agent-message`. Codex refuses input on a child
+  thread, and a message its parent said it sent did not reach a finished child.
 
 ## Manual verification
 

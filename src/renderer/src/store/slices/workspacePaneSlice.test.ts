@@ -5,6 +5,7 @@ import {
   adoptLegacyBacklogTab,
   createWorkspacePaneSlice,
   normalizeWorkspacePaneState,
+  paneShowsMenu,
   paneStateFromLegacyLayout,
   partializeWorkspacePaneState,
 } from './workspacePaneSlice'
@@ -277,10 +278,11 @@ test('workspacePaneSlice', async () => {
     assert.equal(pane().activeTabId, a, 'then the left one')
     slice.closePaneTab(WS, a)
     assert.equal(pane().activeTabId, null)
-    assert.equal(pane().open, false, 'closing the last tab closes the pane')
+    assert.equal(pane().open, true, 'closing the last tab leaves the column open')
+    assert.equal(paneShowsMenu(pane()), true, 'and lands on its menu')
   })
 
-  run('closing the last docked tab closes the pane; a tab closed in its own window does not', () => {
+  run('closing the last docked tab lands on the menu; a tab closed in its own window does not', () => {
     const { slice, pane } = carrierWith({
       open: true,
       activeTabId: 'a',
@@ -293,7 +295,8 @@ test('workspacePaneSlice', async () => {
     slice.closePaneTab(WS, 'b')
     assert.equal(pane().open, true, 'a popped-out tab closing leaves the pane open')
     slice.closePaneTab(WS, 'a')
-    assert.equal(pane().open, false, 'only a popped-out tab is left: the pane closes, as a pop-out emptying it does')
+    assert.equal(pane().open, true, 'only a popped-out tab is left: the column stays')
+    assert.equal(paneShowsMenu(pane()), true, 'and shows its menu')
     assert.equal(pane().tabs.length, 1)
   })
 
@@ -528,5 +531,115 @@ test('workspacePaneSlice', async () => {
     }
   })
 
+  // --- the menu ---------------------------------------------------------------
+
+  run('the toggle opens on the menu and keeps the tab that was in front', () => {
+    const { slice, pane } = carrierWith()
+    const files = slice.openPaneTab(WS, { kind: 'files' })!
+    slice.togglePaneMenu(WS)
+    assert.equal(pane().open, false)
+    assert.equal(paneShowsMenu(pane()), false, 'closing it leaves no menu behind')
+    slice.togglePaneMenu(WS)
+    assert.equal(pane().open, true)
+    assert.equal(paneShowsMenu(pane()), true)
+    assert.equal(pane().activeTabId, files, 'the tab in front stands through the menu, for Back to return to')
+  })
+
+  run('a plain open and everything that shows a tab leave the menu', () => {
+    const { slice, pane } = carrierWith()
+    const files = slice.openPaneTab(WS, { kind: 'files' })!
+    const git = slice.openPaneTab(WS, { kind: 'git' })!
+    const shown: Array<() => void> = [
+      () => slice.openPaneTab(WS, { kind: 'browser' }),
+      () => slice.setActivePaneTab(WS, files),
+      () => slice.togglePaneKind(WS, 'git'),
+    ]
+    for (const show of shown) {
+      slice.showPaneMenu(WS)
+      assert.equal(paneShowsMenu(pane()), true)
+      show()
+      assert.equal(paneShowsMenu(pane()), false)
+    }
+    slice.showPaneMenu(WS)
+    slice.setPaneOpen(WS, false)
+    slice.setPaneOpen(WS, true)
+    assert.equal(paneShowsMenu(pane()), false, 'an agent opening the column lands on its tab')
+    assert.equal(
+      pane().tabs.some((tab) => tab.id === git),
+      true,
+    )
+  })
+
+  run('a background open leaves the menu where it is', () => {
+    const { slice, pane } = carrierWith()
+    slice.openPaneTab(WS, { kind: 'files' })
+    slice.showPaneMenu(WS)
+    slice.openPaneTab(WS, { kind: 'browser', activate: false })
+    assert.equal(paneShowsMenu(pane()), true)
+  })
+
+  run('with the menu up, a kind in front is brought forward rather than closed', () => {
+    const { slice, pane } = carrierWith()
+    const git = slice.openPaneTab(WS, { kind: 'git' })!
+    slice.showPaneMenu(WS)
+    assert.equal(slice.togglePaneKind(WS, 'git'), true)
+    assert.deepEqual(
+      pane().tabs.map((tab) => tab.id),
+      [git],
+    )
+    assert.equal(paneShowsMenu(pane()), false)
+  })
+
+  run('the toggle docks a floating tab onto its own tab rather than the menu', () => {
+    const { slice, pane } = carrierWith()
+    const page = slice.openPaneTab(WS, { kind: 'browser' })!
+    slice.openPaneTab(WS, { kind: 'files' })
+    slice.setPaneTabFloating(WS, page, true)
+    assert.equal(pane().open, false)
+    slice.togglePaneMenu(WS)
+    assert.equal(pane().open, true)
+    assert.equal(pane().activeTabId, page)
+    assert.equal(paneShowsMenu(pane()), false)
+    assert.equal(
+      pane().tabs.some((tab) => tab.floating),
+      false,
+    )
+  })
+
+  run('the menu is the sitting, not the record', () => {
+    const record = partializeWorkspacePaneState({
+      open: true,
+      activeTabId: 'a',
+      menu: true,
+      tabs: [{ id: 'a', kind: 'files' }],
+    })
+    assert.equal(record?.menu, undefined)
+    assert.equal(
+      normalizeWorkspacePaneState({ open: true, activeTabId: 'a', menu: true, tabs: [{ id: 'a', kind: 'files' }] })
+        ?.menu,
+      true,
+      'every write normalizes, so the normalizer carries it',
+    )
+  })
+
   console.log('workspacePaneSlice tests passed')
+})
+
+test('a foreign Canvas tab keeps its store through a reload, and a bad store loses the board, never the tab', () => {
+  const store = `ws_${'a'.repeat(24)}`
+  const pane = {
+    open: true,
+    activeTabId: 'foreign',
+    tabs: [
+      { id: 'foreign', kind: 'canvas', canvas: { path: 'arch.excalidraw', store } },
+      { id: 'own', kind: 'canvas', canvas: { path: 'arch.excalidraw' } },
+      { id: 'bad', kind: 'canvas', canvas: { path: 'other.excalidraw', store: '../elsewhere' } },
+    ],
+  } as unknown as WorkspacePaneState
+  const restored = normalizeWorkspacePaneState(partializeWorkspacePaneState(pane))
+  const tab = (id: string) => restored?.tabs.find((candidate) => candidate.id === id)
+  assert.deepEqual(tab('foreign')?.canvas, { path: 'arch.excalidraw', store })
+  assert.deepEqual(tab('own')?.canvas, { path: 'arch.excalidraw' })
+  assert.ok(tab('bad'), 'the tab stays, on the picker')
+  assert.equal(tab('bad')?.canvas, undefined, 'and never as a board of that name here')
 })

@@ -216,6 +216,12 @@ export const TAILNET_CAPABILITIES = [
   // at a time, so a paired machine needs its own Stop for each.
   // CONVERSATION_STOP_SUBAGENT_CAPABILITY.
   'conversation-stop-subagent',
+  // The person's words may be passed to one agent a chat spawned (2026-11-07):
+  // `messageSubagent` names it as `stopSubagent` does, and the chat's model
+  // delivers them. A listed chat says whether its provider can
+  // (`capabilities.messageSubagent`); a client draws no box without both.
+  // CONVERSATION_AGENT_MESSAGE_CAPABILITY.
+  'conversation-agent-message',
   // A chat may be handed off to a fresh session from a paired machine, as its
   // own Handoff does here (2026-10-25): `handoff`, where a listed chat says
   // its provider can (`capabilities.handoff`). CONVERSATION_HANDOFF_CAPABILITY.
@@ -320,7 +326,7 @@ export const TAILNET_CAPABILITIES = [
   'conversation-quote-tokens',
   // The sub-agents of a chat followed from a paired machine (2026-11-07):
   // `watchSubagents` has the socket say, in `subagents` frames, which a chat
-  // has and how each stands, as this machine's own Agents tab reads them. Each
+  // has and how each stands, as this machine's own panel reads them. Each
   // is a chat of its own, followed by its id. The list still leaves them out,
   // so a client that does not ask is told of none. A client shows only the
   // agents a chat's CLI spawned for a machine without it.
@@ -372,6 +378,13 @@ export const TAILNET_CAPABILITIES = [
   // skips the argument.
   'workspace-extensions',
   'new-chat-skills',
+  // A paired desktop's Canvas pane lists this machine's boards (2026-11-07):
+  // `canvas.list` takes `scope: machine` and answers every board here with its
+  // project, and each row's `id` reaches `canvas.screenshot` and the other
+  // canvas tools, so a board of any project here is shown and a chat started
+  // on it. A client that does not see it asks this workspace's boards alone,
+  // as an older `canvas.list` answers them, and says so in words.
+  'canvas-machine-boards',
   // A paired desktop's Create PR on a chat here (2026-10-18): the
   // `conversation.pull_request_*` tools read whether the chat's checkout is
   // ready, draft the text with this machine's text generation settings, push

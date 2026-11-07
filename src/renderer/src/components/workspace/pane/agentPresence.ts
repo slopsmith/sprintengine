@@ -87,14 +87,14 @@ export function browserPresenceKey(tabId: string): string {
   return `browser\0${tabId}`
 }
 
-export function canvasPresenceKey(workspaceId: string, path: string): string {
-  return `canvas\0${canvasBoardKey({ workspaceId, path })}`
+export function canvasPresenceKey(workspaceId: string, path: string, store?: string): string {
+  return `canvas\0${canvasBoardKey({ workspaceId, path, ...(store ? { store } : {}) })}`
 }
 
 /** The presence a pane tab can have, or null for a kind no agent holds. */
 export function paneTabPresenceKey(workspaceId: string, tab: WorkspacePaneTab): string | null {
   if (tab.kind === 'browser') return browserPresenceKey(tab.id)
-  if (tab.kind === 'canvas' && tab.canvas) return canvasPresenceKey(workspaceId, tab.canvas.path)
+  if (tab.kind === 'canvas' && tab.canvas) return canvasPresenceKey(workspaceId, tab.canvas.path, tab.canvas.store)
   return null
 }
 
@@ -111,7 +111,7 @@ function feedFromMain(): void {
   feeding = true
   window.api.onBrowserState?.((state) => agentPresence.observe(browserPresenceKey(state.tabId), state.controller))
   window.api.onCanvasPresence?.((presence) =>
-    agentPresence.observe(canvasPresenceKey(presence.workspaceId, presence.path), presence.controller),
+    agentPresence.observe(canvasPresenceKey(presence.workspaceId, presence.path, presence.store), presence.controller),
   )
 }
 

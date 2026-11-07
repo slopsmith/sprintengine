@@ -273,6 +273,11 @@ under their `requestId`, as it answers `watchQueued`.
   and only then does the desktop leave tokens in the `text` of that socket's
   `user_message` events and held and scheduled messages. Without that a quote
   arrives as words: its passage as a blockquote, then `Comment: …`.
+- `conversation-agent-message`: `messageSubagent` passes the person's words to
+  one agent a chat spawned, through that chat's model, where its provider can (a
+  listed thread's `capabilities.messageSubagent`). The words are recorded on the
+  `user_message` as `subagentMessage`. A desktop without it refuses the kind as
+  `unsupported_command`.
 - `conversation-subagents`: `{ type: 'watchSubagents', requestId }` has the
   desktop send a `subagents` frame (`ConversationSubagentsFrame`: the chat's
   `key` and its `subagents`, oldest first, whole each time) now and whenever

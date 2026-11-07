@@ -203,6 +203,18 @@ export function parseConversationClientMessage(value: unknown): ConversationClie
           }
         : null
     }
+    if (command.kind === 'messageSubagent') {
+      return id(value.commandId) &&
+        id(command.toolUseId) &&
+        typeof command.message === 'string' &&
+        command.message.trim()
+        ? {
+            type: 'command',
+            commandId: value.commandId,
+            command: { kind: 'messageSubagent', toolUseId: command.toolUseId, message: command.message },
+          }
+        : null
+    }
     if (command.kind === 'handoff') {
       return id(value.commandId) ? { type: 'command', commandId: value.commandId, command: { kind: 'handoff' } } : null
     }
@@ -393,6 +405,7 @@ export function explainRejectedConversationMessage(value: unknown): Conversation
     (rejection.commandKind === 'resolvePlan' ||
       rejection.commandKind === 'cancelQueued' ||
       rejection.commandKind === 'stopSubagent' ||
+      rejection.commandKind === 'messageSubagent' ||
       rejection.commandKind === 'handoff' ||
       rejection.commandKind === 'rewind' ||
       rejection.commandKind === 'revert' ||

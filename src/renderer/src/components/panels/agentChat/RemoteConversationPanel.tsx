@@ -24,6 +24,15 @@ import { remoteFileCountsOf } from '../../workspace/terminalLines'
 import { ChatViewErrorBoundary } from './ChatViewErrorBoundary'
 import { hostUsageLimitsOf } from './hostUsageLimits'
 import { publishRemoteChat } from './remoteChatRegistry'
+import { cliForConversationProvider } from '../../../../../shared/conversation-harness'
+import { studioSubagentsOf, SubagentStatusWords } from './chatSubagents'
+import {
+  SubagentChatHost,
+  SubagentEndNotice,
+  subagentFacts,
+  SubagentGone,
+  SubagentViewHeader,
+} from './SubagentChatHost'
 import type { ChatBinding, ChatAgentFields } from './chatBinding'
 import type { ChatReadiness } from './chatStates'
 import {
@@ -59,6 +68,23 @@ type Props = {
   remoteAgentId: string
   /** What the row it was opened from called it, until the machine is read. */
   title?: string
+  /**
+   * Set for a sub-agent drawn in its parent's place: no list names one, so its
+   * parent's `subagents` row stands in for its listed thread, and it is a layer
+   * of its parent's stack rather than the chat at the bottom of one.
+   */
+  subagent?: {
+    row: MeshSubagent
+    parentAgentId: string
+    parentName: string
+    onGoToParent: () => void
+  }
+}
+
+/** A sub-agent's row as the chat its pane reads: it names what a list would. */
+function threadOfSubagent(row: MeshSubagent): MeshConversation {
+  const { readOnly: _readOnly, status: _status, task: _task, startedAt, endedAt, error: _error, ...listed } = row
+  return { ...listed, createdAt: startedAt, updatedAt: endedAt ?? startedAt } as MeshConversation
 }
 
 function remoteConversationReadiness(
@@ -100,6 +126,7 @@ const NO_AGENT_READS: RemoteAgentReads = { fork: false, sideQuestions: false, co
 type RemoteSessionFeatures = {
   modelSwitch: boolean
   stopSubagents: boolean
+  messageSubagents: boolean
   handoff: boolean
   sendSkills: boolean
   rewind: boolean
@@ -119,6 +146,7 @@ function remoteConversationSession(
   const {
     modelSwitch,
     stopSubagents,
+    messageSubagents,
     handoff,
     sendSkills,
     rewind,
@@ -187,6 +215,9 @@ function remoteConversationSession(
       // The machine's turn Stop spares such a chat's agents, so this is the
       // only Stop an agent has from here.
       stopSubagent: stopSubagents && capabilities?.stopSubagent === true,
+      // Whether the person's words can be passed to one agent the chat spawned:
+      // the machine takes the command and lists the chat's provider as able.
+      messageSubagent: messageSubagents && capabilities?.messageSubagent === true,
       // Whether the chat can be handed off to a fresh session over there: the
       // machine takes the command and lists the chat's provider as able.
       handoff: handoff && capabilities?.handoff === true,
@@ -221,13 +252,16 @@ export default function RemoteConversationPanel({
   remoteWorkspaceId,
   remoteAgentId,
   title,
+  subagent,
 }: Props) {
   const key = useMemo<MeshConversationKey>(
     () => ({ connectionId, workspaceId: remoteWorkspaceId, agentId: remoteAgentId }),
     [connectionId, remoteWorkspaceId, remoteAgentId],
   )
   const [link, setLink] = useState<MeshConversationLink | null>(null)
-  const [thread, setThread] = useState<MeshConversation | null>(null)
+  const seedThread = useMemo(() => (subagent ? threadOfSubagent(subagent.row) : null), [subagent])
+  const [listedThread, setThread] = useState<MeshConversation | null>(null)
+  const thread = listedThread ?? seedThread
   const [listedAccess, setListedAccess] = useState<MeshConversationAccess | null>(null)
   // The machine advertises model switching and lists this chat's catalog.
   const [listedModelSwitch, setListedModelSwitch] = useState(false)
@@ -251,6 +285,8 @@ export default function RemoteConversationPanel({
   const [steerSends, setSteerSends] = useState(false)
   // The machine stops one agent of one of its chats by itself.
   const [stopSubagents, setStopSubagents] = useState(false)
+  // The machine passes the person's words to one agent of one of its chats.
+  const [messageSubagents, setMessageSubagents] = useState(false)
   // The machine hands one of its chats off to a fresh session.
   const [handoff, setHandoff] = useState(false)
   // The machine takes one of its chats back to before a message, and puts a
@@ -281,7 +317,7 @@ export default function RemoteConversationPanel({
   const [usageLimits, setUsageLimits] = useState(false)
   const [hostUsage, setHostUsage] = useState<MeshConversationUsageLimits | null>(null)
   // The chat's sub-agents, as the machine last said. It says only where it
-  // advertises `conversation-subagents`; the Agents tab reads them from here.
+  // advertises `conversation-subagents`; the panel reads them from here.
   const [hostSubagents, setHostSubagents] = useState<MeshSubagent[]>([])
   const modelSwitch = listedModelSwitch && Boolean(thread?.models)
   // Bumped after an accepted model switch, so the list is read again and the
@@ -326,6 +362,8 @@ export default function RemoteConversationPanel({
   scheduledSendsRef.current = scheduledSends
   const usageLimitsRef = useRef(usageLimits)
   usageLimitsRef.current = usageLimits
+  const messageSubagentsRef = useRef(messageSubagents)
+  messageSubagentsRef.current = messageSubagents
   const threadRef = useRef(thread)
   threadRef.current = thread
   const transport = useMemo(() => {
@@ -378,6 +416,7 @@ export default function RemoteConversationPanel({
           commandList: commandListRef.current,
           hostSchedule: scheduledSendsRef.current,
           hostUsageLimits: usageLimitsRef.current,
+          agentMessages: messageSubagentsRef.current,
         }
       },
       // A watch ended there is off its list: read it again, so the strip
@@ -415,7 +454,7 @@ export default function RemoteConversationPanel({
   }, [key, machineName])
 
   // A sub-agent is a chat of its own over there, followed by its own ids: what
-  // the Agents tab reads of one, and the answer to what it asks, go through
+  // the panel reads of one, and the answer to what it asks, go through
   // this. Made once for each, as the pane's own is, and with the pane's word on
   // what this pairing may do.
   const subagentTransport = useMemo(() => {
@@ -432,6 +471,7 @@ export default function RemoteConversationPanel({
             ...capabilities,
             operate: accessRef.current === 'operate',
             permanentApprovals: permanentApprovalsRef.current,
+            agentMessages: messageSubagentsRef.current,
           }
         },
       }
@@ -471,6 +511,7 @@ export default function RemoteConversationPanel({
         setHostPullRequests(result.createPullRequest === true)
         setSteerSends(result.steerSends === true)
         setStopSubagents(result.stopSubagents === true)
+        setMessageSubagents(result.messageSubagents === true)
         setHandoff(result.handoff === true)
         setRewind(result.rewind === true)
         setCheckpointRevert(result.checkpointRevert === true)
@@ -551,6 +592,7 @@ export default function RemoteConversationPanel({
       remoteConversationSession(thread, key, {
         modelSwitch,
         stopSubagents,
+        messageSubagents,
         handoff,
         sendSkills,
         rewind,
@@ -565,6 +607,7 @@ export default function RemoteConversationPanel({
       key,
       modelSwitch,
       stopSubagents,
+      messageSubagents,
       handoff,
       sendSkills,
       rewind,
@@ -600,8 +643,22 @@ export default function RemoteConversationPanel({
       ...(scheduledSends ? { hostSchedule: { machineName, messages: hostScheduled } } : {}),
       ...(hostUsageLimits ? { hostUsageLimits } : {}),
       listed,
+      ...(subagent
+        ? {
+            subagent: {
+              parentAgentId: subagent.parentAgentId,
+              parentName: subagent.parentName,
+              onGoToParent: subagent.onGoToParent,
+              ...(access !== null && access !== 'operate'
+                ? { blocked: `This pairing may follow this chat on ${machineName} but not drive it.` }
+                : {}),
+            },
+          }
+        : {}),
     }),
     [
+      subagent,
+      access,
       fields,
       displayTitle,
       thread,
@@ -619,21 +676,23 @@ export default function RemoteConversationPanel({
     ],
   )
 
-  // The Agents tab beside it reads the chat through this transport, as it
-  // reads a local chat through its record.
+  // The panel beside it reads the chat through this transport, as it reads a
+  // local chat through its record.
+  const subagentOf = subagent?.parentAgentId
   useEffect(
     () =>
       publishRemoteChat(workspaceId, {
         agentId: remoteAgentId,
+        ...(subagentOf ? { subagentOf } : {}),
         transport,
         binding,
         subagents: hostSubagents,
         subagentTransport,
       }),
-    [workspaceId, remoteAgentId, transport, binding, hostSubagents, subagentTransport],
+    [workspaceId, remoteAgentId, subagentOf, transport, binding, hostSubagents, subagentTransport],
   )
 
-  return (
+  const chat = (
     <ConversationTransportProvider value={transport}>
       <ChatViewErrorBoundary chatKey={`${connectionId}:${remoteWorkspaceId}:${remoteAgentId}`}>
         <ConversationChatBody
@@ -644,5 +703,44 @@ export default function RemoteConversationPanel({
         />
       </ChatViewErrorBoundary>
     </ConversationTransportProvider>
+  )
+  if (subagent) return chat
+  return (
+    <SubagentChatHost
+      workspaceId={workspaceId}
+      rootAgentId={remoteAgentId}
+      rootName={displayTitle}
+      chatName={(id) => hostSubagents.find((row) => row.agentId === id)?.title}
+      renderChat={({ agentId, parentAgentId, parentName, crumbs, onCrumb, onBack }) => {
+        const row = hostSubagents.find((candidate) => candidate.agentId === agentId)
+        if (!row) return <SubagentGone words={`${machineName} no longer lists this subagent.`} onBack={onBack} />
+        const [shown] = studioSubagentsOf([row])
+        return (
+          <>
+            <SubagentViewHeader
+              crumbs={crumbs}
+              name={row.title}
+              facts={subagentFacts(cliForConversationProvider(row.providerId), row.modelId)}
+              status={shown ? <SubagentStatusWords subagent={shown} /> : undefined}
+              onCrumb={onCrumb}
+            />
+            <SubagentEndNotice error={row.error ?? null} />
+            <div className="min-h-0 flex-1">
+              <RemoteConversationPanel
+                workspaceId={workspaceId}
+                connectionId={connectionId}
+                machineName={machineName}
+                remoteWorkspaceId={remoteWorkspaceId}
+                remoteAgentId={agentId}
+                title={row.title}
+                subagent={{ row, parentAgentId, parentName, onGoToParent: onBack }}
+              />
+            </div>
+          </>
+        )
+      }}
+    >
+      {chat}
+    </SubagentChatHost>
   )
 }

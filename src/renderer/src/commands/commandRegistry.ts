@@ -548,7 +548,7 @@ export const COMMAND_REGISTRY = [
   //
   // Consequence of routing to the cluster: it acts only while the workspace bar
   // is on screen. A door surface replaces the identity cluster with its own bar
-  // (WorkspaceHeader), so this is inert there — the same shape as the git.*
+  // (WorkspaceBand), so this is inert there — the same shape as the git.*
   // panel commands, which gate on `gitPanelActive` for the same reason.
   command({
     id: 'workspace.folder.reveal',
@@ -566,12 +566,12 @@ export const COMMAND_REGISTRY = [
   // their pane tab.
   command({
     id: 'pane.toggle',
-    title: 'Toggle workspace pane',
+    title: 'Toggle panel',
     category: 'panel',
     scopes: ['workspace'],
     defaultKeybindings: ['Primary+Alt+B'],
     availability: ['activeWorkspace'],
-    handlerPath: { kind: 'workspace-manager', handler: 'setPaneOpen(windowActiveWorkspaceId, !paneOpen)' },
+    handlerPath: { kind: 'workspace-manager', handler: 'togglePaneMenu(windowActiveWorkspaceId)' },
   }),
   // The pane's "+" from the keyboard: the menu of what can be opened there,
   // with the pane shown first if it was closed. T for "tab", as a new tab is
@@ -619,16 +619,27 @@ export const COMMAND_REGISTRY = [
     availability: ['activeWorkspace'],
     handlerPath: { kind: 'app-menu', command: 'panel.git.toggle' },
   }),
-  // The Agents list is a pane tab like Git: showing → close it, behind → bring
-  // it forward, absent → open it. Unbound, like Canvas; the palette, the pane's
-  // "+" menu and a chat's own agent lanes open it.
+  // The Backlog left the window's top row (owner ruling 2026-11-07), so this is
+  // its route from the keyboard and the palette, beside its row under
+  // Extensions. A pane tab like Git, and toggled like one. Unbound: it never had
+  // a chord, and a new command does not get to take one.
   command({
-    id: 'panel.agents.toggle',
-    title: 'Toggle agents',
+    id: 'panel.backlog.toggle',
+    title: 'Toggle backlog',
+    category: 'panel',
+    scopes: ['workspace'],
+    availability: ['activeWorkspace', 'backlogEnabled'],
+    handlerPath: { kind: 'workspace-manager', handler: "togglePaneKind(windowActiveWorkspaceId, 'backlog')" },
+  }),
+  // A chat's subagents are listed on the right-hand panel, so this opens it on
+  // its menu, and leaves it open if it is. Unbound, like Canvas.
+  command({
+    id: 'panel.subagents.show',
+    title: 'Show subagents',
     category: 'panel',
     scopes: ['workspace'],
     availability: ['activeWorkspace'],
-    handlerPath: { kind: 'workspace-manager', handler: "togglePaneKind(windowActiveWorkspaceId, 'agents')" },
+    handlerPath: { kind: 'workspace-manager', handler: 'showPaneMenu(windowActiveWorkspaceId)' },
   }),
   // Canvas is a pane tab like Files and Git, so its toggle reads the same way:
   // showing → close it, present but behind → bring it forward, absent → open
@@ -735,7 +746,7 @@ export const COMMAND_REGISTRY = [
   // No Fleet command: the Fleet panel was retired on 2026-09-05
   // (remote-sessions-in-the-sidebar). Paired machines' sessions are rows in
   // the sidebar's Remote band; machine management is Settings → Remote and
-  // the top bar's Remote glyph (WorkspaceActions → RemotePopover).
+  // the account menu's Remote row (AccountSurfaces → RemotePopover).
   command({
     id: 'terminal.new',
     title: 'Open plain terminal',

@@ -10,6 +10,7 @@ import type {
 import { useWorkspaceStore } from '../../store/workspaceStore'
 import { DRAWER_ROWS, EXTENSIONS_CATALOGUE_SURFACE_ID } from './extensionsDrawer'
 import { extensionContributionRows } from './extensionContributionRows'
+import { BacklogGlyph } from './pane/paneKinds'
 import { useSurfaceView } from './surfaceView'
 
 // The drawer's six fixed rows plus installed door contributions, RESOLVED
@@ -85,6 +86,7 @@ export function useExtensionsDrawerRows(): ExtensionsDrawerRowView[] {
   const openSurfaceId = catalogueModalOpen ? EXTENSIONS_CATALOGUE_SURFACE_ID : activeGlobalSurface
   const openGlobalSurface = useWorkspaceStore((s) => s.openGlobalSurface)
   const setSidebarSection = useWorkspaceStore((s) => s.setSidebarSection)
+  const openPaneTab = useWorkspaceStore((s) => s.openPaneTab)
   // Which view the OPEN surface is standing on, so exactly one of a
   // multi-view surface's rows reads selected — including when the person moved
   // with the surface's own rail rather than by clicking a row. Only the open
@@ -182,8 +184,30 @@ export function useExtensionsDrawerRows(): ExtensionsDrawerRowView[] {
         },
       ]
     })
+    // The Backlog keeps a row here (owner ruling 2026-11-07): it left the
+    // window's top row, and a row is how a person who has no chord for it finds
+    // it. It is a tab of the pane rather than a door, so it opens there on the
+    // workspace on screen, and no surface ever reads as this row's page.
+    const backlogRow: ExtensionsDrawerRowView[] = selectModuleEnabled(moduleOverrides, 'backlog')
+      ? [
+          {
+            key: 'pane:backlog',
+            rowId: null,
+            surfaceId: 'pane:backlog',
+            moduleId: 'backlog',
+            label: 'Backlog',
+            Icon: BacklogGlyph,
+            active: false,
+            open: () => {
+              const { activeWorkspaceId } = useWorkspaceStore.getState()
+              if (activeWorkspaceId) openPaneTab(activeWorkspaceId, { kind: 'backlog' })
+            },
+          },
+        ]
+      : []
     return [
       ...fixedRows,
+      ...backlogRow,
       ...extensionContributionRows({
         surfaces: globalSurfaces,
         navEntries: hostNavEntries,
@@ -198,7 +222,9 @@ export function useExtensionsDrawerRows(): ExtensionsDrawerRowView[] {
     activeView,
     hostNavEntries,
     globalSurfaces,
+    moduleOverrides,
     openGlobalSurface,
+    openPaneTab,
     openSurfaceId,
     setSidebarSection,
   ])

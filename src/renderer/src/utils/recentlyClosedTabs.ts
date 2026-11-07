@@ -51,7 +51,6 @@ export function closedPaneTabSpec(tab: WorkspacePaneTab): WorkspacePaneOpenInput
     case 'files':
     case 'git':
     case 'backlog':
-    case 'agents':
     case 'library':
       return { kind: tab.kind }
     case 'diff': {
@@ -69,7 +68,14 @@ export function closedPaneTabSpec(tab: WorkspacePaneTab): WorkspacePaneOpenInput
       }
     }
     case 'canvas':
-      return { kind: 'canvas', ...(tab.canvas?.path ? { canvas: { path: tab.canvas.path } } : {}) }
+      // The store too: reopened without it, another project's board would name
+      // one in this project, and the pane would make an empty board of that name.
+      return {
+        kind: 'canvas',
+        ...(tab.canvas?.path
+          ? { canvas: { path: tab.canvas.path, ...(tab.canvas.store ? { store: tab.canvas.store } : {}) } }
+          : {}),
+      }
     case 'document':
       return tab.document?.path ? { kind: 'document', document: { path: tab.document.path } } : null
     default:

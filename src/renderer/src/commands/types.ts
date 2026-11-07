@@ -36,6 +36,7 @@ export type CommandAvailability =
   // Canvas tab. Without it the toggle would open a tab that renders the
   // unavailable surface, which is a worse answer than not offering the command.
   | 'canvasEnabled'
+  | 'backlogEnabled'
   // The Git tab is showing in the active workspace's pane, so its
   // panel-command handlers (refresh/fetch/commit) can receive and act on a
   // dispatch.

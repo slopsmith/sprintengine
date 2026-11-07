@@ -38,8 +38,10 @@ import type { SignIns, SignInDone, SignInStarted } from '../machine/machine-sign
  *    `stale`: a paired device's message written long before it arrived.
  * 6: `handoffConversation`, a chat handed off to a fresh session, and
  *    `sendTurn`'s `origin` may give the reason `auto-compact`.
+ * 7: `messageSubagent`, the person's words for one agent a chat spawned, and
+ *    `sendTurn` takes `subagentMessage` and an `origin` reason `agent-message`.
  */
-export const BACKEND_WIRE_VERSION = 6
+export const BACKEND_WIRE_VERSION = 7
 
 /** Members answered over the wire. The synchronous ones are the router's to answer (from the mirror, or locally). */
 export const REMOTE_BACKEND_MEMBERS = [
@@ -51,6 +53,7 @@ export const REMOTE_BACKEND_MEMBERS = [
   'setModel',
   'interrupt',
   'stopSubagent',
+  'messageSubagent',
   'askSideQuestion',
   'cancelSideQuestion',
   'readContextBreakdown',

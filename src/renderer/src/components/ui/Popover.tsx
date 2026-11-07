@@ -4,7 +4,7 @@ import { OVERLAY_CHROME_CLASS, OVERLAY_SURFACE_CLASS } from './tokens'
 
 export type PopoverPlacement = 'bottom-start' | 'bottom-end' | 'top-start' | 'top-end'
 
-type PopoverRenderTriggerArgs = {
+export type PopoverTriggerArgs = {
   ref: { current: HTMLButtonElement | null }
   open: boolean
   openPopover: () => void
@@ -33,7 +33,7 @@ type PopoverProps = {
    * Surface).
    */
   layer?: 'popover' | 'menu'
-  renderTrigger: (args: PopoverRenderTriggerArgs) => React.ReactNode
+  renderTrigger: (args: PopoverTriggerArgs) => React.ReactNode
   children: React.ReactNode
   placement?: PopoverPlacement
   className?: string

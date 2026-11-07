@@ -3,7 +3,7 @@ import React, { type JSX } from 'react'
 import type { StudioLocalServer } from '../../../../../packages/studio-protocol/src/public'
 import { LocalServerGlyph } from '../AppIcons'
 import { GhostButton, Tooltip } from '../ui'
-import { LocalServersMenu, LocalServerStateWord, localServerExitLine, localServerStateWord } from './LocalServersMenu'
+import { LocalServersMenu, localServerExitLine, localServerStateWord } from './LocalServersMenu'
 
 // Where a person sees the local servers agents started, in the two places
 // they look: the open chat's composer strip (this conversation's servers,
@@ -67,53 +67,6 @@ export function localServersRowMarkCopy(
   const title = `${live.length === 1 ? 'Local server' : 'Local servers'}: ${words.join(', ')}`
   const lines = servers.map((server) => `${server.title} — ${localServerStateWord(server.state)}`)
   return { count: live.length, title, lines, ariaLabel: `${title}. Show local servers` }
-}
-
-/**
- * The open chat's local servers, on the composer's strip, beside the pull
- * request slot. Nothing is drawn for a conversation that linked none.
- */
-export function LocalServersStripButton({
-  workspaceId,
-  servers,
-  elsewhere,
-}: {
-  workspaceId: string
-  servers: readonly StudioLocalServer[]
-  /** The paired machine the servers run on, for a chat there. */
-  elsewhere?: { machineName: string }
-}): JSX.Element | null {
-  const copy = localServersStripCopy(servers)
-  if (!copy) return null
-  const single = servers.length === 1 ? servers[0] : null
-  const ariaLabel = elsewhere ? `${copy.ariaLabel}, on ${elsewhere.machineName}` : copy.ariaLabel
-  return (
-    <LocalServersMenu
-      workspaceId={workspaceId}
-      servers={servers}
-      ariaLabel={single ? `Local server ${single.title}` : 'Local servers from this conversation'}
-      {...(elsewhere ? { elsewhere } : {})}
-      renderTrigger={({ ref, togglePopover, triggerProps }) => (
-        <Tooltip content={ariaLabel} placement="top" wrapperClassName="flex min-w-0">
-          <GhostButton
-            ref={ref}
-            size="xs"
-            tone="subtle"
-            onClick={togglePopover}
-            {...triggerProps}
-            aria-label={ariaLabel}
-            data-strip-local-servers={servers.length}
-            className="min-w-0 gap-1.5 whitespace-nowrap"
-          >
-            <LocalServerGlyph className="icon-xs shrink-0" />
-            <span className="min-w-0 max-w-48 truncate">{copy.label}</span>
-            <span aria-hidden="true">·</span>
-            {single ? <LocalServerStateWord state={single.state} /> : <span className="shrink-0">{copy.state}</span>}
-          </GhostButton>
-        </Tooltip>
-      )}
-    />
-  )
 }
 
 /**

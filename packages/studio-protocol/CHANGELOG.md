@@ -4,6 +4,10 @@
 
 ### Added
 
+- **The person's words for one agent** (`conversation-agent-message`, in
+  `welcome.conversation`, owners): `conversation.messageSubagent` passes them to
+  one agent a chat spawned, through that chat's model.
+
 - The socket does not advertise `conversation-subagents`: its conversation
   topic carries no `subagents` frames, and a window on it reads a chat's
   sub-agents from the records.

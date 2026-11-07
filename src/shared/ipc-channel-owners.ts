@@ -81,6 +81,7 @@ const SERVER_IPC_CHANNEL_TABLE = {
   'conversation:sessions:set-model': {},
   'conversation:sessions:mcp-action': {},
   'conversation:sessions:stop-subagent': {},
+  'conversation:sessions:message-subagent': {},
   'conversation:sessions:side-question': {},
   'conversation:sessions:cancel-side-question': {},
   'conversation:sessions:context-breakdown': { retry: 'once' },
@@ -154,6 +155,8 @@ const SERVER_IPC_CHANNEL_TABLE = {
   'mesh:visit-conversation': {},
   'mesh:workspace-checkout': {},
   'mesh:workspace-extensions': {},
+  'mesh:canvas-boards': {},
+  'mesh:canvas-screenshot': {},
   // The module kernel's own channel and the bundled modules' (scheduled agents).
   'modules:bridge:invoke': {},
   'modules:host-service:invoke': {},

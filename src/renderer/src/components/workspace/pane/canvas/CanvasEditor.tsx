@@ -194,6 +194,8 @@ const CANVAS_DARK_FILTER = 'invert(93%) hue-rotate(180deg)'
 type CanvasEditorProps = {
   workspaceId: string
   path: string
+  /** Another project's store, when this is its board: every call names the board with it. */
+  store?: string
   /** The board as the tab last knew it. Read once, at mount. */
   initial: CanvasBoardState
   /** The board's name — the editor's document name, and what an export is called. */
@@ -258,6 +260,7 @@ const UI_OPTIONS = {
 export default function CanvasEditor({
   workspaceId,
   path,
+  store,
   initial,
   name,
   theme,
@@ -281,7 +284,7 @@ export default function CanvasEditor({
   // later value, so freezing it here says so out loud rather than leaving a
   // prop that looks live and is not.
   const initialRef = useRef(initial)
-  const board = useMemo(() => ({ workspaceId, path }), [workspaceId, path])
+  const board = useMemo(() => ({ workspaceId, path, ...(store ? { store } : {}) }), [workspaceId, path, store])
   // The board, readable from a cleanup that must run ONLY on unmount. An effect
   // that named `board` in its dependencies would tear down and set up again if
   // it ever changed, and that particular cleanup drops the editor handle — so
@@ -420,8 +423,7 @@ export default function CanvasEditor({
     let result: Awaited<ReturnType<typeof window.api.canvasCommitScene>>
     try {
       result = await window.api.canvasCommitScene({
-        workspaceId: board.workspaceId,
-        path: board.path,
+        ...board,
         baseRevision,
         elements,
         appState: reduceAppState(editor.getAppState() as unknown as Record<string, unknown>),
@@ -444,8 +446,7 @@ export default function CanvasEditor({
       // first — so the answer is applied exactly as a push is, which is also
       // what moves both revisions and the echo hash.
       applyPush({
-        workspaceId: board.workspaceId,
-        path: board.path,
+        ...board,
         revision: result.value.revision,
         elements: result.value.elements,
         // The merge answers with elements alone; every file in the scene is one
@@ -459,7 +460,7 @@ export default function CanvasEditor({
     // Main took exactly what was sent: what is on screen IS that revision.
     revisionRef.current = outcome.revision
     appliedRevisionRef.current = outcome.revision
-  }, [applyPush, board.path, board.workspaceId])
+  }, [applyPush, board])
 
   const cancelCommitTimer = useCallback(() => {
     if (commitTimerRef.current === null) return
@@ -568,8 +569,7 @@ export default function CanvasEditor({
       // 400ms of drawing, which is the same thing a crash would lose.
       void window.api
         .canvasCommitScene({
-          workspaceId: boardRef.current.workspaceId,
-          path: boardRef.current.path,
+          ...boardRef.current,
           baseRevision: revisionRef.current,
           elements,
           appState: reduceAppState(editor.getAppState() as unknown as Record<string, unknown>),
@@ -584,12 +584,12 @@ export default function CanvasEditor({
     if (!shouldNoteHumanInput(now, humanInputAtRef.current)) return
     humanInputAtRef.current = now
     try {
-      window.api.canvasNoteHumanInput({ workspaceId: board.workspaceId, path: board.path })
+      window.api.canvasNoteHumanInput(board)
     } catch {
       // Fire-and-forget by contract: the person is drawing, and a missing
       // channel must not interrupt them.
     }
-  }, [board.path, board.workspaceId])
+  }, [board])
 
   /**
    * This editor's half of an export.

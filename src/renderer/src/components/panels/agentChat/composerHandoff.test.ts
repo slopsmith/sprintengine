@@ -135,3 +135,19 @@ test('with several chats, the quote goes to the one with the keyboard, else one 
     unregisterSecond()
   }
 })
+
+test('a quote goes to the sub-agent drawn in its parent’s place, not to the parent hidden beneath it', async () => {
+  const { pushSubagentView, resetSubagentViews } = await import('./subagentViewStack')
+  chat({
+    parent: { conversation: { providerId: 'p', modelId: 'm' } },
+    child: { conversation: { providerId: 'p', modelId: 'm' }, subagentOf: { agentId: 'parent', startedAt: 1 } },
+  })
+  pushSubagentView('ws', 'parent', { kind: 'chat', agentId: 'child' })
+  try {
+    expect(deliverQuoteToWorkspaceChat('ws', QUOTE)).toBe('child')
+    expect(fixtures.drafts.get('ws/child')?.text).toContain('src/a.ts:L3')
+    expect(fixtures.drafts.has('ws/parent')).toBe(false)
+  } finally {
+    resetSubagentViews()
+  }
+})

@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 
-// The account menu is identity and sign-out, and nothing else: the app is open
-// source and signing in unlocks nothing (owner ruling 2026-09-27), so no plan,
-// tier or upgrade may appear on it. This renders the real surface, because an
-// upgrade row or a plan label is a regression in what the element shows.
+// The account menu is identity, Remote, Sessions and the way in or out: the app
+// is open source and signing in unlocks nothing (owner ruling 2026-09-27), so no
+// plan, tier or upgrade may appear on it. It opens signed out too, because Remote
+// and Sessions are not an account's, and the web client is always signed out.
+// This renders the real surface, because an upgrade row or a plan label is a
+// regression in what the element shows.
 import { JSDOM } from 'jsdom'
 
 import React from 'react'
@@ -59,7 +61,7 @@ test('SidebarAccountBar.accountMenu', async () => {
   }
   let retries = 0
 
-  function render(authState: SprintEngineAuthState): HTMLElement {
+  function render(authState: SprintEngineAuthState, extra: Record<string, unknown> = {}): HTMLElement {
     const host = dom.window.document.createElement('div')
     dom.window.document.body.appendChild(host)
     const root = createRoot(host as unknown as Element)
@@ -78,6 +80,7 @@ test('SidebarAccountBar.accountMenu', async () => {
           logout: () => {},
           openSettings: () => {},
           settingsOpen: false,
+          ...extra,
         }),
       )
     })
@@ -130,6 +133,53 @@ test('SidebarAccountBar.accountMenu', async () => {
     [],
     'the cluster is exactly the account control and the gear — no trigger glyphs',
   )
+
+  dom.window.document.body.innerHTML = ''
+
+  // Signed out it still opens, with the rows that are not an account's and the
+  // way in. A row pressed closes the menu and opens what it names.
+  const opened: string[] = []
+  let closed = 0
+  let signIns = 0
+  const signedOut: SprintEngineAuthState = {
+    authenticated: false,
+    user: null,
+    selectedOrganization: null,
+    status: 'signed_out',
+    message: null,
+  }
+  render(signedOut, {
+    remoteRow: { meta: '2 machines', onSelect: () => opened.push('remote') },
+    sessionsRow: { meta: '3 running', onSelect: () => opened.push('sessions') },
+    accountBadge: { count: 3, tone: 'good', label: '3 sessions running' },
+    setAccountOpen: () => {
+      closed += 1
+    },
+    startLogin: () => {
+      signIns += 1
+    },
+  })
+  assert.ok(body().includes('Not signed in'), 'it says so')
+  const row = (name: string) =>
+    [...dom.window.document.querySelectorAll('[data-account-item="true"]')].find((item) =>
+      (item.textContent ?? '').trim().startsWith(name),
+    ) as HTMLButtonElement | undefined
+  assert.ok(row('Remote')?.textContent?.includes('2 machines'), 'Remote says what it has')
+  assert.ok(row('Sessions')?.textContent?.includes('3 running'), 'Sessions says what it has')
+  act(() => row('Sessions')?.click())
+  act(() => row('Remote')?.click())
+  assert.deepEqual(opened, ['sessions', 'remote'])
+  assert.equal(closed, 2, 'and the menu closes behind each')
+  act(() => row('Sign in')?.click())
+  assert.equal(signIns, 1, 'signing in is the menu’s last row')
+  const trigger = dom.window.document.querySelector('[data-account-trigger]')
+  assert.equal(
+    trigger?.getAttribute('aria-label'),
+    'Account · Your account, 3 sessions running',
+    'the avatar says what it wears',
+  )
+  assert.equal(trigger?.textContent?.trim(), '3', 'it wears the count those rows would otherwise hide')
+  dom.window.document.body.innerHTML = ''
 
   console.log('SidebarAccountBar.accountMenu.test.tsx: ok')
 })

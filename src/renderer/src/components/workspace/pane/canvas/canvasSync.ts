@@ -204,9 +204,13 @@ function rendererPlatform(): string {
   return typeof platform === 'string' ? platform : 'linux'
 }
 
-/** One string per board, whichever spelling of its path names it: what {@link canvasPushMatchesBoard} compares. */
+/**
+ * One string per board, whichever spelling of its path names it: what
+ * {@link canvasPushMatchesBoard} compares. The store is part of the name, so one
+ * chat's foreign `arch` is not its own `arch`.
+ */
 export function canvasBoardKey(board: CanvasBoardRef): string {
-  return `${board.workspaceId}\0${canvasBoardKeyPath(board.path, rendererPlatform())}`
+  return `${board.workspaceId}\0${board.store ?? ''}\0${canvasBoardKeyPath(board.path, rendererPlatform())}`
 }
 
 /**

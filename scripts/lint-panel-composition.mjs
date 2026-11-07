@@ -10,7 +10,7 @@
 //       density, and accent treatment — so this guard catches the composition
 //       regression that the design-token lint cannot see.
 //
-//   (b) `WorkspaceActions` declares at most five at-rest control groups via
+//   (b) `BandActions` declares at most five at-rest control groups via
 //       `{/* top-bar-group: <name> */}` JSX comment markers. The cap is the
 //       BRAND-APP rule "≤ 5 controls per panel header".
 //       Adding a sixth marker fails this guard; renaming or removing one
@@ -26,19 +26,23 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 
 const PANELS_DIR = resolve(process.cwd(), 'src/renderer/src/components/panels')
-const WORKSPACE_TOPBAR_PATH = resolve(process.cwd(), 'src/renderer/src/components/workspace/WorkspaceActions.tsx')
+const WORKSPACE_TOPBAR_PATH = resolve(process.cwd(), 'src/renderer/src/components/workspace/BandActions.tsx')
 const TOP_BAR_GROUP_MARKER = /\btop-bar-group:\s*([a-z0-9-]+)\b/g
 const TOP_BAR_GROUP_CAP = 5
 // Canonical at-rest group inventory. Mirrors the BRAND-APP rule and the
 // panel-design-system.md TopBar table. Adding to this set requires a brand
 // review.
 const CANONICAL_TOP_BAR_GROUPS = new Set([
-  'activity-and-views',
-  'communication',
+  'views',
+  'module-items',
   // `agent-spawn` retired: its split-button is deleted; spawning is
   // New chat's and the tab strip's job.
   // `account-and-settings` retired: account + Settings relocated to the sidebar
-  // bottom (SidebarAccountBar). The set above is the whole TopBar inventory.
+  // bottom (SidebarAccountBar).
+  // `activity-and-views` and `communication` retired (owner ruling 2026-11-07):
+  // the header bar went, and Sessions, Remote and the bell with it, to the rail
+  // and the account menu. The set above is what modules contribute to the band,
+  // and is the whole TopBar inventory.
 ])
 
 // Files exempt from the rule with reasons. Keep this list small and
@@ -149,7 +153,7 @@ try {
   const unique = new Set(seenGroups)
   const unexpected = [...unique].filter((g) => !CANONICAL_TOP_BAR_GROUPS.has(g))
   const missing = [...CANONICAL_TOP_BAR_GROUPS].filter((g) => !unique.has(g))
-  process.stdout.write('\nWorkspaceActions control-group cap\n')
+  process.stdout.write('\nBandActions control-group cap\n')
   process.stdout.write(`  cap:        ≤ ${TOP_BAR_GROUP_CAP} at-rest groups (BRAND-APP)\n`)
   process.stdout.write(`  declared:   ${seenGroups.length} marker(s); ${unique.size} unique\n`)
   process.stdout.write(`  canonical:  ${[...CANONICAL_TOP_BAR_GROUPS].join(', ')}\n`)
@@ -181,7 +185,7 @@ try {
   }
 } catch (error) {
   process.stdout.write(
-    `\nWorkspaceActions control-group cap: skipped (could not read ${WORKSPACE_TOPBAR_PATH}: ${error.message})\n`,
+    `\nBandActions control-group cap: skipped (could not read ${WORKSPACE_TOPBAR_PATH}: ${error.message})\n`,
   )
   topBarFindings += 1
 }

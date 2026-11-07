@@ -157,7 +157,12 @@ export function AppNavigator() {
       </HomeStack.Screen>
       <HomeStack.Screen name="ConversationAgent" options={{ headerShown: false }}>
         {({ navigation, route }) => (
-          <ConversationAgentScreen conversation={route.params} laneId={route.params.laneId} onBack={() => navigation.goBack()} />
+          <ConversationAgentScreen
+            conversation={route.params}
+            laneId={route.params.laneId}
+            onBack={() => navigation.goBack()}
+            onChat={() => navigation.navigate("Conversation", route.params)}
+          />
         )}
       </HomeStack.Screen>
       <HomeStack.Screen name="ConversationPlan" options={{ headerShown: false }}>

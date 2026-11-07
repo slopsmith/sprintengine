@@ -20,7 +20,7 @@ import { BrowserGlyph, CanvasGlyph } from '../paneKinds'
 // pictures can be looked over without scrolling the transcript for them. Each
 // one jumps back to the turn it came in.
 //
-// It follows the focused chat as the Agents tab does, reading the chat's own
+// It follows the focused chat as the right-hand panel does, reading the chat's own
 // session rather than anything the chat view holds, so it shows the chat even
 // when its view is not mounted.
 
@@ -36,7 +36,7 @@ export function LibraryTab({ workspaceId, active }: { workspaceId: string; activ
   const focusedAgentId = useWorkspaceStore((s) => s.focusedAgentByWorkspaceId[workspaceId] ?? null)
   const local = useLocalChatBinding(workspaceId, focusedAgentId ?? '')
   // A chat on a paired machine has no record here; it is read through the
-  // transport its pane holds, as the Agents tab reads it.
+  // transport its pane holds, as the right-hand panel reads it.
   const remote = useRemoteChat(workspaceId, local ? null : focusedAgentId)
   const remoteShown = !local && remote !== null
   const agentId = remoteShown ? remote.agentId : focusedAgentId

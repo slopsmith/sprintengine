@@ -1,55 +1,26 @@
-import React, { useCallback, useEffect, useMemo, type JSX } from 'react'
+import React, { useCallback, useEffect, useMemo } from 'react'
 
 import { useWorkspaceStore } from '../../../store/workspaceStore'
 import { selectModuleEnabled } from '../../../modules'
 import { dispatchFileReveal } from '../../../utils/fileReveal'
-import { DiffStatPill, OutlineButton, Popover, RowButton, Tooltip } from '../../ui'
-import {
-  AgentsGlyph,
-  BrowserGlyph,
-  CanvasGlyph,
-  DiffGlyph,
-  FilesGlyph,
-  LibraryGlyph,
-} from '../../workspace/pane/paneKinds'
-import { openAgentsPane } from '../../workspace/pane/agents/agentsPaneFocus'
+import { openSubagentList } from './subagentViewStack'
 import type { TranscriptEntry } from './conversationProjection'
 import { deriveChatActivity, sharedEditFolder, type ChatActivity, type ChatActivityKind } from './chatActivity'
 import {
   markRowSeen,
   publishChatActivity,
   rowSeen,
-  useChatActivity,
   type ChatActivityRow,
   type PublishedChatActivity,
 } from './chatActivityStore'
 
 // What the agent touched in a chat — the files it changed and where they sit,
 // the page it drove, the board it drew on, the agents it sent off and the
-// pictures in the chat — each row opening the workspace pane on that tab, so
-// none of it is a hunt through the pane's strip after a run. It lives in the
-// title bar as a pill of the rows' glyphs, which drops the rows down. It is
+// pictures in the chat — each opening the workspace pane on that tab, so none
+// of it is a hunt after a run. The right-hand panel draws it (`ChatPanel`). It is
 // never docked over the transcript at any width (owner ruling 2026-11-02): a
 // card there took its width out of the chat's text column and pushed the
 // conversation left.
-
-const GLYPHS: Record<ChatActivityKind, (props: { className?: string }) => JSX.Element> = {
-  changes: DiffGlyph,
-  files: FilesGlyph,
-  browser: BrowserGlyph,
-  canvas: CanvasGlyph,
-  agents: AgentsGlyph,
-  library: LibraryGlyph,
-}
-
-const PANE_KIND: Record<ChatActivityKind, string> = {
-  changes: 'diff',
-  files: 'files',
-  browser: 'browser',
-  canvas: 'canvas',
-  agents: 'agents',
-  library: 'library',
-}
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
@@ -118,7 +89,7 @@ export function chatActivityRows(
       case 'agents': {
         const agents = activity.agents ?? { total: 0, working: 0 }
         return row(
-          `Agents · ${agents.total}`,
+          `Subagents · ${agents.total}`,
           agents.working ? `${agents.working} working` : 'All done',
           agents.working > 0,
           `${agents.total}:${agents.working}`,
@@ -131,7 +102,7 @@ export function chatActivityRows(
 }
 
 /**
- * Derives the chat's rows and publishes them for the title bar's pill.
+ * Derives the chat's rows and publishes them for the right-hand panel.
  * Called once per chat view.
  */
 export function useChatActivityCard({
@@ -225,7 +196,7 @@ export function useChatActivityCard({
           return
         }
         case 'agents':
-          openAgentsPane(workspaceId, agentId, null)
+          openSubagentList(workspaceId)
           return
         case 'library':
           openPaneTab(workspaceId, { kind: 'library' })
@@ -240,139 +211,4 @@ export function useChatActivityCard({
     publishChatActivity(workspaceId, agentId, published.rows.length ? published : null)
   }, [workspaceId, agentId, published])
   useEffect(() => () => publishChatActivity(workspaceId, agentId, null), [workspaceId, agentId])
-}
-
-/** The pane tab showing now, when the pane is open: the row it belongs to is the selected one. */
-function useActivePaneKind(workspaceId: string | null): string | null {
-  return useWorkspaceStore((state) => {
-    const pane = state.workspaces.find((workspace) => workspace.id === workspaceId)?.paneState
-    if (!pane?.open) return null
-    return pane.tabs.find((tab) => tab.id === pane.activeTabId)?.kind ?? null
-  })
-}
-
-/** The rows themselves, as the pill's drop-down lists them. */
-export function ChatActivityRows({
-  rows,
-  onOpen,
-  activePaneKind,
-}: {
-  rows: readonly ChatActivityRow[]
-  onOpen: (kind: ChatActivityKind) => void
-  activePaneKind: string | null
-}) {
-  return (
-    <ul className="flex flex-col gap-0.5" aria-label="What the agent touched">
-      {rows.map((row) => {
-        const Glyph = GLYPHS[row.kind]
-        const selected = activePaneKind === PANE_KIND[row.kind]
-        // An agent in it now wears the violet the pane's tabs and the Files
-        // tree use for that; a row changed since it was opened, primary ink.
-        const glyphTone = row.live
-          ? 'text-[color:var(--agent-trail-ink)]'
-          : row.unseen
-            ? 'text-[color:var(--text-strong)]'
-            : 'text-[color:var(--text-muted)]'
-        return (
-          <li key={row.kind}>
-            <RowButton
-              selected={selected}
-              className="flex min-w-0 items-center gap-2.5 text-body text-[color:var(--text-default)]"
-              onClick={() => onOpen(row.kind)}
-            >
-              <Glyph className={`icon-sm shrink-0 ${glyphTone}`} />
-              <span className="min-w-0 flex-1 truncate">{row.label}</span>
-              {row.diff ? (
-                <DiffStatPill
-                  added={row.diff.added}
-                  removed={row.diff.removed}
-                  ariaLabel={`${row.diff.added} lines added, ${row.diff.removed} removed`}
-                  className="shrink-0"
-                />
-              ) : row.meta ? (
-                <span
-                  className={`max-w-[120px] shrink-0 truncate text-meta ${
-                    row.live ? 'text-[color:var(--agent-trail-ink)]' : 'text-[color:var(--text-muted)]'
-                  }`}
-                >
-                  {row.meta}
-                </span>
-              ) : null}
-            </RowButton>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-/**
- * The focused chat's activity in the title bar: the rows' glyphs and an
- * arrow, which drops the rows down.
- */
-export function ChatActivityPill({ workspaceId }: { workspaceId: string | null }) {
-  const agentId = useWorkspaceStore((state) =>
-    workspaceId ? (state.focusedAgentByWorkspaceId[workspaceId] ?? null) : null,
-  )
-  const activity = useChatActivity(workspaceId, agentId)
-  const activePaneKind = useActivePaneKind(workspaceId)
-  const [open, setOpen] = React.useState(false)
-  if (!activity || !activity.rows.length) return null
-  return (
-    <Popover
-      open={open}
-      onOpenChange={setOpen}
-      ariaLabel="What the agent touched"
-      popupRole="dialog"
-      placement="bottom-end"
-      material="glass"
-      surfaceClassName="w-[264px] p-1"
-      renderTrigger={({ ref, triggerProps, togglePopover }) => (
-        <Tooltip content="What the agent touched">
-          <OutlineButton
-            ref={ref}
-            {...triggerProps}
-            size="sm"
-            pressed={open}
-            aria-label="What the agent touched"
-            onClick={togglePopover}
-            className="app-no-drag mr-1.5 shrink-0 gap-1.5 px-2 text-[color:var(--text-muted)]"
-          >
-            {activity.rows.map((row) => {
-              const Glyph = GLYPHS[row.kind]
-              return (
-                <Glyph
-                  key={row.kind}
-                  className={`icon-xs ${row.live ? 'text-[color:var(--agent-trail-ink)]' : row.unseen ? 'text-[color:var(--text-strong)]' : ''}`}
-                />
-              )
-            })}
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
-              className={`icon-xs transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
-            >
-              <path
-                d="m4 6 4 4 4-4"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </OutlineButton>
-        </Tooltip>
-      )}
-    >
-      <ChatActivityRows
-        rows={activity.rows}
-        activePaneKind={activePaneKind}
-        onOpen={(kind) => {
-          setOpen(false)
-          activity.open(kind)
-        }}
-      />
-    </Popover>
-  )
 }

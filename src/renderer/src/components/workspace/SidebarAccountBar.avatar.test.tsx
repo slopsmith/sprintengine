@@ -176,10 +176,13 @@ test('SidebarAccountBar.avatar', async () => {
   }
   reset()
 
-  // Signed out is unchanged: a Sign in button, no identity disc at all.
+  // Signed out: the plain square that opens the menu, no identity disc at all.
   render(state(null, false), false)
   assert.equal(avatars().length, 0, 'signed out renders no avatar')
-  assert.ok(dom.window.document.querySelector('button[aria-label="Sign in"]'), 'signed out offers sign-in')
+  assert.ok(
+    dom.window.document.querySelector('button[aria-label="Account · Your account"]'),
+    'signed out still has the account control',
+  )
   reset()
 
   console.log('sidebar-account-bar avatar: ok')

@@ -15,6 +15,8 @@ import {
   MESH_CREATE_SCHEDULED_AGENT_CHANNEL,
   MESH_UPDATE_SCHEDULED_AGENT_CHANNEL,
   MESH_WORKSPACE_CHECKOUT_CHANNEL,
+  MESH_CANVAS_BOARDS_CHANNEL,
+  MESH_CANVAS_SCREENSHOT_CHANNEL,
   MESH_WORKSPACE_EXTENSIONS_CHANNEL,
   MESH_FORGET_CHANNEL,
   MESH_GET_LIVE_STATE_CHANNEL,
@@ -199,6 +201,21 @@ export function registerMeshIpc(ipcMain: IpcMain, service: AutomationService): v
     return service
       .mesh()
       .workspaceExtensions({ connectionId: record.connectionId, workspaceId: record.workspaceId, cli: record.cli })
+  })
+  ipcMain.handle(MESH_CANVAS_BOARDS_CHANNEL, (_event, input: unknown) => {
+    const record = asRecord(input) ?? {}
+    return service
+      .mesh()
+      .canvasBoards({ connectionId: record.connectionId, workspaceId: record.workspaceId, scope: record.scope })
+  })
+  ipcMain.handle(MESH_CANVAS_SCREENSHOT_CHANNEL, (_event, input: unknown) => {
+    const record = asRecord(input) ?? {}
+    return service.mesh().canvasScreenshot({
+      connectionId: record.connectionId,
+      workspaceId: record.workspaceId,
+      board: record.board,
+      dark: record.dark,
+    })
   })
   // A remote chat's Create PR, a step per channel as the shell's own are:
   // every one runs on the chat's machine, in its checkout there.

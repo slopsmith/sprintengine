@@ -48,7 +48,8 @@ it took `files` (a message's files attached by path), both on 2026-10-07. It
 went to 5 when `sendTurn` took `composedAt` and `confirmedStale` and could
 answer `stale` (2026-10-20), and to 6 when it gained `handoffConversation`, a
 chat handed off to a fresh session, and `sendTurn`'s `origin` the reason
-`auto-compact` (2026-10-21).
+`auto-compact` (2026-10-21), and to 7 when it gained `messageSubagent`, and
+`sendTurn` `subagentMessage` and the `origin` reason `agent-message` (2026-11-07).
 
 A session's summary, which that wire pushes with every chat event, carries
 three optional clocks a reader must not count on: `lastTurnEndedAt` (when
@@ -184,6 +185,21 @@ and says that machine's Studio needs updating; one that sees an answer of
 another `version` counts nothing from it and says the same. The desktop
 asking prices the rows itself, so two machines on different price lists
 still agree.
+
+`canvas-machine-boards` (2026-11-07) lets a paired desktop's Canvas pane see this
+machine's boards. `canvas.list` takes `scope: machine` and answers every board
+here with its `project` (null for a removed project), `here`, `workspaceId` and
+`id`, and `board` on the other canvas tools takes that `id`. A desktop that sees
+the capability asks for all of them. On a machine that lacks it, it calls
+`canvas.list` for the one workspace, with no `scope`, which an older machine has
+always answered, and the pane says in words that the list is that project's
+alone. Such a row has no `id`, so its picture and its new chat name the board by
+path, from that project. Neither end needs a version bump: every new member is
+optional. A machine offering no canvas tools (a server with no desktop open)
+answers "Unknown tool", and the desktop says to open Studio there. Every board
+name on a machine, removed projects included, is now readable on
+`workspace:read`: there is no per-project scope. The phone does not use any of
+this. It only learned to show a board named by `id` as its name.
 
 Bump the version instead when the change is not additive: a field that changes
 meaning or type, a field that is removed, a response whose shape a peer is
@@ -502,6 +518,24 @@ sends it only where it is advertised (a desktop following another machine's
 chat refuses it there in words first). The Studio RPC advertises it too: its
 `conversation.stopSubagent` method, an owner's for now, reads the lane's own
 validator and reaches the same host.
+The person's words for one agent are the `conversation-agent-message`
+capability (2026-11-07): a `messageSubagent` command names an agent as
+`stopSubagent` does and carries `message`. No harness delivers to an agent
+directly, and a user message aimed at one reaches its parent, so the desktop
+asks the chat's own model to use its messaging tool, addressed by the agent's
+task id: steered into a running turn, or as a turn of its own. It costs that
+model a turn. The `user_message` it records has the `origin` reason
+`agent-message` and a `subagentMessage` (`toolUseId`, `text`), which is what a
+lane shows; a reader that knows neither draws Studio's notice, as it would any.
+Each listed chat says whether its provider can as `capabilities.messageSubagent`,
+an optional boolean, and a `subagent_status` may say `canContinue: false`. All of
+it is additive: a desktop without the capability refuses the kind as
+`unsupported_command`, and a client sends it only where it is advertised (a
+desktop following another machine's chat refuses it there in words first). A
+client draws an agent's box only with both, and otherwise no box at all, only a
+way to the parent (owner ruling 2026-11-07). The Studio RPC advertises it too:
+its `conversation.messageSubagent` method, an owner's for now, reads the lane's
+own validator and reaches the same host. `BACKEND_WIRE_VERSION` went to 7 for it.
 A chat handed off from a paired device is the `conversation-handoff`
 capability (2026-10-25): a `handoff` command, carrying nothing but its command
 id, hands the chat off to a fresh session as the desktop's own Handoff does,

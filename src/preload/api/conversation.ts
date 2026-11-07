@@ -31,6 +31,7 @@ import type {
   ConversationSessionActionResult,
   ConversationSetModelInput,
   ConversationMcpServerActionInput,
+  ConversationMessageSubagentInput,
   ConversationStopSubagentInput,
   ConversationCancelSideQuestionInput,
   ConversationContextBreakdownInput,
@@ -172,6 +173,10 @@ type ConversationIpcRenderer = {
     input: ConversationStopSubagentInput,
   ): Promise<ConversationSessionActionResult>
   invoke(
+    channel: 'conversation:sessions:message-subagent',
+    input: ConversationMessageSubagentInput,
+  ): Promise<ConversationSessionActionResult>
+  invoke(
     channel: 'conversation:sessions:side-question',
     input: ConversationSideQuestionInput,
   ): Promise<ConversationSideQuestionResult>
@@ -288,6 +293,9 @@ export function createConversationApi(renderer: ConversationIpcRenderer) {
     ): Promise<ConversationMcpServerActionResult> => renderer.invoke('conversation:sessions:mcp-action', input),
     conversationSessionStopSubagent: (input: ConversationStopSubagentInput): Promise<ConversationSessionActionResult> =>
       renderer.invoke('conversation:sessions:stop-subagent', input),
+    conversationSessionMessageSubagent: (
+      input: ConversationMessageSubagentInput,
+    ): Promise<ConversationSessionActionResult> => renderer.invoke('conversation:sessions:message-subagent', input),
     conversationSessionAskSideQuestion: (
       input: ConversationSideQuestionInput,
     ): Promise<ConversationSideQuestionResult> => renderer.invoke('conversation:sessions:side-question', input),
@@ -393,6 +401,7 @@ export function createConversationApi(renderer: ConversationIpcRenderer) {
     | 'conversationSessionSetModel'
     | 'conversationSessionMcpAction'
     | 'conversationSessionStopSubagent'
+    | 'conversationSessionMessageSubagent'
     | 'conversationSessionAskSideQuestion'
     | 'conversationSessionCancelSideQuestion'
     | 'conversationSessionContextBreakdown'

@@ -328,8 +328,10 @@ type MenuProps = {
   ariaLabel: string
   placement?: PopoverProps['placement']
   layer?: PopoverProps['layer']
-  /** The face: the strip's button, the sidebar's mark. */
+  /** The face: the panel's row, the sidebar's mark. */
   renderTrigger: PopoverProps['renderTrigger']
+  /** The face is a row: it takes the width it is given. */
+  fill?: boolean
   /** The paired machine the servers run on, for a chat there: read-only, opened from here where they reach. */
   elsewhere?: { machineName: string }
 }
@@ -342,6 +344,7 @@ export function LocalServersMenu({
   layer,
   renderTrigger,
   elsewhere,
+  fill = false,
 }: MenuProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [tailnet, setTailnet] = useState<TailnetShareStatus | null>(null)
@@ -404,7 +407,7 @@ export function LocalServersMenu({
     // on a click), and the surface is portalled but still a React child of
     // this span: the menu's clicks and keys end here.
     <span
-      className="inline-flex min-w-0"
+      className={fill ? 'flex w-full min-w-0' : 'inline-flex min-w-0'}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
@@ -420,7 +423,7 @@ export function LocalServersMenu({
         layer={layer}
         surfaceClassName={`min-w-[240px] max-w-[360px] ${MENU_LIST_CLASS}`}
         onOpenAutoFocus={focusFirstItem}
-        className="min-w-0"
+        className={fill ? 'w-full min-w-0' : 'min-w-0'}
         renderTrigger={renderTrigger}
       >
         <div role="none" onKeyDown={(event) => roveMenuFocus(event, surfaceRef.current)}>

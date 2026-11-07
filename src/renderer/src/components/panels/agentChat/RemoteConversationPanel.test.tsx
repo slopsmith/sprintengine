@@ -98,6 +98,24 @@ const thread: MeshConversation = {
 
 // Mounts the remote pane against a scripted Mesh API. The local
 // conversation API is absent altogether: nothing in this view may reach it.
+// The right-hand panel, beside the chat as the window has it. It reads the chat
+// only through what the chat publishes, so a paired machine's facts reach it
+// the way a local chat's do. Its reading of a local checkout is not in play.
+vi.mock('../../workspace/pane/panel/useWorkspaceCheckoutFacts', () => ({
+  useWorkspaceCheckoutFacts: () => ({ branch: null, changes: null }),
+}))
+const panelProps = (workspaceId: string) => ({
+  workspaceId,
+  tabs: [],
+  items: [],
+  currentTabId: null,
+  onOpenTab: () => undefined,
+  onCloseTab: () => undefined,
+  onTabContextMenu: () => undefined,
+  addControl: null,
+  onClose: () => undefined,
+})
+
 async function mountRemote({
   access,
   permissionPreset,
@@ -111,6 +129,7 @@ async function mountRemote({
   quotes = false,
   steerSends = false,
   stopSubagents = false,
+  messageSubagents = false,
   handoff = false,
   rewind = false,
   checkpointRevert = false,
@@ -156,6 +175,7 @@ async function mountRemote({
   steerSends?: boolean
   /** The machine stops one agent of a chat by itself (`conversation-stop-subagent`). */
   stopSubagents?: boolean
+  messageSubagents?: boolean
   /** The machine hands its chats off to a fresh session (`conversation-handoff`). */
   handoff?: boolean
   /** The machine takes a chat back to before one of its messages (`conversation-rewind`). */
@@ -249,6 +269,7 @@ async function mountRemote({
       quotes,
       steerSends,
       stopSubagents,
+      messageSubagents,
       handoff,
       rewind,
       checkpointRevert,
@@ -351,6 +372,9 @@ async function mountRemote({
     meshConversationResolveApproval: vi.fn(async () => ({ ok: true })),
     meshConversationInterrupt: vi.fn(async () => ({ ok: true })),
     meshConversationHandoff: vi.fn(async (_input: { key: MeshConversationKey }) => ({ ok: true as const })),
+    meshConversationMessageSubagent: vi.fn(
+      async (_input: { key: MeshConversationKey; toolUseId: string; message: string }) => ({ ok: true }),
+    ),
     meshConversationStopSubagent: vi.fn(async (_input: { key: MeshConversationKey; toolUseId: string }) => ({
       ok: true,
     })),
@@ -453,6 +477,7 @@ async function mountRemote({
   const { default: RemoteConversationPanel } = await import('./RemoteConversationPanel')
   // Edit from here and Revert ask before they act, as the app's own root lets them.
   const { ConfirmDialogProvider } = await import('../../ui/ConfirmDialog')
+  const { ChatPanel } = await import('../../workspace/pane/panel/ChatPanel')
   const { EditorView } = await import('@codemirror/view')
   const host = dom.window.document.createElement('div')
   dom.window.document.body.appendChild(host)
@@ -462,6 +487,7 @@ async function mountRemote({
       createElement(
         ConfirmDialogProvider,
         null,
+        createElement(ChatPanel, panelProps('local-workspace')),
         createElement(RemoteConversationPanel, {
           workspaceId: 'local-workspace',
           connectionId: key.connectionId,
@@ -512,6 +538,8 @@ async function mountRemote({
     api,
     followed,
     emit: (frame: MeshConversationFrame) => receivers.at(-1)!(frame),
+    /** To the chat's own follow, when a sub-agent has been followed since. */
+    emitToChat: (frame: MeshConversationFrame) => receivers[0]!(frame),
     button: (label: string) =>
       Array.from(host.querySelectorAll('button')).find((item) => item.textContent?.trim() === label),
     type: (value: string) => {
@@ -526,6 +554,24 @@ async function mountRemote({
       composer().dispatchEvent(
         new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
       ),
+    /** Writes and sends in the box on top, for a sub-agent drawn over its hidden parent. */
+    sendInTopBox: async (value: string) => {
+      const editors = host.querySelectorAll<HTMLElement>('.cm-editor')
+      const top = editors[editors.length - 1]!
+      const view = EditorView.findFromDOM(top)!
+      await act(async () =>
+        view.dispatch({
+          changes: { from: 0, insert: value },
+          selection: { anchor: value.length },
+          userEvent: 'input.type',
+        }),
+      )
+      await act(async () =>
+        top
+          .querySelector('.cm-content')!
+          .dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })),
+      )
+    },
     composer,
     draft: () => editor().state.doc.toString(),
     async unmount() {
@@ -552,12 +598,23 @@ test('the strip under a paired machine’s chat names its branch, its changed fi
     },
   })
   try {
-    const strip = chat.host.querySelector('[data-conversation-strip]')!
-    expect(strip.querySelector('[data-strip-branch="agent/chat-5v54"]')).not.toBeNull()
-    expect(strip.querySelector('[data-strip-pull-request-slot]')?.textContent).toContain('283')
+    const panel = chat.host.querySelector('[data-chat-panel]')!
+    expect(panel.querySelector('[data-panel-branch="agent/chat-5v54"]')).not.toBeNull()
+    expect(panel.querySelector('[data-panel-pull-request-slot]')?.textContent).toContain('283')
     // The files that machine counted, as "+5 −1", and the worktree it names.
-    expect(strip.querySelector('[aria-label^="3 files added, 2 updated, 1 removed"]')).not.toBeNull()
-    expect(strip.querySelector('[data-strip-branch]')?.getAttribute('aria-label')).toContain('in a worktree')
+    expect(panel.querySelector('[aria-label^="3 files added, 2 updated, 1 removed"]')).not.toBeNull()
+    expect(panel.querySelector('[data-panel-branch]')?.getAttribute('aria-label')).toContain('in a worktree')
+    // There is no checkout of it here, so the rows say that rather than offer
+    // a click that goes nowhere: only what can be acted on is a button.
+    const row = (name: string) =>
+      [...panel.querySelectorAll('[data-panel-row]')].find((item) => item.textContent?.startsWith(name))
+    expect(row('Files')?.getAttribute('data-panel-row')).toBe('fact')
+    expect(row('Files')?.textContent).toContain('On mac-mini')
+    expect(row('Terminal')?.getAttribute('data-panel-row')).toBe('fact')
+    expect(row('Terminal')?.textContent).toContain('On mac-mini')
+    expect(row('Branch')?.getAttribute('data-panel-row')).toBe('fact')
+    expect(row('Changes')?.getAttribute('data-panel-row')).toBe('fact')
+    expect(row('Library')?.getAttribute('data-panel-row')).toBe('action')
   } finally {
     await chat.unmount()
   }
@@ -570,7 +627,7 @@ test('a conversation on a paired machine renders in the chat view and is driven 
     expect(chat.host.textContent).toContain('Why does the upload test flake?')
     expect(chat.host.textContent).toContain('Let me run it.')
     // No header line above the transcript repeats the agent and the machine:
-    // the tab and the strip below say them (owner, 2026-10-08).
+    // the tab and the panel say them (owner, 2026-10-08).
     expect(chat.host.textContent).not.toContain('· On mac-mini')
 
     // An approval is answered over the mesh, and no rule that would outlive
@@ -588,14 +645,12 @@ test('a conversation on a paired machine renders in the chat view and is driven 
     // lists this chat as taking images, which go over with the message; a
     // chat that does not take them draws none (below).
     expect(chat.host.querySelector('[data-composer-options]')).not.toBeNull()
-    // The strip under the composer marks the machine the chat runs on with its
-    // glyph alone, named in its tooltip and accessible name; this computer has
+    // The panel's head names the machine the chat runs on; this computer has
     // no checkout of it, so no branch and no counts.
-    const machine = chat.host.querySelector('[data-conversation-strip] [data-strip-machine]')
-    expect(machine?.getAttribute('aria-label')).toBe('On mac-mini')
-    expect(machine?.textContent).toBe('')
-    expect(chat.host.querySelector('[data-conversation-strip] [data-strip-branch]')).toBeNull()
-    expect(chat.host.querySelector('[data-conversation-strip] [data-diff-stat-pill]')).toBeNull()
+    const machine = chat.host.querySelector('[data-chat-panel] [data-panel-machine]')
+    expect(machine?.textContent).toContain('mac-mini')
+    expect(chat.host.querySelector('[data-chat-panel] [data-panel-branch]')).toBeNull()
+    expect(chat.host.querySelector('[data-chat-panel] [data-diff-stat-pill]')).toBeNull()
     // A turn's changes can be read, but its files are on the other machine's
     // disk, and this machine does not say it reverts them itself, so nothing
     // offers to.
@@ -900,6 +955,63 @@ test('no Stop on an agent where the machine cannot stop one by itself, or lists 
   }
 })
 
+// A chat over there, with an agent in it that finished, opened in the chat's place.
+async function openFinishedAgent(options: Parameters<typeof mountRemote>[0]) {
+  const chat = await mountRemote(options)
+  await startAgent(chat)
+  await chat.act(async () =>
+    chat.emit({
+      type: 'event',
+      event: event('subagent_status', { toolUseId: 'toolu_agent', taskId: 'task-1', status: 'completed', endedAt: 2 }),
+    }),
+  )
+  const card = Array.from(chat.host.querySelectorAll('button')).find((button) =>
+    button.getAttribute('aria-label')?.endsWith('Open it'),
+  )
+  await chat.act(async () => card!.click())
+  return chat
+}
+
+test('an agent in a chat over there opens in the chat’s place, and its box goes over the mesh', async () => {
+  const { resetSubagentViews } = await import('./subagentViewStack')
+  const chat = await openFinishedAgent({
+    access: 'operate',
+    messageSubagents: true,
+    capabilities: { ...thread.capabilities!, messageSubagent: true },
+  })
+  try {
+    expect(chat.host.querySelector('[data-subagent-header]')?.textContent).toContain('Restyle the boxes')
+    expect(chat.host.querySelector('[data-subagent-blocked]')).toBeNull()
+    expect(chat.host.querySelector('[data-lane-composer]')).not.toBeNull()
+  } finally {
+    await chat.act(async () => resetSubagentViews())
+    await chat.unmount()
+  }
+})
+
+test.each([
+  ['a machine without the capability', { messageSubagents: false }, 'needs updating'],
+  ['a chat whose provider cannot', { messageSubagents: true, messageSubagent: false }, 'no way to pass a message'],
+])('%s gets the bar and no box, and it leads back to the chat', async (_name, facts, words) => {
+  const { messageSubagent, ...rest } = facts as { messageSubagents: boolean; messageSubagent?: boolean }
+  const { resetSubagentViews } = await import('./subagentViewStack')
+  const chat = await openFinishedAgent({
+    access: 'operate',
+    ...rest,
+    capabilities: { ...thread.capabilities!, messageSubagent: messageSubagent ?? true },
+  })
+  try {
+    expect(chat.host.querySelector('[data-lane-composer]')).toBeNull()
+    const bar = chat.host.querySelector('[data-subagent-blocked]')
+    expect(bar?.textContent).toContain(words)
+    await chat.act(async () => bar!.querySelector('button')!.click())
+    expect(chat.host.querySelector('[data-subagent-header]')).toBeNull()
+  } finally {
+    await chat.act(async () => resetSubagentViews())
+    await chat.unmount()
+  }
+})
+
 test('a pairing that may only follow sees no Stop on an agent', async () => {
   const chat = await mountRemote({
     access: 'read',
@@ -1034,7 +1146,7 @@ test("the ring of a chat over there opens what fills its window, read from that 
     await chat.act(async () =>
       chat.emit({ type: 'event', event: event('usage_updated', { contextWindow: 200_000, contextUsed: 76_000 }) }),
     )
-    const ring = () => chat.host.querySelector<HTMLButtonElement>('[data-strip-context] [data-strip-context-button]')!
+    const ring = () => chat.host.querySelector<HTMLButtonElement>('[data-panel-context]')!
     await chat.act(async () => ring().click())
     await chat.act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
     expect(chat.api.meshConversationContextBreakdown).toHaveBeenCalledExactlyOnceWith({ key })
@@ -1057,9 +1169,7 @@ test('none of the three where the machine does not take them, or lists its chat 
       await chat.act(async () =>
         chat.emit({ type: 'event', event: event('usage_updated', { contextWindow: 200_000, contextUsed: 76_000 }) }),
       )
-      await chat.act(async () =>
-        chat.host.querySelector<HTMLButtonElement>('[data-strip-context] [data-strip-context-button]')?.click(),
-      )
+      await chat.act(async () => chat.host.querySelector<HTMLButtonElement>('[data-panel-context]')?.click())
       expect(chat.api.meshConversationContextBreakdown).not.toHaveBeenCalled()
       await chat.act(async () => chat.type('/btw which file flakes?'))
       await chat.act(async () => chat.enter())
@@ -1975,7 +2085,7 @@ test('a paired machine that opens pull requests offers Create PR, and every step
     // The machine recorded it; the list is read again and the slot is that pull request's.
     expect(chat.api.meshConversationList.mock.calls.length).toBeGreaterThan(listReads)
     expect(chat.host.querySelector('[data-create-pull-request-error]')).toBeNull()
-    expect(chat.host.querySelector('[data-strip-pull-request-slot]')?.textContent).toContain('290')
+    expect(chat.host.querySelector('[data-panel-pull-request-slot]')?.textContent).toContain('290')
   } finally {
     await chat.unmount()
   }
@@ -2127,7 +2237,7 @@ test('no Schedule for a machine that does not keep scheduled messages, or a pair
   }
 })
 
-test('the sub-agents a machine names reach the Agents tab, each read and answered as its own chat', async () => {
+test('the sub-agents a machine names reach the panel, each read and answered as its own chat', async () => {
   const chat = await mountRemote({ access: 'operate', permanentApprovals: true })
   const { readRemoteChat } = await import('./remoteChatRegistry')
   try {
@@ -2166,6 +2276,124 @@ test('the sub-agents a machine names reach the Agents tab, each read and answere
       decision: 'once',
     })
   } finally {
+    await chat.unmount()
+  }
+})
+
+const farChild = {
+  workspaceId: key.workspaceId,
+  agentId: 'remote-child',
+  title: 'Reviewer',
+  providerId: 'cursor-agent',
+  modelId: 'grok-4.7',
+  readOnly: false,
+  status: 'working' as const,
+  task: 'Review it',
+  startedAt: 1,
+}
+
+const panelRow = (host: HTMLElement, name: string) =>
+  [...host.querySelectorAll<HTMLElement>('[data-chat-panel] [data-panel-row]')].find((row) =>
+    row.textContent?.startsWith(name),
+  )
+
+const childEvent = (type: ConversationEventType, payload: Record<string, unknown>) => ({
+  ...event(type, payload),
+  sessionId: 'child-session',
+  agentId: 'remote-child',
+})
+
+test('a sub-agent over there opens from the panel as a chat of its own: its transcript, and its box goes to it', async () => {
+  const { resetSubagentViews } = await import('./subagentViewStack')
+  const chat = await mountRemote({ access: 'operate' })
+  try {
+    await chat.act(async () => chat.emit({ type: 'subagents', subagents: [farChild] }))
+    const row = panelRow(chat.host, 'Reviewer')
+    expect(row?.textContent).toContain('Working')
+    expect(row?.querySelector('svg')).not.toBeNull()
+    await chat.act(async () => row!.click())
+    expect(chat.followed.at(-1)).toEqual({ ...key, agentId: 'remote-child' })
+
+    await chat.act(async () => {
+      const events = [
+        childEvent('user_message', { turnId: 'c1', text: 'Review the calendar screen, closely' }),
+        childEvent('turn_started', { turnId: 'c1' }),
+        childEvent('content_delta', { turnId: 'c1', text: 'The week view overflows.' }),
+        childEvent('turn_completed', { turnId: 'c1' }),
+      ]
+      chat.emit({ type: 'snapshot', page: { events, hasMore: false, beforeCursor: null } } as MeshConversationFrame)
+      chat.emit({ type: 'synchronized', seq: events.at(-1)!.seq } as MeshConversationFrame)
+      chat.emit({ type: 'link', state: 'live', detail: 'Following on mac-mini.', access: 'operate' })
+    })
+    expect(chat.host.textContent).toContain('Review the calendar screen, closely')
+    expect(chat.host.textContent).toContain('The week view overflows.')
+
+    // The panel went with it: its name, a way back, and no children of its own.
+    const panel = chat.host.querySelector<HTMLElement>('[data-chat-panel]')!
+    expect(panel.querySelector('h2')?.textContent).toBe('Reviewer')
+    expect(panel.querySelector('[data-panel-parent]')?.textContent).toContain('Main chat')
+    expect(panel.querySelector('[data-panel-parent]')?.textContent).toContain('Fix the flaky upload test')
+    expect(panel.textContent).not.toContain('Subagents')
+
+    // A chat of its own takes a message directly, as `subagent.start`'s do.
+    expect(chat.host.querySelector('[data-subagent-blocked]')).toBeNull()
+    await chat.sendInTopBox('Check 320px too')
+    expect(chat.api.meshConversationSend).toHaveBeenCalledExactlyOnceWith({
+      key: { ...key, agentId: 'remote-child' },
+      message: 'Check 320px too',
+    })
+
+    await chat.act(async () => panel.querySelector<HTMLElement>('[data-panel-parent] button')!.click())
+    expect(chat.host.querySelector('[data-subagent-header]')).toBeNull()
+    expect(panel.querySelector('h2')?.textContent).toBe('Fix the flaky upload test')
+  } finally {
+    await chat.act(async () => resetSubagentViews())
+    await chat.unmount()
+  }
+})
+
+test('what a sub-agent over there asks is answered above its parent’s box, through its own chat', async () => {
+  const chat = await mountRemote({ access: 'operate' })
+  try {
+    await chat.act(async () =>
+      chat.emit({ type: 'subagents', subagents: [{ ...farChild, status: 'needs_input', sessionId: 'child-session' }] }),
+    )
+    expect(chat.followed.at(-1)).toEqual({ ...key, agentId: 'remote-child' })
+    await chat.act(async () => {
+      const events = [
+        childEvent('turn_started', { turnId: 'c1' }),
+        childEvent('approval_requested', { turnId: 'c1', requestId: 'child-ask', action: 'Bash', summary: 'npm test' }),
+      ]
+      chat.emit({ type: 'snapshot', page: { events, hasMore: false, beforeCursor: null } } as MeshConversationFrame)
+      chat.emit({ type: 'synchronized', seq: events.at(-1)!.seq } as MeshConversationFrame)
+    })
+    const asks = chat.host.querySelector<HTMLElement>('[data-subagent-request="remote-child"]')!
+    expect(asks.textContent).toContain('Reviewer is asking')
+    expect(asks.textContent).toContain('npm test')
+    const allow = [...asks.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Allow once')!
+    await chat.act(async () => allow.click())
+    expect(chat.api.meshConversationResolveApproval).toHaveBeenLastCalledWith({
+      key: { ...key, agentId: 'remote-child' },
+      requestId: 'child-ask',
+      decision: 'once',
+    })
+  } finally {
+    await chat.unmount()
+  }
+})
+
+test('a pairing that may only read has no box in a sub-agent over there, only the bar', async () => {
+  const { resetSubagentViews } = await import('./subagentViewStack')
+  const chat = await mountRemote({ access: 'read' })
+  try {
+    await chat.act(async () => chat.emit({ type: 'subagents', subagents: [farChild] }))
+    await chat.act(async () => panelRow(chat.host, 'Reviewer')!.click())
+    const bar = chat.host.querySelector('[data-subagent-blocked]')
+    expect(bar?.textContent).toContain('may follow this chat on mac-mini but not drive it')
+    await chat.act(async () => bar!.querySelector('button')!.click())
+    expect(chat.host.querySelector('[data-subagent-header]')).toBeNull()
+  } finally {
+    await chat.act(async () => resetSubagentViews())
     await chat.unmount()
   }
 })
@@ -2214,7 +2442,7 @@ test('a chat over there that a usage limit stopped says so in the tray, and its 
     await chat.act(async () => chat.emit(sessionLimitReached()))
     expect(chat.host.textContent).toContain("Claude's session limit is used up.")
     // The strip draws that machine's reading of the plan, as a local chat's draws this one's.
-    const mark = chat.host.querySelector<HTMLElement>('[data-strip-usage-limits="claude"]')
+    const mark = chat.host.querySelector<HTMLElement>('[data-panel-usage-limits="claude"]')
     expect(mark?.getAttribute('aria-label')).toContain('on mac-mini')
     await chat.act(async () => chat.button('Resume at reset')!.click())
     expect(chat.api.meshConversationUsageLimitResume).toHaveBeenCalledExactlyOnceWith({ key, action: 'schedule' })
@@ -2331,7 +2559,7 @@ test('a pairing that may only follow sees the notice without its buttons; a mach
   try {
     await older.act(async () => older.emit(sessionLimitReached()))
     expect(older.host.textContent).not.toContain('session limit is used up')
-    expect(older.host.querySelector('[data-strip-usage-limits]')).toBeNull()
+    expect(older.host.querySelector('[data-panel-usage-limits]')).toBeNull()
   } finally {
     await older.unmount()
   }
@@ -2349,7 +2577,7 @@ test("the strip under a paired machine's chat names its agents' local servers, a
   try {
     // The list is read as the pane opens; the strip draws what it named.
     await chat.act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
-    const mark = chat.host.querySelector<HTMLElement>('[data-strip-local-servers]')
+    const mark = chat.host.querySelector<HTMLElement>('[data-panel-local-servers]')
     expect(mark?.getAttribute('aria-label')).toBe('Local server localhost:5173, running, on mac-mini')
     await chat.act(async () => mark!.click())
     expect(chat.document.querySelector('[data-local-server-elsewhere]')?.textContent).toBe('On mac-mini')

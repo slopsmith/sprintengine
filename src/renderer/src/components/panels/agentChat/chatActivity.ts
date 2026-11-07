@@ -3,6 +3,7 @@ import type {
   ConversationStoredImageAttachment,
 } from '../../../../../shared/conversation-runtime'
 import type { TranscriptEntry, TranscriptToolEntry } from './conversationProjection'
+import { canvasBoardName } from '../../../../../shared/canvas/paths'
 import { STUDIO_MCP_SERVER_ID } from '../../../../../shared/product-identity'
 
 // What the agent touched in one conversation, read off its transcript: the
@@ -179,7 +180,9 @@ export function deriveChatActivity(entries: readonly TranscriptEntry[]): ChatAct
         browser = { live: running || Boolean(seen?.live), url: url ?? seen?.url ?? null }
       } else if (studio?.startsWith('canvas_')) {
         touch('canvas')
-        const board = inputString(tool, 'board')
+        // A board named by its id reads as its name, as every other board does.
+        const named = inputString(tool, 'board')
+        const board = named && named.includes('://') ? canvasBoardName(named) : named
         const seen = canvas as ChatActivity['canvas']
         canvas = { live: running || Boolean(seen?.live), board: board ?? seen?.board ?? null }
       }

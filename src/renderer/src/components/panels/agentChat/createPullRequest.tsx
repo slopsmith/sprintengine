@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import {
   pullRequestNoun,
@@ -13,8 +13,8 @@ import { Modal, ModalBody, ModalButton, ModalFooter, ModalHeader } from '../../u
 import { copyToClipboardWithToast } from '../../../utils/copyToClipboardWithToast'
 import type { PullRequestHost } from './pullRequestHost'
 
-// The chat's "Create PR" (owner ruling 2026-10-04), in the same slot at the
-// bottom of the chat as "Open PR #123", and never beside it. The slot shows:
+// The chat's "Create PR" (owner ruling 2026-10-04), in the same slot on the
+// panel's Pull request row as "#123", and never beside it. The slot shows:
 //
 // - "Open PR #N" while the conversation owns an open (or draft) pull request;
 // - "Create PR" when the checkout is ready to propose (`createPullRequestReadiness`:
@@ -33,13 +33,13 @@ import type { PullRequestHost } from './pullRequestHost'
 // on Gitea, Forgejo and Codeberg — and records it as this conversation's,
 // which flips the slot to "Open PR #N". Where the forge's CLI is missing,
 // signed out or fails (and on Bitbucket) it opens the forge's own page with
-// the title and description filled in, and the strip says why; a description
+// the title and description filled in, and the row says why; a description
 // the page could not take is put on the clipboard, so nothing written is
 // lost. A page the system would not open (Windows refuses a long address) is
 // never claimed opened: the title and description go on the clipboard and
-// the strip says so. Where the CLI probably opened the request but its
+// the row says so. Where the CLI probably opened the request but its
 // address is not known, the forge's list of requests opens instead, to find
-// it in. Every step says where it is, and a failure says why, on the strip.
+// it in. Every step says where it is, and a failure says why, on the row.
 //
 // GitLab calls them merge requests, and so does the control on a GitLab
 // checkout: "Create MR", "Create a merge request".
@@ -51,6 +51,22 @@ import type { PullRequestHost } from './pullRequestHost'
 // clipboard stay here, in front of the person. A chat on WSL or an SSH
 // machine draws no button, because its git and `gh` are not here and nothing
 // there answers for them.
+//
+// The flow belongs to the chat, not the control: the panel unmounts whenever
+// it closes or a tool takes the column, and a step in progress or a failure
+// nobody has read yet must still be there when it comes back. So the state is
+// `useCreatePullRequestFlow`, held by the chat view for as long as the chat is
+// open, the dialog is drawn there too, and the control only shows the flow.
+
+/** What the slot needs to draw "Create PR": the panel's row. */
+export type CreatePullRequestSlot = {
+  /** The chat's flow: its step, its failure, and the way to start it. */
+  flow: CreatePullRequestFlow
+  /** Whether the checkout reads as ready now; a held failure is dismissed rather than retried when not. */
+  ready?: boolean
+  /** The forge the checkout's remote is on: GitLab's control says "Create MR". */
+  forge?: PullRequestForge | null
+}
 
 /** Which control the slot draws. */
 export type PullRequestSlotChoice = 'open' | 'create' | 'merged' | null
@@ -114,7 +130,7 @@ function stepWords(step: 'pushing' | 'creating' | 'recording', noun: string): st
   return step === 'pushing' ? 'Pushing the branch…' : `Opening the ${noun}…`
 }
 
-/** What the strip says when the forge's page opened: why, and where the description went if the page could not take it. */
+/** What the row says when the forge's page opened: why, and where the description went if the page could not take it. */
 function pageNote(place: string, reason: string | undefined, descriptionCopied: boolean): string | null {
   const note = reason ? `${place}’s page opened instead. ${reason}` : null
   const copied = descriptionCopied ? 'The description is on the clipboard to paste into the page.' : null
@@ -123,7 +139,7 @@ function pageNote(place: string, reason: string | undefined, descriptionCopied: 
 }
 
 /**
- * What the strip says when the forge's page would not open: that it did not,
+ * What the row says when the forge's page would not open: that it did not,
  * where the title and description went instead, and why the page was the
  * way at all. `copied` names what reached the clipboard, null when nothing
  * did (the copy says its own failure).
@@ -139,7 +155,7 @@ function unopenedPageNote(
   return reason ? `${lead} ${reason}` : lead
 }
 
-/** What the strip says when the request's address is not known and the forge's list of them was to open. */
+/** What the row says when the request's address is not known and the forge's list of them was to open. */
 function listNote(place: string, reason: string, noun: string, opened: boolean): string {
   return opened
     ? `${reason} ${place}’s ${noun} list opened, to look for it there.`
@@ -162,112 +178,157 @@ async function openedExternally(url: string): Promise<boolean> {
   }
 }
 
-/**
- * The "Create PR" button, its confirm step, and the progress and failures it
- * says on the strip.
- */
-export function CreatePullRequestControl({
-  host,
-  onSettled,
-  onHoldChange,
-  ready = true,
-  forge = null,
-}: {
+/** One chat's Create PR, wherever its control happens to be drawn. */
+export type CreatePullRequestFlow = {
   /** The machine whose checkout the pull request is opened from, and whose record keeps it. */
   host: PullRequestHost
-  /** The forge the checkout's remote is on, whose own word for the request the control uses. */
-  forge?: PullRequestForge | null
+  dialogOpen: boolean
+  progress: Progress
   /**
-   * Whether the checkout reads as ready for a pull request now. Held on a
-   * failure once it is not (the pull request it opened exists), the control
-   * offers to dismiss the failure rather than a Create PR that could only fail.
+   * It has something of its own to show: the dialog, a step in progress, or a
+   * failure. The slot keeps the control while it does, even once the checkout
+   * stops reading as ready, which it does the moment the pull request exists: the
+   * ask `onSettled` starts would otherwise take a failure to record it off the
+   * screen unread.
    */
-  ready?: boolean
-  /** The flow ended (created, opened a forge page, or failed): ask again whether the button may show. */
-  onSettled: () => void
-  /**
-   * The control has something on screen of its own: the dialog, a step in
-   * progress, or a failure. The slot keeps it while it does, even once the
-   * checkout stops reading as ready, which it does the moment the pull
-   * request exists: the ask `onSettled` starts would otherwise unmount it
-   * with a failure to record it still unread.
-   */
-  onHoldChange?: (held: boolean) => void
-}): React.JSX.Element {
+  held: boolean
+  openDialog: () => void
+  closeDialog: () => void
+  dismiss: () => void
+  create: (text: { title: string; body: string }, pin: PullRequestCheckoutPin | null) => void
+}
+
+/**
+ * The state behind "Create PR", for the chat view to hold while the chat is
+ * open. Null with no host. `onSettled`: the flow ended (created, opened a forge
+ * page, or failed), so ask again whether the button may show.
+ */
+export function useCreatePullRequestFlow(
+  host: PullRequestHost | null,
+  forge: PullRequestForge | null,
+  onSettled: () => void,
+): CreatePullRequestFlow | null {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [progress, setProgress] = useState<Progress>(null)
   const noun = pullRequestNoun(forge)
-  const held = dialogOpen || progress !== null
-  useEffect(() => {
-    onHoldChange?.(held)
-  }, [held, onHoldChange])
-  useEffect(() => () => onHoldChange?.(false), [onHoldChange])
 
   // `pin`: the branch and commit the dialog opened on. The push and the
   // creation are refused once the checkout has moved off it.
-  const create = async (text: { title: string; body: string }, pin: PullRequestCheckoutPin | null) => {
-    setDialogOpen(false)
-    setProgress({ step: 'pushing' })
-    const pushed = await host.push(pin ?? undefined).catch((error: unknown) => failed(error))
-    if (!pushed.ok) {
-      setProgress({ step: 'failed', message: pushed.message })
-      return
-    }
-    setProgress({ step: 'creating' })
-    const created = await host.create(text, pin ?? undefined).catch((error: unknown) => failed(error))
-    if (!created.ok) {
-      setProgress({ step: 'failed', message: created.message })
-      return
-    }
-    if (created.kind === 'page' || created.kind === 'list' || created.kind === 'existing') {
-      // A page: the forge opens it from there, and nothing exists to record
-      // yet. A list: the request is probably there, but with no address
-      // there is nothing to record either. An existing one: the branch had
-      // it already, perhaps a teammate's, so it is shown, not claimed for
-      // this chat (whose merge would then settle it).
-      const opened = await openedExternally(created.url)
-      let note: string | null = null
-      if (created.kind === 'existing') {
-        if (!opened) note = `This branch already has a ${noun}, and it could not be opened.`
-      } else if (created.kind === 'list') {
-        note = listNote(created.place, created.reason, noun, opened)
-      } else if (opened) {
-        const copied =
-          created.descriptionLeftOut === true && text.body.trim() !== ''
-            ? await copyToClipboardWithToast(text.body, { success: 'silent' })
-            : false
-        note = pageNote(created.place, created.reason, copied)
-      } else {
-        // Nothing opened, so nothing was filled in anywhere: everything the
-        // person confirmed goes on the clipboard for them to take to the forge.
-        const described = text.body.trim() !== ''
-        const copied = await copyToClipboardWithToast(described ? `${text.title}\n\n${text.body}` : text.title, {
-          success: 'silent',
-        })
-        note = unopenedPageNote(
-          created.place,
-          created.reason,
-          copied ? (described ? 'title and description' : 'title') : null,
-        )
+  const create = useCallback(
+    (text: { title: string; body: string }, pin: PullRequestCheckoutPin | null) => {
+      if (!host) return
+      const run = async () => {
+        setDialogOpen(false)
+        setProgress({ step: 'pushing' })
+        const pushed = await host.push(pin ?? undefined).catch((error: unknown) => failed(error))
+        if (!pushed.ok) {
+          setProgress({ step: 'failed', message: pushed.message })
+          return
+        }
+        setProgress({ step: 'creating' })
+        const created = await host.create(text, pin ?? undefined).catch((error: unknown) => failed(error))
+        if (!created.ok) {
+          setProgress({ step: 'failed', message: created.message })
+          return
+        }
+        if (created.kind === 'page' || created.kind === 'list' || created.kind === 'existing') {
+          // A page: the forge opens it from there, and nothing exists to record
+          // yet. A list: the request is probably there, but with no address
+          // there is nothing to record either. An existing one: the branch had
+          // it already, perhaps a teammate's, so it is shown, not claimed for
+          // this chat (whose merge would then settle it).
+          const opened = await openedExternally(created.url)
+          let note: string | null = null
+          if (created.kind === 'existing') {
+            if (!opened) note = `This branch already has a ${noun}, and it could not be opened.`
+          } else if (created.kind === 'list') {
+            note = listNote(created.place, created.reason, noun, opened)
+          } else if (opened) {
+            const copied =
+              created.descriptionLeftOut === true && text.body.trim() !== ''
+                ? await copyToClipboardWithToast(text.body, { success: 'silent' })
+                : false
+            note = pageNote(created.place, created.reason, copied)
+          } else {
+            // Nothing opened, so nothing was filled in anywhere: everything the
+            // person confirmed goes on the clipboard for them to take to the forge.
+            const described = text.body.trim() !== ''
+            const copied = await copyToClipboardWithToast(described ? `${text.title}\n\n${text.body}` : text.title, {
+              success: 'silent',
+            })
+            note = unopenedPageNote(
+              created.place,
+              created.reason,
+              copied ? (described ? 'title and description' : 'title') : null,
+            )
+          }
+          setProgress(note ? { step: 'noted', message: note } : null)
+          onSettled()
+          return
+        }
+        setProgress({ step: 'recording' })
+        const recorded = await host.link(created.url, text.title)
+        setProgress(recorded.ok ? null : { step: 'failed', message: recorded.message })
+        onSettled()
       }
-      setProgress(note ? { step: 'noted', message: note } : null)
-      onSettled()
-      return
-    }
-    setProgress({ step: 'recording' })
-    const recorded = await host.link(created.url, text.title)
-    setProgress(recorded.ok ? null : { step: 'failed', message: recorded.message })
-    onSettled()
-  }
+      void run()
+    },
+    [host, noun, onSettled],
+  )
 
+  return useMemo(
+    () =>
+      host
+        ? {
+            host,
+            dialogOpen,
+            progress,
+            held: dialogOpen || progress !== null,
+            openDialog: () => {
+              setProgress(null)
+              setDialogOpen(true)
+            },
+            closeDialog: () => setDialogOpen(false),
+            dismiss: () => setProgress(null),
+            create,
+          }
+        : null,
+    [host, dialogOpen, progress, create],
+  )
+}
+
+/** The confirm step, drawn by the chat view: it outlasts anything the panel does underneath it. */
+export function CreatePullRequestDialogHost({
+  flow,
+  forge = null,
+}: {
+  flow: CreatePullRequestFlow | null
+  forge?: PullRequestForge | null
+}): React.JSX.Element | null {
+  if (!flow?.dialogOpen) return null
+  return (
+    <CreatePullRequestDialog
+      host={flow.host}
+      noun={pullRequestNoun(forge)}
+      onCancel={flow.closeDialog}
+      onCreate={flow.create}
+    />
+  )
+}
+
+/** The "Create PR" button, and the progress and failures it says on the row. */
+export function CreatePullRequestControl({ slot }: { slot: CreatePullRequestSlot }): React.JSX.Element {
+  const { flow, ready = true, forge = null } = slot
+  const { progress } = flow
+  const noun = pullRequestNoun(forge)
   const busy = progress !== null && progress.step !== 'failed' && progress.step !== 'noted'
   const said = progress?.step === 'failed' || progress?.step === 'noted'
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5" data-strip-create-pull-request="">
+    <span className="inline-flex min-w-0 flex-wrap items-center justify-end gap-1.5" data-panel-create-pull-request="">
       {progress?.step === 'noted' ? (
         <span
           role="status"
-          className="min-w-0 max-w-64 truncate text-meta text-[color:var(--text-muted)]"
+          className="min-w-0 text-right text-meta text-[color:var(--text-muted)]"
           title={progress.message}
           data-create-pull-request-note=""
         >
@@ -276,7 +337,7 @@ export function CreatePullRequestControl({
       ) : progress?.step === 'failed' ? (
         <span
           role="alert"
-          className="min-w-0 max-w-64 truncate text-meta text-[color:var(--tone-error)]"
+          className="min-w-0 text-right text-meta text-[color:var(--tone-error)]"
           title={progress.message}
           data-create-pull-request-error=""
         >
@@ -296,7 +357,7 @@ export function CreatePullRequestControl({
           size="xs"
           tone="subtle"
           // Read: the slot goes back to what the checkout says.
-          onClick={() => setProgress(null)}
+          onClick={flow.dismiss}
           aria-label={progress?.step === 'noted' ? 'Dismiss this note' : 'Dismiss this Create PR failure'}
           className="shrink-0 whitespace-nowrap"
         >
@@ -306,10 +367,7 @@ export function CreatePullRequestControl({
         <GhostButton
           size="xs"
           tone="subtle"
-          onClick={() => {
-            setProgress(null)
-            setDialogOpen(true)
-          }}
+          onClick={flow.openDialog}
           aria-label={`Create a ${noun} from this branch`}
           className="shrink-0 gap-1.5 whitespace-nowrap"
         >
@@ -317,14 +375,6 @@ export function CreatePullRequestControl({
           {forge === 'gitlab' ? 'Create MR' : 'Create PR'}
         </GhostButton>
       )}
-      {dialogOpen ? (
-        <CreatePullRequestDialog
-          host={host}
-          noun={noun}
-          onCancel={() => setDialogOpen(false)}
-          onCreate={(text, pin) => void create(text, pin)}
-        />
-      ) : null}
     </span>
   )
 }

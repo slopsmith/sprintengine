@@ -39,6 +39,7 @@ export const EXTENSIONS_HOME_TILE_SUMMARIES: Readonly<Record<string, string>> = 
   design: 'Design systems, rendered from disk',
   plugins: 'MCP servers your agents can call',
   skills: 'Reusable instructions agents pick up',
+  'pane:backlog': 'What is planned for this project',
 }
 
 /**

@@ -140,7 +140,7 @@ describe('chatActivityRows', () => {
     expect(rows.map(({ kind, label, meta, live, unseen }) => ({ kind, label, meta, live, unseen }))).toEqual([
       { kind: 'changes', label: 'Changes · 1 file', meta: null, live: false, unseen: true },
       { kind: 'files', label: 'Files', meta: 'src', live: false, unseen: false },
-      { kind: 'agents', label: 'Agents · 1', meta: '1 working', live: true, unseen: true },
+      { kind: 'agents', label: 'Subagents · 1', meta: '1 working', live: true, unseen: true },
       { kind: 'browser', label: 'Browser', meta: 'Agent here', live: true, unseen: true },
     ])
     expect(rows[0]!.diff).toEqual({ added: 24, removed: 6 })

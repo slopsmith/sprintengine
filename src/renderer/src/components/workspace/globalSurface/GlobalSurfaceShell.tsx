@@ -301,7 +301,7 @@ export function GlobalSurfaceShell({
 //
 // `inGutter` is optical alignment, not a nudge. The lifted bar slot indents by the
 // 20px door gutter so the door's name shares a vertical line with the content
-// under it (WorkspaceHeader). A chevron placed at that line would push the title
+// under it (WorkspaceBand). A chevron placed at that line would push the title
 // off it and put a 24px button's worth of padding where 20px was measured, so the
 // button hangs 8px back instead: its glyph — inset ~7px inside the box — lands on
 // the gutter line, and the LEADING EDGE OF THE BAR keeps the alignment the title

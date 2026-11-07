@@ -72,8 +72,10 @@ import {
   AgentLaneSummary,
   LaneGlyph,
   laneOutcomeWords,
+  laneName,
   laneTask,
   useOpenAgentsPane,
+  useOpenSubagentsPanel,
   useStopSubagent,
 } from './subagentStatus'
 import { StopGlyph } from './stopGlyph'
@@ -405,7 +407,9 @@ function StudioNoticeRow({ entry }: { entry: Extract<TranscriptEntry, { kind: 'u
       <p className="whitespace-pre-wrap break-words text-meta text-[color:var(--text-muted)]">
         <span className="font-medium text-[color:var(--text-subtle)]">{STUDIO_PRODUCT_NAME}</span>
         {' · '}
-        {withoutStudioNoticePrefix(entry.text)}
+        {entry.subagentMessage
+          ? `You wrote to a subagent, and this chat was asked to pass it on: ${entry.subagentMessage.text}`
+          : withoutStudioNoticePrefix(entry.text)}
       </p>
       {files.length ? (
         <div data-copy-exclude="" className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Attached files">
@@ -846,9 +850,9 @@ export const WorkTimelineStep = memo(function WorkTimelineStep({ tool }: { tool:
 
 // The agents a turn sent off, one card each, outside the turn's fold: the
 // fan-out is the part of the work worth seeing at a glance. A card opens the
-// agent's own thread in the Agents tab beside the chat, a chat on another
-// machine's as well. Where no tab can be opened, each agent is its lane,
-// which opens in place.
+// agent as a chat of its own in the chat's place, a chat on another machine's
+// as well. Where it cannot be opened, each agent is its lane, which opens in
+// place.
 const AgentLaneCards = memo(function AgentLaneCards({ lanes }: { lanes: TranscriptToolEntry[] }) {
   const openAgents = useOpenAgentsPane()
   const stopAgent = useStopSubagent()
@@ -861,7 +865,7 @@ const AgentLaneCards = memo(function AgentLaneCards({ lanes }: { lanes: Transcri
         return (
           <li key={lane.id} className="relative">
             {openAgents ? (
-              <AgentLaneCard lane={lane} onOpen={() => openAgents(lane.id)} stoppable={stop !== null} />
+              <AgentLaneCard lane={lane} onOpen={() => openAgents(lane.id, laneName(lane))} stoppable={stop !== null} />
             ) : (
               <SubagentLane tool={lane} />
             )}
@@ -895,7 +899,7 @@ const AgentLaneCard = memo(function AgentLaneCard({
       ref={cardRef}
       variant="bordered"
       onClick={onOpen}
-      aria-label={`${subagentLaneLabel(lane)}: ${laneTask(lane) || 'agent'}. Open in Agents`}
+      aria-label={`${subagentLaneLabel(lane)}: ${laneTask(lane) || 'agent'}. Open it`}
       className={`w-full py-2 pl-3 ${stoppable ? 'pr-8' : 'pr-3'}`}
     >
       <AgentLaneSummary lane={lane} />
@@ -1015,14 +1019,14 @@ export const SubagentLane = memo(function SubagentLane({ tool }: { tool: Transcr
           </Tooltip>
         )}
         {running && stopAgent ? <StopAgentButton laneId={tool.id} stop={stopAgent} /> : null}
-        {/* This agent's own thread, in the Agents tab beside the chat. */}
+        {/* This agent's own chat, in the chat's place. */}
         {openAgents ? (
-          <Tooltip content="Open in Agents">
+          <Tooltip content="Open this subagent">
             <IconButton
               size="xs"
-              aria-label={`Open ${subagentLaneLabel(tool)} in Agents`}
+              aria-label={`Open ${subagentLaneLabel(tool)}`}
               className="shrink-0 opacity-0 focus-visible:opacity-100 group-hover/lane:opacity-100"
-              onClick={() => openAgents(tool.id)}
+              onClick={() => openAgents(tool.id, laneName(tool))}
             >
               <OpenInPaneGlyph />
             </IconButton>
@@ -1327,7 +1331,7 @@ export function WorkingTimelineRow({
   const [detailsOpen, setDetailsOpen] = useState(false)
   const detailsId = useId()
   useLiveRowMotion(ref, true)
-  const openAgents = useOpenAgentsPane()
+  const openSubagents = useOpenSubagentsPanel()
   const context = useConversationLinkContext()
   // The same disclosure the running turn's fold keeps. Opened, the thinking
   // and the prose between steps are on screen in full, and the line under the
@@ -1364,9 +1368,9 @@ export function WorkingTimelineRow({
             />
           </GhostButton>
         ) : null}
-        {row.agents && openAgents ? (
-          <LinkButton ink="quiet" onClick={() => openAgents(null)}>
-            See agents
+        {row.agents && openSubagents ? (
+          <LinkButton ink="quiet" onClick={openSubagents}>
+            See subagents
           </LinkButton>
         ) : null}
       </div>
@@ -1453,7 +1457,7 @@ function MessageTimestamp({ at }: { at?: number }) {
 // It goes with the agent's end, which is how a stop shows that it worked: the
 // agent reports itself stopped. A stop the chat refused (said where the chat
 // says any refusal) offers it again.
-function StopAgentButton({ laneId, stop }: { laneId: string; stop: (laneId: string) => Promise<boolean> }) {
+export function StopAgentButton({ laneId, stop }: { laneId: string; stop: (laneId: string) => Promise<boolean> }) {
   const [stopping, setStopping] = useState(false)
   return (
     <Tooltip content={stopping ? 'Stopping this agent…' : 'Stop this agent'}>

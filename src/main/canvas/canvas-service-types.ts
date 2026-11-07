@@ -15,6 +15,7 @@ import type {
   CanvasImage,
   CanvasImportRequest,
   CanvasLayoutRequest,
+  CanvasMachineListing,
   CanvasResult,
 } from '../../shared/canvas/types'
 
@@ -49,6 +50,8 @@ export function canvasReaderKey(workspaceId: string, agentId?: string | null): s
 
 export interface CanvasService {
   listBoards(workspaceId: string): Promise<CanvasResult<CanvasBoardSummary[]>>
+  /** Every board on this machine; `workspaceId` says which rows are the asking chat's own. */
+  listAllBoards(workspaceId?: string): Promise<CanvasResult<CanvasMachineListing>>
   readBoard(ref: CanvasBoardRef, opts?: { create?: boolean }): Promise<CanvasResult<CanvasBoardState>>
   /**
    * Whether a board file is on disk at this path, without loading it. What lets

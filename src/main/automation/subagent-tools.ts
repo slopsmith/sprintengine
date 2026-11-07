@@ -97,7 +97,7 @@ export type SubagentToolsDeps = {
   chats?: SubagentChatControl
 }
 
-/** What the Agents tab calls its task: its first line that says anything. */
+/** What the panel calls its task: its first line that says anything. */
 function taskLine(task: string): string {
   const line = task.split('\n').find((candidate) => candidate.trim()) ?? ''
   return line.trim().slice(0, SUBAGENT_TASK_LINE_MAX_CHARS)
@@ -105,7 +105,7 @@ function taskLine(task: string): string {
 
 /**
  * A title none of its siblings has. A restart keeps the name it was given, and
- * a notice or the Agents tab that names two runs alike reads as one agent, so
+ * a notice or the panel that names two runs alike reads as one agent, so
  * the later one takes a number ("Council: Sol", then "Council: Sol (2)").
  */
 export function distinctSubagentTitle(title: string, taken: readonly string[]): string {
@@ -297,7 +297,7 @@ export function createSubagentTools(deps: SubagentToolsDeps): McpToolRegistratio
           },
           name: {
             type: 'string',
-            description: `Its title in the Agents tab, at most ${SUBAGENT_NAME_MAX_CHARS} characters; the CLI and model when omitted.`,
+            description: `Its title in the chat's Subagents list, at most ${SUBAGENT_NAME_MAX_CHARS} characters; the CLI and model when omitted.`,
           },
           wait: { type: 'boolean', description: 'Answer when it finishes rather than at once. Defaults to false.' },
           timeoutMs: {

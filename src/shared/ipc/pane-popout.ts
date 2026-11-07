@@ -38,17 +38,12 @@ export type PanePopOutState = {
    */
   reveal: { tabId: string; key: number } | null
   /**
-   * The chat the owner has in focus in this workspace, and its latest request
-   * to open the Agents tab on one of a chat's agents. Both are the owner
-   * window's alone (it is where chats are focused); an Agents tab out here
-   * shows the agents of the chat the person is working with there.
+   * The chat the owner has in focus in this workspace, which is the owner
+   * window's alone (it is where chats are focused): a Library tab out here
+   * shows the chat the person is working with there.
    */
   focusedAgentId?: string | null
-  agentFocus?: PanePopOutAgentFocus | null
 }
-
-/** A request to open the Agents tab on a chat's agent lane; `serial` changes per request. */
-export type PanePopOutAgentFocus = { agentId: string; laneId: string | null; serial: number }
 
 export type PanePopOutStatePush = { popOutId: string; state: PanePopOutState }
 
@@ -68,7 +63,7 @@ export type PanePopOutOpenTabInput = { kind: WorkspacePaneTabKind } & Partial<
 export type PanePopOutAction =
   | { type: 'close'; tabId: string }
   | { type: 'update'; tabId: string; patch: Partial<Omit<WorkspacePaneTab, 'id' | 'kind'>> }
-  | { type: 'set-board'; tabId: string; path: string }
+  | { type: 'set-board'; tabId: string; path: string; store?: string }
   | { type: 'recent-url'; url: string }
   | { type: 'open'; input: PanePopOutOpenTabInput }
   /**

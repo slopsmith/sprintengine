@@ -81,6 +81,14 @@ export type ConversationQuestionAnswers = Record<string, string>
  *   a chat whose provider cannot stop one by itself (the listed chat's
  *   `capabilities.stopSubagent`). Needs `conversation-stop-subagent`; a
  *   desktop without it refuses the kind as `unsupported_command`.
+ * - `messageSubagent` passes the person's words to one agent the chat spawned,
+ *   named as `stopSubagent` names it. No harness delivers to an agent directly,
+ *   so the chat's own model is asked to, which costs it a turn; the desktop
+ *   records the words on the agent's lane. Refused for a chat whose provider
+ *   cannot (the listed chat's `capabilities.messageSubagent`). An agent that
+ *   ran to its end is resumed by it; one the person stopped refuses it, which
+ *   the chat's model says in its reply. Needs `conversation-agent-message`; a
+ *   desktop without it refuses the kind as `unsupported_command`.
  * - `handoff` hands the chat off to a fresh session instead of compacting it,
  *   as its own Handoff does on the desktop: the chat's messages are written to
  *   a file on the desktop, the provider session is let go, and the next
@@ -230,6 +238,7 @@ export type ConversationCommand =
   | { kind: 'resolvePlan'; requestId: string; decision: ConversationPlanDecision }
   | { kind: 'cancelQueued'; queuedId: string }
   | { kind: 'stopSubagent'; toolUseId: string }
+  | { kind: 'messageSubagent'; toolUseId: string; message: string }
   | { kind: 'handoff' }
   | { kind: 'rewind'; turnSeq: number }
   | { kind: 'revert'; turnSeq: number; undo?: true; confirmed?: true; files?: string[] }
@@ -329,6 +338,7 @@ export const CONVERSATION_COMMAND_KINDS: readonly ConversationCommandKind[] = [
   'setModel',
   'cancelQueued',
   'stopSubagent',
+  'messageSubagent',
   'handoff',
   'rewind',
   'revert',

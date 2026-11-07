@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 
+import { useNarrowViewport } from '../../../hooks/useNarrowViewport'
 import { useWorkspaceStore } from '../../../store/workspaceStore'
 import type { WorkspaceId } from '../../../types/workspace'
 import { WorkspaceAsideColumn } from '../workspaceAsideColumn'
@@ -12,7 +13,7 @@ import { useRecordingWorkspaceIds } from './browser/recordingTabs'
 import { revealPoppedOutTab, showPaneTab, usePanePopOutHost } from './popout/panePopOutHost'
 
 // The pane column (browser-pane epic): the full-height column on the shell
-// row's right edge, beside the WorkspaceHeader, that hosts every retained
+// row's right edge, beside the band, that hosts every retained
 // workspace's pane. One is visible — the active workspace's — and the others
 // stay mounted invisibly, the same retention the workspace layers use, so a
 // pane terminal (later a browser page) survives a workspace switch. Width is
@@ -98,6 +99,8 @@ export function WorkspacePaneColumn({
   const width = useWorkspaceStore((s) => s.workspacePaneWidth)
   const setWidth = useWorkspaceStore((s) => s.setWorkspacePaneWidth)
   const maximised = useWorkspaceStore((s) => s.workspacePaneMaximised)
+  // Too narrow for two columns, the panel floats over the chat.
+  const narrow = useNarrowViewport()
   const activeOpen =
     useWorkspaceStore((s) => s.workspaces.find((w) => w.id === activeWorkspaceId)?.paneState?.open ?? false) &&
     !suppressed
@@ -151,8 +154,12 @@ export function WorkspacePaneColumn({
           if (pane?.tabs.some((tab) => tab.id === tabId)) store.setActivePaneTab(workspaceId, tabId)
         } else if (url) {
           if (!openUrlInPane(workspaceId, url, { forceNewTab: true })) return
-        } else if (!pane?.tabs.some((tab) => tab.kind === 'browser')) {
-          store.openPaneTab(workspaceId, { kind: 'browser' })
+        } else {
+          // The menu may be up over the browser tab: the agent's page comes
+          // forward, as `openPaneTab` brings a new one.
+          const browser = pane?.tabs.find((tab) => tab.kind === 'browser')
+          if (browser) store.setActivePaneTab(workspaceId, browser.id)
+          else store.openPaneTab(workspaceId, { kind: 'browser' })
         }
         store.setPaneOpen(workspaceId, true)
       }),
@@ -172,12 +179,16 @@ export function WorkspacePaneColumn({
   // strip's Maximise control widens the pane.
   useEffect(
     () =>
-      window.api.onCanvasOpenRequest(({ workspaceId, path }) => {
+      window.api.onCanvasOpenRequest(({ workspaceId, path, store }) => {
         if (workspaceId !== activeWorkspaceId) return
-        const store = useWorkspaceStore.getState()
+        const workspaces = useWorkspaceStore.getState()
         // A pane already at its tab cap takes nothing, and opening the column
         // on nothing new would be a window change with no answer in it.
-        const opened = store.openPaneTab(workspaceId, { kind: 'canvas', canvas: { path }, activate: false })
+        const opened = workspaces.openPaneTab(workspaceId, {
+          kind: 'canvas',
+          canvas: { path, ...(store ? { store } : {}) },
+          activate: false,
+        })
         if (opened === null) return
         // A board already out in a window of its own comes forward there.
         showPaneTab(workspaceId, opened)
@@ -219,6 +230,7 @@ export function WorkspacePaneColumn({
       // its pane (below), so nothing outside the column is left to reach.
       keepInteractive={activeFloating && !suppressed}
       fill={activeOpen && maximised}
+      overlay={activeOpen && !maximised && narrow}
     >
       {ids.map((workspaceId) => {
         // The door hides the active pane the way a workspace switch hides any

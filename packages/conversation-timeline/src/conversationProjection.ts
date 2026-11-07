@@ -14,8 +14,9 @@ import type {
   ConversationSubagentStatusPayload,
   ConversationToolStatus,
   ConversationMessageOrigin,
+  ConversationSubagentMessage,
 } from './protocol.js'
-import { readConversationMessageOrigin } from './protocol.js'
+import { readConversationMessageOrigin, readConversationSubagentMessage } from './protocol.js'
 import { parseConversationMentions, type ConversationMentionRef } from './mentions.js'
 import { parseConversationAttachedFiles, type ConversationAttachedFile } from './attachedFiles.js'
 import { normalizeApiKeySource } from './apiKeySource.js'
@@ -40,6 +41,8 @@ export type TranscriptAgentState = {
   progressSummary?: string
   usage?: { totalTokens: number; toolUses: number; durationMs: number }
   error?: string
+  // False where the harness said this agent cannot be sent another message.
+  canContinue?: boolean
 }
 
 // One tool call in a turn's work timeline. A call the model made to spawn a
@@ -90,6 +93,8 @@ export type TranscriptToolEntry = {
   agent?: TranscriptAgentState
   // What the agent said between its steps, in the order it said it.
   messages?: TranscriptAgentMessage[]
+  // What the person wrote to this agent, passed on through the chat, in order.
+  sent?: TranscriptAgentMessage[]
 }
 
 export type TranscriptAgentMessage = { at: number; text: string; truncated?: boolean }
@@ -127,6 +132,9 @@ export type TranscriptEntry =
       // after a usage limit): drawn as Studio's notice, not the person's
       // bubble. Absent for the person's, which every older transcript is.
       origin?: ConversationMessageOrigin
+      // What the person wrote to one of the chat's agents, for a message that
+      // asked the chat to pass it on: what the row says in place of the ask.
+      subagentMessage?: ConversationSubagentMessage
     }
   | {
       kind: 'assistant'
@@ -593,6 +601,7 @@ export type ToolAccumulator = {
   parentToolUseId?: string
   agent?: TranscriptAgentState
   messages?: TranscriptAgentMessage[]
+  sent?: TranscriptAgentMessage[]
 }
 
 export const SESSION_STATUS_BY_EVENT: Partial<Record<ConversationEvent['type'], ConversationSessionStatus>> = {
@@ -627,6 +636,7 @@ export function projectConversation(
   const eventUserTurns = new Map<
     string,
     UserTurn & {
+      subagentMessage?: ConversationSubagentMessage
       seq?: number
       localTurnId?: string
       storedAttachments?: ConversationStoredImageAttachment[]
@@ -807,6 +817,14 @@ export function projectConversation(
           ensureTurn(turnId)
           const localTurnId = readString(event.payload, 'localTurnId')
           const origin = readConversationMessageOrigin(event.payload?.origin)
+          const subagentMessage = readConversationSubagentMessage(event.payload?.subagentMessage)
+          // The lane was spawned before anyone could write to it, so it is
+          // here unless a page of the log starts after it, when it is not on
+          // screen to show the words either.
+          if (subagentMessage) {
+            const lane = toolsById.get(subagentMessage.toolUseId)
+            if (lane) (lane.sent ??= []).push({ at: event.createdAt, text: subagentMessage.text })
+          }
           eventUserTurns.set(turnId, {
             // The acknowledgement replaces an optimistic bubble in place. The
             // local identity is persisted too, so remounts keep the same key.
@@ -822,6 +840,7 @@ export function projectConversation(
               ? event.payload.skills.filter((id): id is string => typeof id === 'string')
               : undefined,
             ...(origin ? { origin } : {}),
+            ...(subagentMessage ? { subagentMessage } : {}),
           })
           ensureTurn(turnId).seq = event.seq
           if (localTurnId) representedLocalTurnIds.add(localTurnId)
@@ -1230,6 +1249,7 @@ export function projectConversation(
           ...(eventUserTurn.files?.length ? { files: eventUserTurn.files } : {}),
           skills: eventUserTurn.skills,
           ...(eventUserTurn.origin ? { origin: eventUserTurn.origin } : {}),
+          ...(eventUserTurn.subagentMessage ? { subagentMessage: eventUserTurn.subagentMessage } : {}),
           ...(attachments
             ? { attachments }
             : eventUserTurn.storedAttachments
@@ -1350,6 +1370,7 @@ export function agentStateOf(status: NonNullable<ReturnType<typeof readSubagentS
     ...(status.progressSummary ? { progressSummary: status.progressSummary } : {}),
     ...(status.usage ? { usage: status.usage } : {}),
     ...(status.error ? { error: status.error } : {}),
+    ...(status.canContinue === false ? { canContinue: false } : {}),
   }
 }
 
@@ -1461,6 +1482,7 @@ export function nestSubagentLanes(turn: TurnAccumulator, index: LaneIndex): Tran
       ...(children.length > 0 ? { children } : {}),
       ...(tool.agent ? { agent: tool.agent } : {}),
       ...(tool.messages?.length ? { messages: tool.messages } : {}),
+      ...(tool.sent?.length ? { sent: tool.sent } : {}),
     }
   }
 

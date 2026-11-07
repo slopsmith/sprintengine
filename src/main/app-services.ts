@@ -171,6 +171,7 @@ import { createExtensionScaffoldHandlers, resolveScaffoldRoots } from './ipc/ext
 import { createAppTourService } from './tours/tour-app'
 import { canvasBoardStoreDir } from './canvas/canvas-board-store'
 import { createCanvasService } from './canvas/canvas-service'
+import { createCanvasStoreCatalogue } from './canvas/canvas-store-catalogue'
 import { createNodeCanvasFs, watchCanvasDirectory } from './canvas/canvas-node-fs'
 import { createCanvasSubscriberRegistry } from './canvas/canvas-subscribers'
 import { createCanvasWorkerHost } from './canvas/canvas-worker-host'
@@ -1721,6 +1722,19 @@ export function createAppServices(
   })
 
   const canvasSubscribers = createCanvasSubscriberRegistry()
+  const canvasStoreCatalogue = createCanvasStoreCatalogue({
+    userDataDir: app.getPath('userData'),
+    listWorkspaces: () => workspaceSyncService.getSnapshot().state.workspaces,
+    log: (message, details) => {
+      void writeDiagnosticLog({
+        level: 'warning',
+        source: 'workspace',
+        title: 'Canvas',
+        message,
+        ...(details ? { details: JSON.stringify(details) } : {}),
+      })
+    },
+  })
   const canvasService = createCanvasService({
     fs: createNodeCanvasFs(),
     now: () => Date.now(),
@@ -1728,6 +1742,7 @@ export function createAppServices(
       workspaceSyncService.getSnapshot().state.workspaces.find((workspace) => workspace.id === workspaceId)
         ?.folderPath ?? null,
     resolveBoardStore: (_workspaceId, workspaceRoot) => canvasBoardStoreDir(app.getPath('userData'), workspaceRoot),
+    storeCatalogue: canvasStoreCatalogue,
     broadcast: broadcastToWorkspaceWindows,
     sendTo: canvasSubscribers.sendTo,
     watch: watchCanvasDirectory,

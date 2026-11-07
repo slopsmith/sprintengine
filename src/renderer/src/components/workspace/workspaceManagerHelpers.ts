@@ -13,7 +13,7 @@ import { workspaceProjectRoot } from '../../utils/workspaceWorktree'
 import { deriveWorkspaceDisplayActivity, isLiveTerminal } from '../../hooks/useTerminalSessions'
 import type { Workspace } from '../../types/workspace'
 import { remoteOriginChatWorkspaceId } from './remoteBand/remoteSessionsModel'
-import type { SessionGroup, SessionItem } from './WorkspaceActions'
+import type { SessionGroup, SessionItem } from './topbar/SessionsPopover'
 import type { ConversationSessionStatus, ConversationSessionSummary } from '../../../../shared/conversation-runtime'
 
 export type WorkspaceActivity = 'needs-input' | 'working' | 'failed' | 'idle'

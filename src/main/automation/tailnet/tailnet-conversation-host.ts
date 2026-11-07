@@ -28,7 +28,7 @@ import {
 } from '../../../../packages/conversation-protocol/src/public'
 import { isPlaceholderAgentName } from '../../../shared/agent-names'
 import { backgroundTasksWakeAgent } from '../../../shared/conversation/backgroundTasks'
-import { subagentStatusOf } from '../../../shared/conversation/subagentStatus'
+import { subagentLiveStatusOf } from '../../../shared/conversation/subagentStatus'
 import {
   conversationPhaseWorking,
   conversationSummaryPhase,
@@ -120,6 +120,10 @@ const wireCapabilities = (capabilities: ConversationSessionSummary['capabilities
         // (`conversation-stop-subagent`); a client offers an agent's Stop only
         // where it can.
         stopSubagent: capabilities.stopSubagent === true,
+        // Whether the person's words can be passed to one agent the chat
+        // spawned (`conversation-agent-message`); a client draws that agent's
+        // box only where they can.
+        messageSubagent: capabilities.messageSubagent === true,
         // Whether the chat can be handed off to a fresh session
         // (`conversation-handoff`); a client offers Handoff only where it can.
         handoff: capabilities.handoff === true,
@@ -301,7 +305,7 @@ export type ConversationGatewayHost = {
   ): () => void
   /**
    * Follow which sub-agents a chat has and how each stands, as this desktop's
-   * own Agents tab reads them. Told now, and again whenever the list reads
+   * own panel reads them. Told now, and again whenever the list reads
    * differently. Absent on a host built without `subagentChanges`; returns
    * what stops the following.
    */
@@ -1101,7 +1105,7 @@ export function createConversationGatewayHost(
         )
       : undefined
   }
-  // A chat's sub-agents, oldest first, read as this desktop's own Agents tab
+  // A chat's sub-agents, oldest first, read as this desktop's own panel
   // reads them: from their records, and each one's newest session. Each row
   // names what the list would name of it, so a device can draw it as a chat.
   const subagentsOf = (chat: { workspaceId: string; agentId: string }): ConversationSubagent[] => {
@@ -1125,7 +1129,7 @@ export function createConversationGatewayHost(
         ...permissionFor(key, sessions),
         ...capabilitiesOf(latest?.capabilities ?? runtime.getProviderCapabilities(providerId)),
         readOnly: agent.subagentReadOnly === true,
-        status: subagentStatusOf(agent, latest),
+        status: subagentLiveStatusOf(agent, latest),
         task: parent.task ?? '',
         startedAt: wholeNumber(parent.startedAt) ?? 0,
         ...(epoch(agent.subagentEnd?.at) ? { endedAt: Math.trunc(agent.subagentEnd.at) } : {}),
@@ -1940,7 +1944,10 @@ export function createConversationGatewayHost(
         let session = sessionFor(key)
         // A send, or a preset switch, reaches a conversation with no live
         // session by resuming it; the switch then applies to that session.
-        if (!session && (command.kind === 'send' || command.kind === 'setPermissionPreset')) {
+        if (
+          !session &&
+          (command.kind === 'send' || command.kind === 'setPermissionPreset' || command.kind === 'messageSubagent')
+        ) {
           const resumed = await ensureSession(key)
           if (!resumed.ok) return resumed
           session = resumed.session
@@ -2140,6 +2147,15 @@ export function createConversationGatewayHost(
           // finds it ended and is refused in words, which changes nothing.
           case 'stopSubagent':
             return runtime.stopSubagent({ sessionId: session.sessionId, toolUseId: command.toolUseId })
+          // As that agent's box on this machine does it. By the command's id,
+          // so a repeat is answered as the first was, not delivered twice.
+          case 'messageSubagent':
+            return runtime.messageSubagent({
+              sessionId: session.sessionId,
+              toolUseId: command.toolUseId,
+              message: command.message,
+              commandId,
+            })
           // As the chat's server row on this machine does it, refused for an
           // action its provider does not take. Sent twice, a reconnect
           // reconnects again and a switch finds the server where it left it.

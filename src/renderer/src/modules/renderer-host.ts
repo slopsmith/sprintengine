@@ -519,7 +519,7 @@ export type RegisteredDoorBadge = DoorBadgeContribution & {
 }
 
 // A control a module contributes to the app's top bar (the title-strip control
-// cluster WorkspaceActions renders). Mirrors registerSidebarNavEntry: the item
+// cluster BandActions renders). Mirrors registerSidebarNavEntry: the item
 // is a self-contained zero-prop component that owns its full behavior — state,
 // tooltip, action — exactly like the shell's own top-bar controls; the host
 // only owns placement + gating. Consumers filter by the owning module's
@@ -1214,7 +1214,7 @@ export type RendererKernel = {
   getDoorBadges(moduleEnabled?: (moduleId: string) => boolean): RegisteredDoorBadge[]
   /**
    * Contributed top-bar controls for enabled modules, sorted by `order` then
-   * id so the bar reads the same across reloads. WorkspaceActions renders
+   * id so the bar reads the same across reloads. BandActions renders
    * these in the bar's module slot, so a module toggle adds/removes a control
    * without a reload.
    */

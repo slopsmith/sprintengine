@@ -80,7 +80,10 @@ export function phoneChatActivity(rows: readonly ConversationRow[], lanes: reado
       } else if (studio?.startsWith("canvas_")) {
         touch("canvas");
         const seen = canvas as ChatActivity["canvas"];
-        canvas = { live: running || Boolean(seen?.live), board: stringValue(input.board).trim() || seen?.board || null };
+        // A board named by its id (`canvas://ws_…/arch.excalidraw`) reads as its name.
+        const named = stringValue(input.board).trim();
+        const board = named.includes("://") ? named.slice(named.lastIndexOf("/") + 1).replace(/\.excalidraw$/iu, "") : named;
+        canvas = { live: running || Boolean(seen?.live), board: board || seen?.board || null };
       }
       const picture = toolPicture(tool);
       if (picture) steps.push({ tool, picture });

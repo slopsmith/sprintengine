@@ -1,10 +1,9 @@
-// Where a spawned agent stands, as its lane and the Agents panel show it: the
+// Where a spawned agent stands, as its lane and the right-hand panel show it: the
 // model's mark beside it and the words that say working, done, failed or
 // stopped. The mark says who, so the words have to say how it is doing.
 
 import { createContext, useContext, type JSX } from 'react'
 import { TruncatedText, type AgentGlyphState } from '../../ui'
-import { openAgentsPane } from '../../workspace/pane/agents/agentsPaneFocus'
 import { useConversationLinkContext } from './conversationLinks'
 import type { TranscriptToolEntry } from './conversationProjection'
 import { flattenToolEntries, subagentLaneLabel, toolObject } from './conversationTimeline'
@@ -12,6 +11,7 @@ import { LiveElapsed } from './liveElapsed'
 import { formatStepDuration } from './stepDuration'
 import { SubagentIcon, useLaneParentCli } from './subagentIcon'
 import { subagentResultPreview, subagentRunsOn } from './subagentResult'
+import { openSubagentList, useOpenSubagent } from './subagentViewStack'
 import { ToolKindGlyph } from './toolRows/ToolKindGlyph'
 import { formatTokenCount } from '../../../utils/tokenFormat'
 
@@ -39,6 +39,11 @@ export function laneTask(tool: TranscriptToolEntry): string {
       ? input.description.trim()
       : ''
   return described || tool.agent?.description || ''
+}
+
+/** What to call an agent where it stands alone: what it was sent to do, else its kind. */
+export function laneName(tool: TranscriptToolEntry): string {
+  return laneTask(tool) || subagentLaneLabel(tool)
 }
 
 /** How long the agent ran: from its spawn to its end, or what it reported. */
@@ -187,8 +192,7 @@ export function LaneStatus({ lane }: { lane: TranscriptToolEntry }): JSX.Element
 }
 
 /**
- * One agent at a glance, as the chat's agent cards and the Agents tab's list
- * draw it: who it is and what it was sent to do, how it is doing, and under
+ * One agent at a glance, as the chat's agent cards draw it: who it is and what it was sent to do, how it is doing, and under
  * that what it is doing now or the first line of what it found. The caller
  * supplies the pressable box around it.
  */
@@ -242,15 +246,27 @@ export function AgentLaneSummary({ lane }: { lane: TranscriptToolEntry }): JSX.E
   )
 }
 
-/**
- * Opens this chat's Agents tab, on one agent when given its lane. A chat on
- * another machine is opened there too: its pane says it is open in this
- * workspace (`publishRemoteChat`), by its agent id on that machine, which is
- * the id its links carry, and the tab reads it through the pane's transport.
- */
-export function useOpenAgentsPane(): ((laneId: string | null) => void) | null {
+/** Opens the right-hand panel on its menu, where this chat's subagents are listed. */
+export function useOpenSubagentsPanel(): (() => void) | null {
   const context = useConversationLinkContext()
-  if (!context?.workspaceId || !context.agentId) return null
-  const { workspaceId, agentId } = context
-  return (laneId) => openAgentsPane(workspaceId, agentId, laneId)
+  if (!context?.workspaceId) return null
+  const { workspaceId } = context
+  return () => openSubagentList(workspaceId)
+}
+
+/**
+ * Opens one of this chat's agents as a chat of its own in the main pane, by its
+ * lane; with none, the list of them. A chat on another machine opens the same
+ * way: its links carry its agent id on that machine, by which its pane found it
+ * (`publishRemoteChat`), and the lane is read through the pane's transport.
+ */
+export function useOpenAgentsPane(): ((laneId: string | null, label?: string) => void) | null {
+  const context = useConversationLinkContext()
+  const open = useOpenSubagent()
+  if (!context?.workspaceId || !open) return null
+  const { workspaceId } = context
+  return (laneId, label) => {
+    if (laneId) open({ kind: 'lane', laneId, ...(label ? { label } : {}) })
+    else openSubagentList(workspaceId)
+  }
 }

@@ -71,6 +71,10 @@ import { registerVersionControlIpc } from './ipc/version-control-ipc'
 import { registerWindowIpc } from './ipc/window-ipc'
 import { registerPanePopOutIpc } from './ipc/pane-popout-ipc'
 import { registerBrowserIpc } from './ipc/browser-ipc'
+import { stat } from 'node:fs/promises'
+
+import { continueCanvasBoardInNewChat } from './canvas/canvas-board-chat'
+import { createProjectlessChatFolder } from './projectless-chat-folders'
 import { registerCanvasIpc } from './ipc/canvas-ipc'
 import { registerEditorRevealIpc } from './ipc/editor-reveal-ipc'
 import { registerToursIpc } from './ipc/tours-ipc'
@@ -150,6 +154,23 @@ export function registerCoreIpc(
   registerCanvasIpc(ipcMain, services.canvasService, services.canvasSubscribers, {
     pickExportDirectory: pickCanvasExportDirectory,
     revealFile: revealCanvasBoardFile,
+    continueInNewChat: (input) =>
+      continueCanvasBoardInNewChat(
+        {
+          folderOf: (workspaceId) =>
+            services.workspaceSyncService
+              .getSnapshot()
+              .state.workspaces.find((workspace) => workspace.id === workspaceId)?.folderPath ?? null,
+          folderExists: (folder) =>
+            stat(folder).then(
+              (found) => found.isDirectory(),
+              () => false,
+            ),
+          launch: services.conversationLaunchService.launch,
+          newProjectlessFolder: createProjectlessChatFolder,
+        },
+        input,
+      ),
   })
   registerEditorRevealIpc(ipcMain, services.editorRevealBroker, {
     // The answering window, never a name the message carries; only workspace

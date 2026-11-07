@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid'
 import { useEffect, useRef } from 'react'
 
+import { isCanvasStoreKey } from '../../../../../../shared/canvas/paths'
 import type { PanePopOutAction, PanePopOutState } from '../../../../../../shared/ipc/pane-popout'
 import { clientSupports } from '../../../../clientCapabilities'
 import { showToast } from '../../../../store/toastStore'
@@ -8,7 +9,6 @@ import { useWorkspaceStore } from '../../../../store/workspaceStore'
 import type { WorkspaceId, WorkspacePaneTab, WorkspacePaneTabKind } from '../../../../types/workspace'
 import { openFileSurface } from '../../../../utils/openFileSurface'
 import { readAuxWindowBounds } from '../../../auxWindows/auxWindowPlacement'
-import { readAgentFocusRequest, subscribeAgentFocusRequests } from '../agents/agentsPaneFocus'
 import type { PaneKindDefinition } from '../paneKinds'
 
 // The owner window's half of the pane pop-out (shared/ipc/pane-popout.ts has
@@ -130,7 +130,7 @@ export function revealPoppedOutTab(workspaceId: WorkspaceId, tabId: string): boo
 
 /**
  * Show a pane tab something outside the strip asked for — a board an agent
- * opened, a chat's agent lane, a link sent to the pane's browser. A tab out in
+ * opened, a link sent to the pane's browser. A tab out in
  * a window of its own is brought forward there and the pane is left as it is,
  * rather than opened on its placeholder; any other tab is selected and the
  * pane opens on it. `focus` raises the window too: for the person's own click,
@@ -156,7 +156,6 @@ const POP_OUT_OPEN_KINDS: ReadonlySet<WorkspacePaneTabKind> = new Set<WorkspaceP
   'backlog',
   'canvas',
   'document',
-  'agents',
 ])
 const POP_OUT_OPEN_FIELDS = ['title', 'url', 'diff', 'canvas', 'document'] as const
 
@@ -218,7 +217,12 @@ export function applyPanePopOutAction(popOutId: string, action: PanePopOutAction
     }
     case 'set-board':
       if (holds(action.tabId) && typeof action.path === 'string') {
-        store.setPaneTabBoard(workspaceId, action.tabId, action.path)
+        store.setPaneTabBoard(
+          workspaceId,
+          action.tabId,
+          action.path,
+          isCanvasStoreKey(action.store) ? action.store : undefined,
+        )
       }
       return
     case 'recent-url':
@@ -322,7 +326,6 @@ type Pushed = {
   recentUrls: readonly string[] | undefined
   revealKey: number | null
   focusedAgentId: string | null
-  agentFocusSerial: number | null
 }
 
 function samePush(a: Pushed | undefined, b: Pushed): boolean {
@@ -331,7 +334,6 @@ function samePush(a: Pushed | undefined, b: Pushed): boolean {
     a.recentUrls !== b.recentUrls ||
     a.revealKey !== b.revealKey ||
     a.focusedAgentId !== b.focusedAgentId ||
-    a.agentFocusSerial !== b.agentFocusSerial ||
     a.tabs.length !== b.tabs.length
   )
     return false
@@ -408,16 +410,14 @@ export function usePanePopOutHost(windowWorkspaceIds: ReadonlySet<WorkspaceId> |
         }
         for (const [popOutId, group] of held) {
           const record = popOuts.get(popOutId)!
-          // Which chat's agents an Agents tab shows is decided here, where
-          // chats are focused; the window has no chat of its own to follow.
+          // Which chat a Library tab shows is decided here, where chats are
+          // focused; the window has no chat of its own to follow.
           const focusedAgentId = state.focusedAgentByWorkspaceId[group.workspaceId] ?? null
-          const agentFocus = readAgentFocusRequest(group.workspaceId)
           const next: Pushed = {
             tabs: group.tabs,
             recentUrls: group.recentUrls,
             revealKey: record.reveal?.key ?? null,
             focusedAgentId,
-            agentFocusSerial: agentFocus?.serial ?? null,
           }
           if (samePush(pushed.get(popOutId), next)) continue
           pushed.set(popOutId, next)
@@ -428,9 +428,6 @@ export function usePanePopOutHost(windowWorkspaceIds: ReadonlySet<WorkspaceId> |
             ...(group.recentUrls ? { recentUrls: group.recentUrls } : {}),
             reveal,
             focusedAgentId,
-            agentFocus: agentFocus
-              ? { agentId: agentFocus.agentId, laneId: agentFocus.laneId, serial: agentFocus.serial }
-              : null,
           }
           window.api.panePopOutPush(popOutId, payload)
         }
@@ -463,9 +460,6 @@ export function usePanePopOutHost(windowWorkspaceIds: ReadonlySet<WorkspaceId> |
     syncRef.current = sync
     requestSync = sync
     const offStore = useWorkspaceStore.subscribe(sync)
-    // A request for the Agents tab is not a store write, so it is listened
-    // for in its own right.
-    const offAgentFocus = subscribeAgentFocusRequests(sync)
     const offAction = window.api.onPanePopOutAction(({ popOutId, action }) => applyPanePopOutAction(popOutId, action))
     const offClosed = window.api.onPanePopOutClosed(({ popOutId }) => {
       const record = popOuts.get(popOutId)
@@ -480,7 +474,6 @@ export function usePanePopOutHost(windowWorkspaceIds: ReadonlySet<WorkspaceId> |
     sync()
     return () => {
       offStore()
-      offAgentFocus()
       offAction()
       offClosed()
       if (requestSync === sync) requestSync = null

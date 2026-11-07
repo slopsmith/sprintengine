@@ -77,8 +77,16 @@ export const CONVERSATION_STEER_SENDS_CAPABILITY = 'conversation-steer-sends' as
  */
 export const CONVERSATION_STOP_SUBAGENT_CAPABILITY = 'conversation-stop-subagent' as const
 /**
+ * The person's words may be passed to one agent a chat spawned, as that agent's
+ * box does on the desktop: `messageSubagent` names the agent by the call that
+ * spawned it, and the chat's own model is asked to deliver them, which is the
+ * only way any harness reaches one. A listed chat says whether its provider
+ * can (`capabilities.messageSubagent`). A client draws no box without both.
+ */
+export const CONVERSATION_AGENT_MESSAGE_CAPABILITY = 'conversation-agent-message' as const
+/**
  * The chats a chat started for one task may be read where it is followed, as
- * the desktop's own Agents tab reads them: `watchSubagents` has the desktop
+ * the desktop's own panel reads them: `watchSubagents` has the desktop
  * name the followed chat's sub-agents in `subagents` frames, and each is a chat
  * of its own, followed by its `agentId` and answered there. No listed chat is
  * one: the `list` leaves them out, so only a client that asks is told of them.
@@ -278,6 +286,7 @@ export const CONVERSATION_CAPABILITIES = [
   CONVERSATION_MESSAGE_FILES_CAPABILITY,
   CONVERSATION_IMAGE_DOWNSCALE_CAPABILITY,
   CONVERSATION_STOP_SUBAGENT_CAPABILITY,
+  CONVERSATION_AGENT_MESSAGE_CAPABILITY,
   CONVERSATION_HANDOFF_CAPABILITY,
   CONVERSATION_REWIND_CAPABILITY,
   CONVERSATION_CHECKPOINT_REVERT_CAPABILITY,

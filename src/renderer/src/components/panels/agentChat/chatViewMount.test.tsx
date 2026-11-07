@@ -1,5 +1,5 @@
 import { JSDOM } from 'jsdom'
-import { forwardRef, memo, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
+import { forwardRef, Fragment, memo, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
 import { expect, test, vi } from 'vitest'
 import type {
   ConversationEvent,
@@ -124,6 +124,12 @@ type SendTurn = (input: {
 // Mounts the whole chat view against a scripted conversation API, the way a
 // person meets it: a transcript arrives over the session subscription and the
 // composer and rows are driven through the DOM.
+// The right-hand panel, beside the chat as the window has it, for the tests of
+// what a chat publishes. Its own reading of a checkout is the terminal's path.
+vi.mock('../../workspace/pane/panel/useWorkspaceCheckoutFacts', () => ({
+  useWorkspaceCheckoutFacts: () => ({ branch: null, changes: null }),
+}))
+
 async function mountChat({
   events = [],
   capabilities = {},
@@ -137,9 +143,11 @@ async function mountChat({
   api: extraApi = {},
   cliModelCatalog,
   whenActive = false,
+  withPanel = false,
   folderPath = '/Users/dev/project',
   worktree,
   beforeRender,
+  confirmDialogs = false,
 }: {
   events?: ConversationEvent[]
   capabilities?: Record<string, unknown>
@@ -155,12 +163,16 @@ async function mountChat({
   cliModelCatalog?: Record<string, unknown>
   /** Draw the chat only while it is the window's active one, as the window does. */
   whenActive?: boolean
+  /** Draw the right-hand panel beside the chat. */
+  withPanel?: boolean
   /** The chat's folder, which keys the transcript the window keeps for it. */
   folderPath?: string | null
   /** The chat's worktree marker. */
   worktree?: Record<string, unknown>
   /** What happens once the store holds the chat and before it is drawn. */
   beforeRender?: () => void
+  /** Around the view, as the app has it: what "Edit from here" asks through. */
+  confirmDialogs?: boolean
 }) {
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'http://localhost', pretendToBeVisual: true })
   const previous = Object.getOwnPropertyDescriptors(globalThis)
@@ -260,12 +272,31 @@ async function mountChat({
   const host = dom.window.document.createElement('div')
   dom.window.document.body.appendChild(host)
   const root = createRoot(host)
-  const chatView = () => createElement(AgentChatView, { workspaceId: 'workspace', agentId: 'agent' })
+  const { ConfirmDialogProvider } = await import('../../ui/ConfirmDialog')
+  const bareChatView = () => createElement(AgentChatView, { workspaceId: 'workspace', agentId: 'agent' })
+  const chatView = () => (confirmDialogs ? createElement(ConfirmDialogProvider, null, bareChatView()) : bareChatView())
   function FrontChat() {
     return useWorkspaceStore((state) => state.activeWorkspaceId) === 'workspace' ? chatView() : null
   }
   if (whenActive) useWorkspaceStore.setState({ activeWorkspaceId: null } as never)
-  await act(async () => root.render(whenActive ? createElement(FrontChat) : chatView()))
+  const { ChatPanel } = await import('../../workspace/pane/panel/ChatPanel')
+  useWorkspaceStore.setState({ focusedAgentByWorkspaceId: { workspace: 'agent' } } as never)
+  const panel = withPanel
+    ? createElement(ChatPanel, {
+        workspaceId: 'workspace',
+        tabs: [],
+        items: [],
+        currentTabId: null,
+        onOpenTab: () => undefined,
+        onCloseTab: () => undefined,
+        onTabContextMenu: () => undefined,
+        addControl: null,
+        onClose: () => undefined,
+      })
+    : null
+  await act(async () =>
+    root.render(createElement(Fragment, null, whenActive ? createElement(FrontChat) : chatView(), panel)),
+  )
   await act(async () => {
     frames.at(-1)?.({ type: 'snapshot', page: { events, hasMore: false, beforeCursor: null } })
     frames.at(-1)?.({ type: 'synchronized', seq: events.at(-1)?.seq ?? 0 })
@@ -2049,7 +2080,7 @@ test('a sent picture’s bytes leave the view once the transcript has stored it,
   }
 })
 
-test('a turn’s steps rest folded, the latest one included; its agents are cards that open the Agents tab', async () => {
+test('a turn’s steps rest folded, the latest one included; its agents are cards that open as chats', async () => {
   // Turn ids of its own: a fold another test opened is remembered per turn.
   const chat = await mountChat({
     events: [
@@ -2070,10 +2101,9 @@ test('a turn’s steps rest folded, the latest one included; its agents are card
       event('turn_completed', { turnId: 'fold-first' }),
     ],
   })
-  const openPaneTab = vi.fn(() => 'agents-tab')
-  const setActivePaneTab = vi.fn()
+  const openPaneTab = vi.fn(() => 'a-tab')
   const { useWorkspaceStore } = await import('../../../store/workspaceStore')
-  useWorkspaceStore.setState({ openPaneTab, setActivePaneTab } as never)
+  useWorkspaceStore.setState({ openPaneTab } as never)
   const fold = () => chat.button('Worked for')
   try {
     expect(fold()?.textContent, 'the agent is not one of the steps').toContain('1 step')
@@ -2081,16 +2111,77 @@ test('a turn’s steps rest folded, the latest one included; its agents are card
     expect(chat.host.textContent, 'its steps are not drawn').not.toContain('a.ts')
     expect(chat.host.textContent).toContain('It builds.')
     const card = Array.from(chat.host.querySelectorAll('button')).find((item) =>
-      item.getAttribute('aria-label')?.endsWith('Open in Agents'),
+      item.getAttribute('aria-label')?.endsWith('Open it'),
     )
     expect(card?.textContent).toContain('Explore agent')
     expect(card?.textContent).toContain('Map the test suites')
-    await chat.act(async () => card!.click())
-    expect(openPaneTab).toHaveBeenCalledWith('workspace', { kind: 'agents', activate: false })
-    expect(setActivePaneTab, 'a docked Agents tab is shown in the pane').toHaveBeenCalledWith('workspace', 'agents-tab')
     await chat.act(async () => fold()!.click())
     expect(chat.host.textContent, 'opened, the fold shows the steps').toContain('a.ts')
+    await chat.act(async () => card!.click())
+    const { readSubagentViews, resetSubagentViews } = await import('./subagentViewStack')
+    try {
+      expect(readSubagentViews('workspace', 'agent'), 'the card opens the agent in the chat’s place').toEqual([
+        { kind: 'lane', ownerAgentId: 'agent', laneId: 'fold-agent', label: 'Map the test suites' },
+      ])
+      expect(openPaneTab, 'no tab is made for it').not.toHaveBeenCalled()
+    } finally {
+      await chat.act(async () => resetSubagentViews())
+    }
   } finally {
+    await chat.unmount()
+  }
+})
+
+test('a sub-agent’s chat offers nothing that takes it out of Studio or past its parent, and its parent stays mounted', async () => {
+  const gateEvents = [
+    event('user_message', { turnId: 'gate', text: 'Review the screen' }),
+    event('turn_started', { turnId: 'gate' }),
+    event('content_delta', { turnId: 'gate', text: 'It holds at 360px.' }),
+    event('turn_completed', { turnId: 'gate' }),
+  ]
+  const chat = await mountChat({
+    confirmDialogs: true,
+    capabilities: { fork: true, rewind: true, handoff: true, checkpoints: true, approvals: true },
+    events: gateEvents,
+  })
+  const { useWorkspaceStore } = await import('../../../store/workspaceStore')
+  const { pushSubagentView, resetSubagentViews } = await import('./subagentViewStack')
+  try {
+    expect(chat.host.textContent, 'the chat itself offers a fork').toContain('Fork from here')
+    await chat.act(async () => {
+      useWorkspaceStore.setState((state) => ({
+        workspaces: state.workspaces.map((workspace) => ({
+          ...workspace,
+          agents: {
+            ...workspace.agents,
+            sub: {
+              ...workspace.agents.agent!,
+              id: 'sub',
+              name: 'Design review',
+              subagentOf: { agentId: 'agent', startedAt: 1, task: 'Review the screen' },
+            },
+          },
+        })),
+      }))
+      pushSubagentView('workspace', 'agent', { kind: 'chat', agentId: 'sub' })
+    })
+    await chat.act(async () => {
+      chat.emit({ type: 'snapshot', page: { events: gateEvents, hasMore: false, beforeCursor: null } })
+      chat.emit({ type: 'synchronized', seq: gateEvents.at(-1)?.seq ?? 0 })
+    })
+    const header = chat.host.querySelector('[data-subagent-header]')
+    expect(header?.textContent).toContain('Design review')
+    const layer = header!.parentElement!
+    expect(layer.textContent, 'it reads as a chat').toContain('It holds at 360px.')
+    expect(layer.textContent).not.toContain('Fork from here')
+    expect(layer.querySelector('[aria-label*="Edit from here"]')).toBeNull()
+    expect(layer.querySelector('[data-chat-composer]'), 'it takes a message directly').not.toBeNull()
+    const hidden = Array.from(chat.host.querySelectorAll('.hidden')).find((element) =>
+      element.textContent?.includes('Fork from here'),
+    )
+    expect(hidden, 'the parent is hidden, not unmounted').toBeDefined()
+  } finally {
+    await chat.act(async () => resetSubagentViews())
     await chat.unmount()
   }
 })
@@ -2362,23 +2453,22 @@ test('a chat whose provider reads no images still attaches files of any kind und
   }
 })
 
-test('the strip under the composer pins the context ring right, its tooltip the token counts', async () => {
+test('the panel names the context reading, its tooltip the token counts', async () => {
   const chat = await mountChat({
+    withPanel: true,
     events: [
       event('user_message', { turnId: 'a', text: 'Earlier message' }),
       event('usage_updated', { inputTokens: 90_000, outputTokens: 400, contextWindow: 200_000, contextUsed: 76_000 }),
     ],
   })
   try {
-    const strip = chat.host.querySelector('[data-conversation-strip]')
-    // A button now: it opens what fills the window (ContextBreakdown.tsx).
-    const ring = strip?.querySelector<HTMLElement>('[data-strip-context] [data-strip-context-button]')
+    // A button: it opens what fills the window (ContextBreakdown.tsx).
+    const ring = chat.host.querySelector<HTMLElement>('[data-panel-context]')
     const counts = `${(76_000).toLocaleString()} / ${(200_000).toLocaleString()} tokens`
     expect(ring?.getAttribute('aria-label')).toBe(`Context 38% used, ${counts} — show what fills it`)
-    expect(ring?.closest('[data-strip-context]')?.className).toContain('ml-auto')
     await chat.act(async () => ring!.focus())
     expect(chat.dom.window.document.querySelector('[role="tooltip"]')?.textContent).toBe(counts)
-    // The ring is the strip's; the old meter row above the composer row is gone.
+    // The reading is the panel's; the old meter row above the composer is gone.
     expect(chat.host.textContent).not.toContain('Context used:')
   } finally {
     await chat.unmount()
@@ -2387,6 +2477,7 @@ test('the strip under the composer pins the context ring right, its tooltip the 
 
 test('a CLI chat’s ring takes its window from the CLI model catalog when the runtime names none', async () => {
   const chat = await mountChat({
+    withPanel: true,
     providerId: 'claude-agent',
     modelId: 'opus',
     cliModelCatalog: {
@@ -2395,7 +2486,7 @@ test('a CLI chat’s ring takes its window from the CLI model catalog when the r
     events: [event('usage_updated', { contextUsed: 50_000 })],
   })
   try {
-    const ring = chat.host.querySelector('[data-strip-context] [data-strip-context-button]')
+    const ring = chat.host.querySelector('[data-panel-context]')
     expect(ring?.getAttribute('aria-label')).toMatch(/^Context 25% used, /)
   } finally {
     await chat.unmount()
@@ -2424,6 +2515,7 @@ test('the ring opens what fills the window, read from the chat’s agent', async
     },
   }))
   const chat = await mountChat({
+    withPanel: true,
     providerId: 'claude-agent',
     modelId: 'opus',
     capabilities: { tools: true, contextBreakdown: true },
@@ -2431,7 +2523,7 @@ test('the ring opens what fills the window, read from the chat’s agent', async
     events: [event('usage_updated', { contextWindow: 200_000, contextUsed: 76_000 })],
   })
   try {
-    const ring = () => chat.host.querySelector<HTMLButtonElement>('[data-strip-context] [data-strip-context-button]')!
+    const ring = () => chat.host.querySelector<HTMLButtonElement>('[data-panel-context]')!
     const note = () => chat.dom.window.document.querySelector('[data-context-breakdown-note]')?.textContent
     await chat.act(async () => ring().click())
     // The Studio protocol has no method for it yet: the panel opens on the
@@ -2462,9 +2554,12 @@ test('the ring opens what fills the window, read from the chat’s agent', async
 })
 
 test('with no usage reported the strip draws no ring, rather than an empty one', async () => {
-  const chat = await mountChat({ providerModels: [{ id: 'mock-model', contextLength: 200_000 }] })
+  const chat = await mountChat({
+    withPanel: true,
+    providerModels: [{ id: 'mock-model', contextLength: 200_000 }],
+  })
   try {
-    expect(chat.host.querySelector('[data-strip-context]')).toBeNull()
+    expect(chat.host.querySelector('[data-panel-context]')).toBeNull()
   } finally {
     await chat.unmount()
   }
@@ -2485,61 +2580,63 @@ const gitApi = (branch: string, files: { added: number; updated: number; removed
   }),
 })
 
-test('the strip names the branch the agent is on and opens the file explorer from it; no worktree, no machine here', async () => {
-  const chat = await mountChat({ api: gitApi('fix/cli-update-output') })
+test('the panel names the branch the agent is on and opens Git from it; no worktree, no machine here', async () => {
+  const chat = await mountChat({ withPanel: true, api: gitApi('fix/cli-update-output') })
   try {
     await chat.act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
-    const strip = chat.host.querySelector('[data-conversation-strip]')!
-    const branch = strip.querySelector<HTMLButtonElement>('[data-strip-branch]')
-    expect(branch?.getAttribute('data-strip-branch')).toBe('fix/cli-update-output')
-    expect(branch?.getAttribute('aria-label')).toBe('Branch fix/cli-update-output — open in file explorer')
-    expect(branch?.textContent).toBe('fix/cli-update-output')
+    const panel = chat.host.querySelector('[data-chat-panel]')!
+    const branch = panel.querySelector<HTMLButtonElement>('[data-panel-branch]')
+    expect(branch?.getAttribute('data-panel-branch')).toBe('fix/cli-update-output')
+    expect(branch?.getAttribute('aria-label')).toBe('Branch fix/cli-update-output')
+    expect(branch?.textContent).toContain('fix/cli-update-output')
     // On this computer, on the workspace's own checkout: no machine, no worktree.
-    expect(strip.querySelector('[data-strip-machine]')).toBeNull()
-    expect(branch?.querySelector('svg')).toBeNull()
-    // The project is the title bar's to name, not the strip's.
-    expect(strip.textContent).not.toContain('project')
+    expect(panel.querySelector('[data-panel-machine]')).toBeNull()
     const { useWorkspaceStore } = await import('../../../store/workspaceStore')
     const openPaneTab = vi.fn(() => null)
     await chat.act(async () => useWorkspaceStore.setState({ openPaneTab } as never))
     await chat.act(async () => branch!.click())
+    expect(openPaneTab).toHaveBeenCalledWith('workspace', { kind: 'git' })
+    const files = [...panel.querySelectorAll<HTMLButtonElement>('[data-panel-row="action"]')].find((row) =>
+      row.textContent?.startsWith('Files'),
+    )
+    await chat.act(async () => files!.click())
     expect(openPaneTab).toHaveBeenCalledWith('workspace', { kind: 'files' })
   } finally {
     await chat.unmount()
   }
 })
 
-test('an agent in a worktree of its own wears the worktree mark on its branch', async () => {
+test('an agent in a worktree of its own says so on its branch', async () => {
   const chat = await mountChat({
+    withPanel: true,
     api: gitApi('agent/rename-module'),
     agent: { execution: { mode: 'worktree', cwd: '/Users/dev/project/.worktrees/rename-module' } },
   })
   try {
     await chat.act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
-    const branch = chat.host.querySelector('[data-conversation-strip] [data-strip-branch]')
-    expect(branch?.getAttribute('aria-label')).toBe('Branch agent/rename-module, in a worktree — open in file explorer')
-    expect(branch?.querySelector('svg')).not.toBeNull()
+    const branch = chat.host.querySelector('[data-chat-panel] [data-panel-branch]')
+    expect(branch?.getAttribute('aria-label')).toBe('Branch agent/rename-module, in a worktree')
   } finally {
     await chat.unmount()
   }
 })
 
-test('the strip’s diff counts are a split pill that opens the Git panel, and a clean checkout draws none', async () => {
-  const chat = await mountChat({ api: gitApi('main', { added: 1, updated: 2, removed: 2 }) })
+test('the panel’s diff counts open the Diff tab, and a clean checkout draws none', async () => {
+  const chat = await mountChat({ withPanel: true, api: gitApi('main', { added: 1, updated: 2, removed: 2 }) })
   try {
     await chat.act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
-    const pill = chat.host.querySelector<HTMLButtonElement>('[data-conversation-strip] [data-diff-stat-pill]')
-    expect(pill?.getAttribute('aria-label')).toBe('1 file added, 2 updated, 2 removed — open changes')
+    const pill = chat.host.querySelector<HTMLElement>('[data-chat-panel] [data-diff-stat-pill]')
+    expect(pill?.getAttribute('aria-label')).toBe('1 file added, 2 updated, 2 removed')
     expect(pill?.textContent).toBe('+3−2')
     const { useWorkspaceStore } = await import('../../../store/workspaceStore')
-    const togglePaneKind = vi.fn(() => true)
-    await chat.act(async () => useWorkspaceStore.setState({ togglePaneKind } as never))
-    await chat.act(async () => pill!.click())
-    expect(togglePaneKind).toHaveBeenCalledWith('workspace', 'git')
+    const openPaneTab = vi.fn(() => null)
+    await chat.act(async () => useWorkspaceStore.setState({ openPaneTab } as never))
+    await chat.act(async () => pill!.closest<HTMLButtonElement>('[data-panel-row="action"]')!.click())
+    expect(openPaneTab).toHaveBeenCalledWith('workspace', { kind: 'diff' })
   } finally {
     await chat.unmount()
   }
-  const clean = await mountChat({ api: gitApi('main', { added: 0, updated: 0, removed: 0 }) })
+  const clean = await mountChat({ withPanel: true, api: gitApi('main', { added: 0, updated: 0, removed: 0 }) })
   try {
     await clean.act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
     expect(clean.host.querySelector('[data-diff-stat-pill]')).toBeNull()

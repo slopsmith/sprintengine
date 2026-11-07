@@ -176,20 +176,10 @@ test('the composer strip is one line: it never wraps, and its items keep to one 
   } finally {
     await view.unmount()
   }
-  // And neither composer brings a wrap of its own to the strip: the New chat
-  // strip and the conversation strip are both this container, and no item on
-  // the conversation strip but the branch may shrink.
+  // And New chat, the one composer that has a strip, brings no wrap of its own
+  // to it: the strip is this container.
   const read = (path: string) => readFileSync(join(process.cwd(), 'src/renderer/src/components', path), 'utf8')
   const newChat = read('workspace/agentComposer/NewAgentPanel.tsx')
   expect(newChat).toContain('<ComposerStrip>')
   expect(newChat).not.toContain('data-composer-strip="true"')
-  const strip = read('panels/agentChat/conversationStrip.tsx')
-  expect(strip).toContain('<ComposerStrip ')
-  expect(strip).not.toMatch(/flex-wrap/)
-  // Every item wrapper on the conversation strip is `shrink-0` except the branch.
-  for (const item of ['ref={machineRef}', 'ref={changesRef}', 'ref={overflowRef}', 'ref={ringRef}']) {
-    const at = strip.indexOf(item)
-    expect(at, item).toBeGreaterThan(-1)
-    expect(strip.slice(at, at + 400), item).toMatch(/shrink-0/)
-  }
 })

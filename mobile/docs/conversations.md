@@ -844,3 +844,12 @@ down it is shown but waits for the link. The rows on the Agents list carry no
 Stop of their own: a row opens its agent, and a second target on it would
 take taps meant for the row. An older desktop does not advertise the
 capability, and its turn Stop still ends the agents with the turn.
+
+An agent's screen ends in a box where a message reaches it, sent as
+`messageSubagent` from a desktop that advertises `conversation-agent-message`, a
+pairing that may operate its chats, and a chat whose listed
+`capabilities.messageSubagent` is `true`. Anywhere else there is no box, only a
+bar that says why and leads to the chat: the rule is the desktop's
+(`agentMessageOffer`). The Agents screen still lists only the agents a chat's CLI
+spawned. A sub-agent Studio started is not on it: the phone does not ask
+`watchSubagents` yet, which is a known gap.

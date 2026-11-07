@@ -2,7 +2,12 @@ import { nanoid } from 'nanoid'
 import { rememberClosedPaneTab } from '../../utils/recentlyClosedTabs'
 import { BROWSER_MAX_RECENT_URLS } from '../../../../shared/browser'
 import { normalizeBrowserViewport } from '../../../../shared/browser-devices'
-import { canvasBoardKeyPath, canvasBoardName, normalizeCanvasPath } from '../../../../shared/canvas/paths'
+import {
+  canvasBoardKeyPath,
+  canvasBoardName,
+  isCanvasStoreKey,
+  normalizeCanvasPath,
+} from '../../../../shared/canvas/paths'
 import { isAbsoluteFilePath } from '../../../../shared/paths'
 import type {
   Workspace,
@@ -26,7 +31,6 @@ const WORKSPACE_PANE_TAB_KINDS: readonly WorkspacePaneTabKind[] = [
   'backlog',
   'canvas',
   'document',
-  'agents',
   'library',
 ]
 
@@ -42,7 +46,6 @@ const SINGLETON_PANE_TAB_KINDS: ReadonlySet<WorkspacePaneTabKind> = new Set([
   'diff',
   'git',
   'backlog',
-  'agents',
   'library',
 ])
 
@@ -57,8 +60,10 @@ const SINGLETON_PANE_TAB_KINDS: ReadonlySet<WorkspacePaneTabKind> = new Set([
 function canvasTabKey(tab: Pick<WorkspacePaneTab, 'canvas'>): string {
   // Folded where the filesystem folds it, and main folds its own registry key
   // the same way: two spellings of one path are one file, so two tabs over them
-  // would be two live editors writing the same board.
-  return canvasBoardKeyPath(tab.canvas?.path ?? '', rendererPlatform())
+  // would be two live editors writing the same board. The store is part of it:
+  // `arch` here and another project's `arch` are two boards with one name.
+  const path = canvasBoardKeyPath(tab.canvas?.path ?? '', rendererPlatform())
+  return tab.canvas?.store ? `${tab.canvas.store}\u0000${path}` : path
 }
 
 /**
@@ -197,8 +202,15 @@ function normalizeTab(input: unknown): WorkspacePaneTab | null {
     // An unusable path drops the FIELD, never the tab: the tab then opens on
     // the board picker, which is a surface the person can act in, where
     // dropping the tab would lose a place in the strip with no explanation.
-    const path = normalizeCanvasPath(String((raw.canvas as { path?: unknown }).path ?? ''))
-    if (path.ok) tab.canvas = { path: path.value }
+    //
+    // The store survives with the path or not at all: a foreign tab that came
+    // back without its store would name a board in THIS project, and the pane
+    // would make an empty one of that name.
+    const { path: rawPath, store } = raw.canvas as { path?: unknown; store?: unknown }
+    const path = normalizeCanvasPath(String(rawPath ?? ''))
+    if (path.ok && (store === undefined || isCanvasStoreKey(store))) {
+      tab.canvas = { path: path.value, ...(store ? { store } : {}) }
+    }
   }
   if (tab.kind === 'document') {
     // A document tab reads one file and has no picker to fall back to, so a
@@ -302,7 +314,18 @@ export function normalizeWorkspacePaneState(input: unknown): WorkspacePaneState 
     activeTabId,
     tabs,
     ...(recentUrls.length > 0 ? { recentUrls } : {}),
+    ...(raw.menu === true ? { menu: true } : {}),
   }
+}
+
+/**
+ * Whether the column shows its menu rather than a tab: it was asked to, or
+ * there is no tab to show. `activeTabId` cannot say this, because the
+ * normalizer falls back to the first tab, and it has to stand through the menu
+ * so Back returns to it and a retained terminal keeps its place.
+ */
+export function paneShowsMenu(pane: Pick<WorkspacePaneState, 'menu' | 'tabs'> | undefined): boolean {
+  return !pane || pane.menu === true || pane.tabs.length === 0
 }
 
 /**
@@ -338,6 +361,22 @@ function normalizeRecentUrls(input: unknown): string[] {
   return out
 }
 
+// Kinds that were tabs once. A profile from an older build still names them, and
+// a tab of one has nothing to draw: a chat's subagents are on the right-hand panel
+// now (owner ruling 2026-11-07).
+const RETIRED_PANE_TAB_KINDS: ReadonlySet<string> = new Set(['agents'])
+
+/**
+ * A record with its retired tabs gone, and the same record back (by reference)
+ * when it holds none. Run on hydration: main hands the renderer records that
+ * never pass the normalizer above, and it is the only thing that drops a kind.
+ */
+export function dropRetiredPaneTabs(paneState: WorkspacePaneState): WorkspacePaneState {
+  if (!Array.isArray(paneState.tabs)) return paneState
+  if (!paneState.tabs.some((tab) => RETIRED_PANE_TAB_KINDS.has(tab.kind))) return paneState
+  return normalizeWorkspacePaneState(paneState) ?? defaultWorkspacePaneState()
+}
+
 /**
  * What persists: the favicon is a per-load cache and is fetched again on load,
  * and whether a tab floats or sits in a pop-out window is this session's alone.
@@ -345,9 +384,12 @@ function normalizeRecentUrls(input: unknown): string[] {
 export function partializeWorkspacePaneState(input: unknown): WorkspacePaneState | undefined {
   const normalized = normalizeWorkspacePaneState(input)
   if (!normalized) return undefined
+  // Which face the column shows is this sitting's: a restart opens on what was
+  // showing rather than on a menu nobody asked for.
+  const { menu: _menu, ...record } = normalized
   return {
-    ...normalized,
-    tabs: normalized.tabs.map((tab) => {
+    ...record,
+    tabs: record.tabs.map((tab) => {
       // `floating` is session-only alongside the favicon: the rect persists,
       // the "is it floating right now" does not.
       // So is an agent's reveal on a Diff tab: a restart must not re-narrow the
@@ -497,8 +539,19 @@ export interface WorkspacePaneSliceActions {
    * would leave the normalizer to drop one of them after the fact — taking the
    * person somewhere they did not ask to be.
    */
-  setPaneTabBoard: (id: WorkspaceId, tabId: string, path: string) => void
+  /** `store` names a board of another project, as `CanvasBoardRef` does. */
+  setPaneTabBoard: (id: WorkspaceId, tabId: string, path: string, store?: string) => void
   setPaneOpen: (id: WorkspaceId, open: boolean) => void
+  /**
+   * What the window's panel toggle does: closed, the column opens on its menu,
+   * docking a floating tab onto its own tab instead when one is up (docked and
+   * floating are one state seen from two sides, as `setPaneOpen` says); open,
+   * it closes. `setPaneOpen` is the plain switch every other path uses, so an
+   * agent's open or a reveal lands on its tab rather than on the menu.
+   */
+  togglePaneMenu: (id: WorkspaceId) => void
+  /** Show the column's menu, opening it if it was closed: Back, and "See subagents". */
+  showPaneMenu: (id: WorkspaceId) => void
   /**
    * The shortcut semantics of the old rail switches, for the singleton kinds:
    * the kind showing → close its tab (and the pane, when that empties it);
@@ -591,6 +644,7 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
           delete tab.floating
           pane.open = true
           pane.activeTabId = tabId
+          delete pane.menu
         }
         ws.paneState = normalizeWorkspacePaneState(pane)
       }),
@@ -661,6 +715,7 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         if (landing && docked.includes(landing)) {
           pane.activeTabId = landing
           pane.open = true
+          delete pane.menu
         }
         ws.paneState = normalizeWorkspacePaneState(pane)
       }),
@@ -715,6 +770,7 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         if (activate) {
           pane.activeTabId = opened
           pane.open = true
+          delete pane.menu
         } else if (pane.activeTabId === null) {
           pane.activeTabId = opened
         }
@@ -735,10 +791,10 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         rememberClosedPaneTab(id, closed)
         pane.tabs.splice(index, 1)
         if (pane.activeTabId === tabId) pane.activeTabId = nextActiveAfterClose(pane.tabs, index)
-        // The last docked tab closing takes the pane with it, the way a toggle
-        // and a pop-out emptying it already do: an empty column is width spent
-        // on nothing. A tab closed in its own window leaves the pane as it was.
-        if (!closed.poppedOut && !pane.tabs.some((tab) => !tab.poppedOut)) pane.open = false
+        // The last docked tab closing lands on the menu rather than shutting
+        // the column: the person was working in it, and the menu is the way on
+        // from here. A tab closed in its own window leaves the pane as it was.
+        if (!closed.poppedOut && !pane.tabs.some((tab) => !tab.poppedOut)) pane.menu = true
         ws.paneState = normalizeWorkspacePaneState(pane)
       }),
 
@@ -764,6 +820,7 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         if (!pane.tabs.some((tab) => tab.id === tabId)) return
         pane.activeTabId = tabId
         pane.open = true
+        delete pane.menu
       }),
 
     updatePaneTab: (id, tabId, patch) =>
@@ -786,7 +843,7 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         ws.paneState = normalizeWorkspacePaneState(pane)
       }),
 
-    setPaneTabBoard: (id, tabId, path) =>
+    setPaneTabBoard: (id, tabId, path, store) =>
       set((state) => {
         const ws = state.workspaces.find((w) => w.id === id)
         if (!ws) return
@@ -796,7 +853,8 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         if (!tab || tab.kind !== 'canvas') return
         const normalized = normalizeCanvasPath(path)
         if (!normalized.ok) return
-        const key = canvasTabKey({ canvas: { path: normalized.value } })
+        const canvas = { path: normalized.value, ...(store ? { store } : {}) }
+        const key = canvasTabKey({ canvas })
         const existing = pane.tabs.find(
           (candidate) => candidate.id !== tabId && candidate.kind === 'canvas' && canvasTabKey(candidate) === key,
         )
@@ -804,8 +862,9 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
           pane.tabs.splice(index, 1)
           pane.activeTabId = existing.id
           pane.open = true
+          delete pane.menu
         } else {
-          tab.canvas = { path: normalized.value }
+          tab.canvas = canvas
           // The same rule `updatePaneTab` follows: the board's name is the
           // tab's label, written where the board is written.
           tab.title = canvasBoardName(normalized.value)
@@ -819,6 +878,8 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         if (!ws) return
         const pane = paneOf(ws)
         if (pane.open !== open) pane.open = open
+        // The menu is one opening's: the next plain open is a tab's.
+        if (!open && pane.menu) delete pane.menu
         // Docked and floating are the same state seen from two sides, so
         // re-opening the pane docks whatever was floating. Without this the
         // floating panel is still `position: fixed` and the pane it belongs to
@@ -831,6 +892,36 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
             }
           }
         }
+      }),
+
+    togglePaneMenu: (id) =>
+      set((state) => {
+        const ws = state.workspaces.find((w) => w.id === id)
+        if (!ws) return
+        const pane = paneOf(ws)
+        if (pane.open) {
+          pane.open = false
+          if (pane.menu) delete pane.menu
+          return
+        }
+        pane.open = true
+        const floating = pane.tabs.find((tab) => tab.floating)
+        if (floating) {
+          delete floating.floating
+          pane.activeTabId = floating.id
+          return
+        }
+        pane.menu = true
+      }),
+
+    showPaneMenu: (id) =>
+      set((state) => {
+        const ws = state.workspaces.find((w) => w.id === id)
+        if (!ws) return
+        const pane = paneOf(ws)
+        pane.open = true
+        pane.menu = true
+        for (const tab of pane.tabs) if (tab.floating) delete tab.floating
       }),
 
     notePaneRecentUrl: (id, url) =>
@@ -852,7 +943,7 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
         const pane = paneOf(ws)
         const index = pane.tabs.findIndex((tab) => tab.kind === kind)
         const isShowing = pane.open && index !== -1 && pane.activeTabId === pane.tabs[index].id
-        if (isShowing) {
+        if (isShowing && !pane.menu) {
           pane.tabs.splice(index, 1)
           pane.activeTabId = nextActiveAfterClose(pane.tabs, index)
           if (pane.tabs.length === 0) pane.open = false
@@ -870,6 +961,7 @@ export function createWorkspacePaneSlice(set: PaneSliceSet): WorkspacePaneSliceA
           pane.activeTabId = tab.id
         }
         pane.open = true
+        delete pane.menu
         showing = true
         ws.paneState = normalizeWorkspacePaneState(pane)
       })

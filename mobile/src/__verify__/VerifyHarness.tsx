@@ -236,7 +236,12 @@ function VerifyConversationStack() {
         </ConversationStack.Screen>
         <ConversationStack.Screen name="ConversationAgent">
           {({ navigation, route }) => (
-            <ConversationAgentScreen conversation={verifyChat} laneId={route.params.laneId} onBack={() => navigation.goBack()} />
+            <ConversationAgentScreen
+              conversation={verifyChat}
+              laneId={route.params.laneId}
+              onBack={() => navigation.goBack()}
+              onChat={() => navigation.popToTop()}
+            />
           )}
         </ConversationStack.Screen>
         <ConversationStack.Screen name="ConversationPlan">

@@ -5,6 +5,7 @@ import {
   MenuItem,
   OutlineButton,
   Popover,
+  type PopoverPlacement,
   TONE_COLOR_VAR,
   TONE_SOFT_VAR,
   Tooltip,
@@ -12,16 +13,20 @@ import {
 } from '../ui'
 import type { SprintEngineAuthState } from '../../../../shared/electron-api'
 import { AccountAvatar, AccountUserGlyph } from './AccountAvatar'
-import { AddExtensionsGlyph } from '../AppIcons'
+import { AddExtensionsGlyph, RemoteMachineGlyph } from '../AppIcons'
 import { InstalledStack } from './globalSurface/extensions/catalogue/InstalledStack'
 import type { RailBadge } from './AppRail'
+import type { Tone } from '../ui/tokens'
+import { SessionsIcon } from './topbar/SessionsPopover'
 
 // The account + Settings cluster lives at the sidebar bottom, relocated from
 // WorkspaceTopBar. The account menu, its trigger, and
 // the Settings gear keep their original handlers — only the mount point moved.
 //
-// Four controls, and no more: the app update, Usage, the account and
-// Settings. For four days it also hosted a trigger glyph per registered modal
+// Five controls, and no more: the app update, Usage, the bell, the account and
+// Settings. The bell came down from the top row (owner ruling 2026-11-07), and
+// Remote and Sessions came with it, behind the account: the account menu opens
+// for everyone, signed in or not, because neither of those is about an account. For four days it also hosted a trigger glyph per registered modal
 // surface (doors→modals, 2026-09-01): Plugins, Automations and Design left the top-nav door band and
 // opened as modals from beside the gear. The Extensions drawer ruling
 // (2026-09-05) sent all three back to being doors — a destination the shell's
@@ -36,7 +41,7 @@ import type { RailBadge } from './AppRail'
 // Three bars of different heights, the column chart with no axes (lucide
 // "chart-no-axes-column" geometry): a chart, read at icon size, with nothing
 // in it that could be mistaken for a value.
-function UsageGlyph({ className }: { className?: string }) {
+export function UsageGlyph({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -89,29 +94,70 @@ function GearIcon({ className }: { className?: string }) {
 // (ExtensionsRail, app shell 2026-09-05): one home for every surface a
 // person can open, whether it mounts as a door or as a modal.
 
+function moveAccountFocus(event: React.KeyboardEvent<HTMLButtonElement>) {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  const surface = event.currentTarget.closest('[data-account-menu="true"]')
+  if (!surface) return
+  const items = Array.from(surface.querySelectorAll<HTMLButtonElement>('[data-account-item="true"]'))
+  if (items.length === 0) return
+  const idx = items.indexOf(event.currentTarget)
+  const next =
+    event.key === 'Home'
+      ? items[0]
+      : event.key === 'End'
+        ? items[items.length - 1]
+        : items[(idx + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]
+  next?.focus()
+}
+
 function AccountMenuItem({ onSelect, children }: { onSelect: () => void; children: React.ReactNode }) {
-  const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
-    event.preventDefault()
-    const surface = event.currentTarget.closest('[data-account-menu="true"]')
-    if (!surface) return
-    const items = Array.from(surface.querySelectorAll<HTMLButtonElement>('[data-account-item="true"]'))
-    if (items.length === 0) return
-    const idx = items.indexOf(event.currentTarget)
-    const next =
-      event.key === 'Home'
-        ? items[0]
-        : event.key === 'End'
-          ? items[items.length - 1]
-          : items[(idx + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]
-    next?.focus()
-  }
   return (
     // The kit's menu row. It passes `data-*` through now — this surface's own
     // roving-focus query selects on `data-account-item` — which is the one
     // thing that kept this a raw button element wearing `MENU_ITEM_CLASS`.
-    <MenuItem data-account-item="true" onClick={onSelect} onKeyDown={onKeyDown}>
+    <MenuItem data-account-item="true" onClick={onSelect} onKeyDown={moveAccountFocus}>
       {children}
+    </MenuItem>
+  )
+}
+
+/** A row the account menu opens something from: what it says at its end, and what it opens. */
+export type AccountMenuRow = {
+  meta: string | null
+  onSelect: () => void
+  tooltip?: string
+  /** The glyph's ink, where the row's state is worn on it. */
+  toneClass?: string
+}
+
+/** What the avatar wears for the rows behind it. */
+export type AccountBadge = { count: number; tone: Tone; label: string }
+
+function AccountRow({
+  glyph,
+  label,
+  row,
+  onChosen,
+}: {
+  glyph: React.ReactNode
+  label: string
+  row: AccountMenuRow
+  onChosen: () => void
+}) {
+  return (
+    <MenuItem
+      data-account-item="true"
+      icon={glyph}
+      trailing={row.meta ? <span className="text-meta text-[color:var(--text-subtle)]">{row.meta}</span> : undefined}
+      onClick={() => {
+        onChosen()
+        row.onSelect()
+      }}
+      onKeyDown={moveAccountFocus}
+      title={row.tooltip}
+    >
+      {label}
     </MenuItem>
   )
 }
@@ -121,15 +167,27 @@ function AccountPopover({
   message,
   onRetry,
   onLogout,
+  onSignIn,
+  remote,
+  sessions,
+  onChosen,
 }: {
   authState: SprintEngineAuthState
   message: string | null
   onRetry: () => void
   onLogout: () => void
+  onSignIn: () => void
+  remote: AccountMenuRow | null
+  sessions: AccountMenuRow | null
+  /** A row was pressed: the menu closes, and what it opened stands on its own. */
+  onChosen: () => void
 }) {
+  const signedIn = authState.authenticated
   const metaLine = authState.selectedOrganization?.name ?? null
-  const primaryLine = authState.user?.displayName ?? authState.user?.email ?? 'Your account'
-  const email = authState.user?.displayName ? authState.user?.email : null
+  const primaryLine = signedIn
+    ? (authState.user?.displayName ?? authState.user?.email ?? 'Your account')
+    : 'Your account'
+  const email = signedIn && authState.user?.displayName ? authState.user?.email : null
 
   return (
     <div data-account-menu="true" className="w-64 overflow-hidden">
@@ -151,7 +209,8 @@ function AccountPopover({
           {email ? (
             <TruncatedText as="div" text={email} className="mt-0.5 text-body text-[color:var(--text-muted)]" />
           ) : null}
-          {metaLine ? (
+          {!signedIn ? <div className="mt-0.5 text-meta text-[color:var(--text-muted)]">Not signed in</div> : null}
+          {signedIn && metaLine ? (
             <TruncatedText as="div" text={metaLine} className="mt-1 text-meta text-[color:var(--text-subtle)]" />
           ) : null}
         </div>
@@ -167,15 +226,38 @@ function AccountPopover({
           </div>
         </>
       ) : null}
+      {remote || sessions ? (
+        <div className="border-t border-[color:var(--border-subtle)] py-1">
+          {remote ? (
+            <AccountRow
+              glyph={<RemoteMachineGlyph className={`icon-sm ${remote.toneClass ?? ''}`} />}
+              label="Remote"
+              row={remote}
+              onChosen={onChosen}
+            />
+          ) : null}
+          {sessions ? (
+            <AccountRow
+              glyph={<SessionsIcon className="icon-sm" />}
+              label="Sessions"
+              row={sessions}
+              onChosen={onChosen}
+            />
+          ) : null}
+        </div>
+      ) : null}
       <div className="border-t border-[color:var(--border-subtle)] py-1">
-        <AccountMenuItem onSelect={onLogout}>Sign out</AccountMenuItem>
+        {signedIn ? (
+          <AccountMenuItem onSelect={onLogout}>Sign out</AccountMenuItem>
+        ) : (
+          <AccountMenuItem onSelect={onSignIn}>Sign in</AccountMenuItem>
+        )}
       </div>
     </div>
   )
 }
 
-export type SidebarAccountBarProps = {
-  collapsed: boolean
+export type AccountControlProps = {
   authState: SprintEngineAuthState
   authMessage: string | null
   accountOpen: boolean
@@ -183,6 +265,19 @@ export type SidebarAccountBarProps = {
   startLogin: () => void | Promise<void>
   refreshAuthState: () => void | Promise<void>
   logout: () => void | Promise<void>
+  /** Null: the row is absent, as its glyph was while the feature is off. */
+  remoteRow?: AccountMenuRow | null
+  sessionsRow?: AccountMenuRow | null
+  /** What the avatar wears for those rows, which would go quiet inside a menu. */
+  accountBadge?: AccountBadge | null
+}
+
+export type SidebarAccountBarProps = AccountControlProps & {
+  collapsed: boolean
+  /** The bell, above the account. Null where the window's band has it. */
+  bellSlot?: React.ReactNode
+  /** The band has the account: the rail is hidden. */
+  accountInBand?: boolean
   openSettings: (checkForUpdates?: boolean, targetTab?: string | null) => void
   settingsOpen: boolean
   /**
@@ -202,6 +297,130 @@ export type SidebarAccountBarProps = {
   /** The Extensions modal's open state, and the way the rail's pill opens it. */
   extensionsOpen?: boolean
   openExtensions?: () => void
+}
+
+/**
+ * The account disc and its menu. Icon-only in BOTH sidebar states (owner,
+ * 2026-09-01): the footer spends no width on the account name — the badge
+ * (provider photo when the session carries one, initials otherwise) is the whole
+ * control, the hover tooltip carries the name, and the click popover keeps the
+ * full detail.
+ *
+ * It opens for everyone: the web client is always signed out, and Remote and
+ * Sessions are not an account's. Signed out, the trigger keeps the plain outlined
+ * square that says so, and Sign in is the menu's last row.
+ */
+export function AccountControl({
+  authState,
+  authMessage,
+  accountOpen,
+  setAccountOpen,
+  startLogin,
+  refreshAuthState,
+  logout,
+  remoteRow = null,
+  sessionsRow = null,
+  accountBadge = null,
+  onRail,
+  placement = 'top-start',
+}: AccountControlProps & { onRail: boolean; placement?: PopoverPlacement }) {
+  const signedIn = authState.authenticated
+  const accountName = signedIn
+    ? (authState.user?.displayName ?? authState.user?.email ?? 'Your account')
+    : 'Your account'
+  const shownBadge = accountBadge && accountBadge.count > 0 ? accountBadge : null
+  const accessibleName = [`Account · ${accountName}`, shownBadge?.label].filter(Boolean).join(', ')
+  const tooltipPlacement = onRail ? 'right' : placement.startsWith('top') ? 'top' : 'bottom'
+  // The ring stays around the photo, and the photo replaces only the initials
+  // inside it. On the rail the disc steps up with the square it sits in —
+  // control-sm inside the rail's control-lg, the same glyph-to-square ratio the
+  // section squares keep — so the foot is not a small cluster under big glyphs.
+  const avatar = (
+    <AccountAvatar
+      user={authState.user}
+      className={onRail ? 'size-control-sm text-body' : 'size-control-xs text-meta'}
+      style={ACCOUNT_DISC_STYLE}
+      glyphClassName="icon-sm"
+    />
+  )
+  const corner = shownBadge ? (
+    <Badge
+      corner
+      decorative
+      tone={shownBadge.tone}
+      count={shownBadge.count}
+      max={99}
+      className="border-[color:var(--bg-canvas)]"
+    />
+  ) : null
+  return (
+    <Popover
+      open={accountOpen}
+      onOpenChange={setAccountOpen}
+      ariaLabel="Account"
+      popupRole="menu"
+      placement={placement}
+      onOpenAutoFocus={(surface) => {
+        surface.querySelector<HTMLButtonElement>('[data-account-item="true"]')?.focus()
+      }}
+      renderTrigger={({ ref, triggerProps, togglePopover }) => (
+        <Tooltip content={accountName} placement={tooltipPlacement}>
+          {signedIn ? (
+            <IconButton
+              ref={ref}
+              size={onRail ? 'lg' : 'md'}
+              pressed={accountOpen}
+              onClick={togglePopover}
+              aria-label={accessibleName}
+              data-account-trigger=""
+              className="relative"
+              {...triggerProps}
+            >
+              {avatar}
+              {corner}
+            </IconButton>
+          ) : (
+            // Was a hand-rolled copy of OutlineButton — border, surface-raised
+            // fill, both hover steps and the whole disabled:hover guard, restated
+            // inline. It has to BE the primitive: the outline variant's look has
+            // moved twice (a resting elevation on 2026-09-02, flat on a
+            // `border.strong` hairline since 2026-10-04), and a lookalike is the
+            // one button in the footer that would be left behind each time.
+            <OutlineButton
+              ref={ref}
+              onClick={togglePopover}
+              // On the rail it fills the same control-lg square as the glyphs
+              // above it. `min-h` rather than a fourth labelled size: the outline
+              // variant's own `h-control-sm` is the height a LABELLED button
+              // takes, and the button spec keeps lg for icon-only chrome.
+              className={`relative p-0 ${onRail ? 'size-control-lg min-h-control-lg' : 'size-control-md min-h-control-md'}`}
+              aria-busy={authState.status === 'checking'}
+              aria-label={accessibleName}
+              data-account-trigger=""
+              {...triggerProps}
+            >
+              <AccountUserGlyph className="icon-md" />
+              {corner}
+            </OutlineButton>
+          )}
+        </Tooltip>
+      )}
+    >
+      <AccountPopover
+        authState={authState}
+        message={authMessage}
+        onRetry={() => void refreshAuthState()}
+        onLogout={() => void logout()}
+        onSignIn={() => {
+          setAccountOpen(false)
+          void startLogin()
+        }}
+        remote={remoteRow}
+        sessions={sessionsRow}
+        onChosen={() => setAccountOpen(false)}
+      />
+    </Popover>
+  )
 }
 
 // Sidebar-bottom account + Settings row. Expanded: the account avatar opens the
@@ -224,32 +443,12 @@ export default function SidebarAccountBar({
   openUsage,
   extensionsOpen = false,
   openExtensions,
+  remoteRow = null,
+  sessionsRow = null,
+  accountBadge = null,
+  bellSlot = null,
+  accountInBand = false,
 }: SidebarAccountBarProps) {
-  const accountName = authState.user?.displayName ?? authState.user?.email ?? 'Your account'
-
-  // The ring stays around the photo, and the photo replaces only the initials
-  // inside it.
-  // On the rail (collapsed) the disc steps up with the square it sits in —
-  // control-sm inside the rail's control-lg, the same glyph-to-square ratio the
-  // section squares keep — so the foot is not a small cluster under big glyphs.
-  const avatar = (
-    <AccountAvatar
-      user={authState.user}
-      className={collapsed ? 'size-control-sm text-body' : 'size-control-xs text-meta'}
-      style={ACCOUNT_DISC_STYLE}
-      glyphClassName="icon-sm"
-    />
-  )
-
-  const accountMenu = (
-    <AccountPopover
-      authState={authState}
-      message={authMessage}
-      onRetry={() => void refreshAuthState()}
-      onLogout={() => void logout()}
-    />
-  )
-
   // The gear wears the updates waiting inside Settings the way the rail's
   // squares wear their news: the kit's corner count, ringed in the rail's own
   // canvas (AppRail's RailGlyph). Named — "2 updates available" — so the number
@@ -315,59 +514,6 @@ export default function SidebarAccountBar({
       </div>
     ) : null
 
-  // Icon-only in BOTH sidebar states (owner, 2026-09-01): the footer spends no
-  // width on the account name — the badge (provider photo when the session
-  // carries one, initials otherwise) is the whole control, the hover tooltip
-  // carries the name, and the click popover keeps the full detail.
-  const accountControl = authState.authenticated ? (
-    <Popover
-      open={accountOpen}
-      onOpenChange={setAccountOpen}
-      ariaLabel="Account"
-      popupRole="menu"
-      placement="top-start"
-      onOpenAutoFocus={(surface) => {
-        surface.querySelector<HTMLButtonElement>('[data-account-item="true"]')?.focus()
-      }}
-      renderTrigger={({ ref, triggerProps, togglePopover }) => (
-        <Tooltip content={accountName} placement={collapsed ? 'right' : 'top'}>
-          <IconButton
-            ref={ref}
-            size={collapsed ? 'lg' : 'md'}
-            pressed={accountOpen}
-            onClick={togglePopover}
-            aria-label={`Account · ${accountName}`}
-            {...triggerProps}
-          >
-            {avatar}
-          </IconButton>
-        </Tooltip>
-      )}
-    >
-      {accountMenu}
-    </Popover>
-  ) : (
-    // Was a hand-rolled copy of OutlineButton — border, surface-raised fill,
-    // both hover steps and the whole disabled:hover guard, restated inline.
-    // It has to BE the primitive: the outline variant's look has moved twice
-    // (a resting elevation on 2026-09-02, flat on a `border.strong` hairline
-    // since 2026-10-04), and a lookalike is the one button in the footer that
-    // would be left behind each time.
-    <OutlineButton
-      onClick={() => void startLogin()}
-      disabled={authState.status === 'checking'}
-      // On the rail the icon-only sign-in fills the same control-lg square as
-      // the glyphs above it. `min-h` rather than a fourth labelled size: the
-      // outline variant's own `h-control-sm` is the height a LABELLED button
-      // takes, and the button spec keeps lg for icon-only chrome.
-      className={collapsed ? 'size-control-lg min-h-control-lg p-0' : 'min-w-0 flex-1'}
-      aria-busy={authState.status === 'checking'}
-      aria-label="Sign in"
-    >
-      {collapsed ? <AccountUserGlyph className="icon-md" /> : 'Sign in'}
-    </OutlineButton>
-  )
-
   return (
     // `app-no-drag` on the cluster, not on each button: the cluster mounts at the
     // foot of the app rail (app shell, 2026-09-05), and the rail is an
@@ -391,7 +537,22 @@ export default function SidebarAccountBar({
       {collapsed ? updateButton : null}
       {extensionsButton}
       {collapsed ? usageButton : null}
-      {accountControl}
+      {bellSlot}
+      {accountInBand ? null : (
+        <AccountControl
+          authState={authState}
+          authMessage={authMessage}
+          accountOpen={accountOpen}
+          setAccountOpen={setAccountOpen}
+          startLogin={startLogin}
+          refreshAuthState={refreshAuthState}
+          logout={logout}
+          remoteRow={remoteRow}
+          sessionsRow={sessionsRow}
+          accountBadge={accountBadge}
+          onRail={collapsed}
+        />
+      )}
       {collapsed ? (
         settingsButton
       ) : (

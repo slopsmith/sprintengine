@@ -1642,7 +1642,7 @@ describe('a chat’s sub-agents on a paired desktop', () => {
 
       // Opened, it is followed as any chat, by the ids the row names.
       const childKey = { connectionId, workspaceId: named()!.workspaceId, agentId: named()!.agentId }
-      const thread = follower(h.mesh, childKey, 'agents-tab')
+      const thread = follower(h.mesh, childKey, 'subagent-chat')
       await waitFor(thread.live, 'the sub-agent is followed')
       const sent = h.mesh.conversationCommand({ key: childKey, command: { kind: 'send', message: 'Go' } })
       await waitFor(() => named()?.status === 'needs_input', 'its question reaches the list by itself')
@@ -1681,6 +1681,41 @@ describe('a chat’s sub-agents on a paired desktop', () => {
     }
   })
 
+  test('one at rest takes a message: it resumes over there, and answers where it is followed', async () => {
+    const h = await startHarness({ subagentRecords: () => records() })
+    try {
+      const sessionId = await startChild(h)
+      const suspended = await h.runtime.suspendSession({ sessionId })
+      assert.ok(suspended.ok, suspended.ok ? '' : suspended.message)
+      const connectionId = await h.pair(['conversation:read', 'conversation:operate'])
+      const childKey = { connectionId, workspaceId, agentId: child }
+      const thread = follower(h.mesh, childKey, 'subagent-chat')
+      await waitFor(thread.live, 'the sub-agent is followed')
+      const sent = h.mesh.conversationCommand({ key: childKey, command: { kind: 'send', message: 'Once more' } })
+      await waitFor(
+        () =>
+          thread
+            .of('event')
+            .some((frame) => frame.event.type === 'user_message' && frame.event.payload?.text === 'Once more'),
+        'what was sent reaches its own transcript',
+      )
+      await waitFor(
+        () => thread.of('event').some((frame) => frame.event.type === 'content_delta'),
+        'and it answers there',
+      )
+      const asked = thread.of('event').find((frame) => frame.event.type === 'approval_requested')
+      if (asked)
+        await h.mesh.conversationCommand({
+          key: childKey,
+          command: { kind: 'resolveApproval', requestId: String(asked.event.payload?.requestId), decision: 'once' },
+        })
+      const answer = await sent
+      assert.ok(answer.ok, answer.ok ? '' : answer.message)
+    } finally {
+      await h.close()
+    }
+  })
+
   test('a pairing that may only read sees them and cannot answer them', async () => {
     const h = await startHarness({ subagentRecords: () => records() })
     try {
@@ -1689,7 +1724,7 @@ describe('a chat’s sub-agents on a paired desktop', () => {
       const pane = follower(h.mesh, { connectionId, workspaceId, agentId })
       await waitFor(() => pane.of('subagents').length > 0, 'following is enough to be told them')
       const childKey = { connectionId, workspaceId, agentId: child }
-      const thread = follower(h.mesh, childKey, 'agents-tab')
+      const thread = follower(h.mesh, childKey, 'subagent-chat')
       await waitFor(thread.live, 'the sub-agent is followed')
       const answered = await h.mesh.conversationCommand({
         key: childKey,

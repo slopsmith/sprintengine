@@ -138,7 +138,7 @@ export type AgentState = {
   /**
    * This chat is a sub-agent of another chat agent in the same workspace,
    * started for one task (subagent-tools.ts). Written once, when it is created.
-   * It belongs to its parent: the Agents tab lists it there, on any machine
+   * It belongs to its parent: its parent's panel lists it, on any machine
    * following the parent (`conversation-subagents`), and no list of a
    * workspace's chats does.
    */

@@ -33,11 +33,11 @@ export function windowCaptionReserve(isMac: boolean): number {
  * Whether the workspace pane's strip owns the window's top-right corner, the
  * one the win/linux caption buttons float over. Docked and open, the pane is
  * the rightmost column and its strip is the top band at that edge. Maximised it
- * is not: the filling column starts BELOW the 36px WorkspaceHeader
- * (workspaceAsideColumn), so the header runs to the window edge and the caption
- * buttons sit over the header's end. Reading only `open` here is what put the
- * header's pane switch under Close-window while the pane was maximised. Exactly
- * one of the two strips reserves the width: the header when this is false, the
+ * is not: the filling column starts BELOW the 36px band
+ * (workspaceAsideColumn), so the band runs to the window edge and the caption
+ * buttons sit over the band's end. Reading only `open` here is what put the
+ * band's panel toggle under Close-window while the pane was maximised. Exactly
+ * one of the two strips reserves the width: the band when this is false, the
  * pane strip when it is true.
  */
 export function paneStripOwnsCaptionCorner(pane: { open: boolean; maximised: boolean }): boolean {

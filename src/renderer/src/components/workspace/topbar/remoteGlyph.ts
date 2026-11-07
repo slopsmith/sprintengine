@@ -5,10 +5,10 @@ import { useWorkspaceStore } from '../../../store/workspaceStore'
 import { meshMachinePhase, machineIsAnswering } from '../../remote/machineRowModel'
 
 // The Remote glyph's own vocabulary — state, tooltip, ink, and the settings
-// opener the trigger needs. Split out of `RemotePopover.tsx` so the title bar's
-// glyph can read it without the popover's body (machine rows, pair-request
+// opener the account menu's row needs. Split out of `RemotePopover.tsx` so the
+// row can read it without the popover's body (machine rows, pair-request
 // cards, the tailnet panel model) riding into the boot chunk: the popover
-// itself is behind a `React.lazy` boundary in `WorkspaceActions` and only
+// itself is behind a `React.lazy` boundary in `AccountSurfaces` and only
 // arrives when someone opens it. `RemotePopover` re-exports all four, so the
 // module that owns the surface is still the one you can import them from.
 

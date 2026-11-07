@@ -53,8 +53,8 @@ test('extensionsHomeTiles', async () => {
   // one landing on the wrong tile.
   assert.deepEqual(
     Object.keys(EXTENSIONS_HOME_TILE_SUMMARIES),
-    ['design', 'plugins', 'skills'],
-    'the ruling’s three parts, in the ruling’s order — Agent CLIs live in Settings ▸ Agents (2026-09-25)',
+    ['design', 'plugins', 'skills', 'pane:backlog'],
+    'the ruling’s parts, in the ruling’s order — Agent CLIs live in Settings ▸ Agents (2026-09-25)',
   )
   for (const [id, summary] of Object.entries(EXTENSIONS_HOME_TILE_SUMMARIES)) {
     assert.ok(summary.length > 0 && !summary.endsWith('.'), `${id}: one line, not a sentence`)

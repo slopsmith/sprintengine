@@ -1,7 +1,7 @@
 import { hostname } from 'node:os'
 import { join } from 'node:path'
 
-import { parseCliPermissionPreset } from '../../shared/cli-permission-preset'
+import { normalizeCliPermissionPreset, parseCliPermissionPreset } from '../../shared/cli-permission-preset'
 import { conversationWorkingRoot, defaultAgent } from '../../shared/agent-state'
 import { getWorkspaceChangeSummary } from '../../main/workspace-change-summary'
 import { isMachinePath } from '../../shared/machine-paths'
@@ -307,6 +307,14 @@ export function createStudioCore(platform: StudioPlatform, options: StudioCoreOp
     heldChatMode: ({ workspaceId, agentId }) => {
       const agent = workspaceRegistry.getRecord(workspaceId)?.agents[agentId]
       return agent?.conversationModeHeld && agent.conversationMode !== 'default' ? agent.conversationMode : undefined
+    },
+    subagentPresetCeiling: ({ workspaceId, agentId, current }) => {
+      const agents = workspaceRegistry.getRecord(workspaceId)?.agents
+      const agent = agents?.[agentId]
+      if (!agent?.subagentOf) return undefined
+      if (agent.subagentReadOnly) return current
+      const parent = agents?.[agent.subagentOf.agentId]
+      return parent?.cliPermissionPreset ? normalizeCliPermissionPreset(parent.cliPermissionPreset) : current
     },
     ...(options.resolveStudioMcpServer ? { resolveStudioMcpServer: options.resolveStudioMcpServer } : {}),
     ...(options.prepareChatFolder ? { prepareChatFolder: options.prepareChatFolder } : {}),
@@ -934,7 +942,7 @@ export function createStudioCore(platform: StudioPlatform, options: StudioCoreOp
         // resume it sends a chat a limit stopped, for a paired machine's strip
         // and tray.
         usageLimits: studioConversationUsageLimits(() => usageLimitResumes),
-        // What moves a paired machine's Agents tab for a chat here.
+        // What moves a paired machine's panel for a chat here.
         subagentChanges: subagentChangesOf({
           onEvent: (listener) => conversations.onEvent(listener),
           onRecords: (listener) => workspaceRegistry.subscribe(listener),

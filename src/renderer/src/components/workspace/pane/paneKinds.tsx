@@ -37,7 +37,7 @@ export type PaneKindDefinition = {
   modalSurfaceId?: string
 }
 
-function TerminalGlyph({ className }: { className?: string }) {
+export function TerminalGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
       <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
@@ -65,7 +65,7 @@ export function FilesGlyph({ className }: { className?: string }) {
   )
 }
 
-function GitGlyph({ className }: { className?: string }) {
+export function GitGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
       <circle cx="4.5" cy="3.5" r="1.5" stroke="currentColor" strokeWidth="1.5" />
@@ -147,27 +147,15 @@ export function CanvasGlyph({ className }: { className?: string }) {
   )
 }
 
-// The header's Backlog switch draws this same mark (PanelSwitches): one glyph
-// for the surface on both ends of the gesture.
-function BacklogGlyph({ className }: { className?: string }) {
+// The Backlog's row under Extensions draws this same mark
+// (extensionsDrawerRows): one glyph for the surface on both ends of the gesture.
+export function BacklogGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
       <path d="M6 4.5h7M6 8h7M6 11.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
       <circle cx="3" cy="4.5" r="1" fill="currentColor" />
       <circle cx="3" cy="8" r="1" fill="currentColor" />
       <circle cx="3" cy="11.5" r="1" fill="currentColor" />
-    </svg>
-  )
-}
-
-// A little robot, still: the Agents list. The characters that move live on the
-// agents themselves; the kind's own mark stays a plain glyph.
-export function AgentsGlyph({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
-      <rect x="3" y="5.4" width="10" height="7.8" rx="2.4" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M8 5.4V3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M6.2 8.6v1.4M9.8 8.6v1.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   )
 }
@@ -201,8 +189,6 @@ export const STATIC_PANE_KINDS: readonly PaneKindDefinition[] = [
   { kind: 'git', label: 'Git', letter: 'G', moduleId: 'git', Glyph: GitGlyph },
   { kind: 'backlog', label: 'Backlog', letter: 'L', moduleId: 'backlog', Glyph: BacklogGlyph },
   { kind: 'canvas', label: 'Canvas', letter: 'C', moduleId: 'canvas', Glyph: CanvasGlyph },
-  // The agents the focused chat sent off to work, running and finished.
-  { kind: 'agents', label: 'Agents', letter: 'A', Glyph: AgentsGlyph },
   // Every picture in the focused chat: what the person attached and what the
   // agent's steps returned.
   { kind: 'library', label: 'Library', letter: 'I', Glyph: LibraryGlyph },

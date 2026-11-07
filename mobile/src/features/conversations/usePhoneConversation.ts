@@ -27,6 +27,7 @@ import {
   declaresQueuedSends,
   declaresScheduledSends,
   declaresSteerSends,
+  declaresAgentMessage,
   declaresStopSubagent,
 } from "../../api/tailnetTransport";
 import type { MobileSession } from "../../api/types";
@@ -261,6 +262,7 @@ export function usePhoneConversation(
   const scheduledActions = useRef(new Map<string, (result: CancelHeldResult) => void>());
   // Agents being stopped by their own Stop (`stopSubagent`), by command id.
   const agentStops = useRef(new Map<string, { laneId: string; settle: (result: StopAgentResult) => void }>());
+  const agentMessages = useRef(new Map<string, (result: StopAgentResult) => void>());
   // The lanes whose Stop is on its way or taken, until the agent reports its
   // end (its lane stops running) or the desktop refuses: the Stop says
   // "Stopping" meanwhile, and is not sent twice.
@@ -278,6 +280,7 @@ export function usePhoneConversation(
   // desktop takes the command and this pairing may drive its chats. Whether
   // the chat's own CLI can is its listed `capabilities.stopSubagent`.
   const stopsAgents = !!session && declaresStopSubagent(session) && conversationCanOperate(session);
+  const messagesAgents = !!session && declaresAgentMessage(session) && conversationCanOperate(session);
   // Whether the socket's probe can be the cheap `hello` rather than a `list`.
   const answersHello = !!session && declaresConversationHello(session);
   // Read by a send as it is made: a turn running, and messages the phone holds.
@@ -587,6 +590,8 @@ export function usePhoneConversation(
     const abandonAgentStops = (message: string) => {
       for (const { settle } of stopping.values()) settle({ ok: false, message });
       stopping.clear();
+      for (const settle of agentMessages.current.values()) settle({ ok: false, message });
+      agentMessages.current.clear();
       setStoppingAgentIds(new Set());
     };
     let current: ConversationStream | null = null;
@@ -1000,6 +1005,14 @@ export function usePhoneConversation(
                 frame.ok
                   ? { ok: true }
                   : { ok: false, message: frame.message ?? refusalText(frame.code, "The desktop did not take that.") },
+              );
+            } else if (frame.type === "commandResult" && agentMessages.current.has(frame.commandId)) {
+              const settle = agentMessages.current.get(frame.commandId)!;
+              agentMessages.current.delete(frame.commandId);
+              settle(
+                frame.ok
+                  ? { ok: true }
+                  : { ok: false, message: frame.message ?? refusalText(frame.code, "The desktop could not pass this on.") },
               );
             } else if (frame.type === "commandResult" && stopping.has(frame.commandId)) {
               const { laneId, settle } = stopping.get(frame.commandId)!;
@@ -1446,6 +1459,27 @@ export function usePhoneConversation(
       }),
     [],
   );
+  // Pass the person's words to one agent, through the chat's model. Settles
+  // when the desktop answers; the words then show on the agent's lane.
+  const messageAgent = useCallback(
+    (laneId: string, message: string): Promise<StopAgentResult> =>
+      new Promise<StopAgentResult>((resolve) => {
+        if (!stream.current) {
+          resolve({ ok: false, message: "Conversation is not connected yet." });
+          return;
+        }
+        try {
+          const commandId = stream.current.command({ kind: "messageSubagent", toolUseId: laneId, message });
+          agentMessages.current.set(commandId, resolve);
+        } catch (error) {
+          resolve({
+            ok: false,
+            message: error instanceof Error ? error.message : "Reconnect before using this action.",
+          });
+        }
+      }),
+    [],
+  );
   const cancelQueued = useCallback(
     (commandId: string): Promise<void> => {
       const owner = lifecycle.current;
@@ -1604,6 +1638,8 @@ export function usePhoneConversation(
     takesSteer,
     stopsAgents,
     stopAgent,
+    messagesAgents,
+    messageAgent,
     /** Lanes whose Stop is on its way or taken, while the agent still runs. */
     stoppingAgentIds,
     desktopHeld,

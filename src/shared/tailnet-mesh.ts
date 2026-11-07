@@ -114,6 +114,36 @@ export type MeshWorkspaceExtensionsResult =
   | { ok: true; extensions: import('./workspace-extensions').WorkspaceExtensions }
   | { ok: false; code: string; message: string }
 
+/** One board on a paired machine. `id` is absent from a machine that does not name its boards yet. */
+export type MeshCanvasBoard = {
+  id: string | null
+  path: string
+  name: string
+  /** Its project there; null for a project that machine has removed. */
+  project: string | null
+  /** That machine's workspace in the board's folder, the one a new chat there starts beside. */
+  workspaceId: string | null
+  /** Epoch milliseconds. */
+  modifiedAt: number
+  elementCount: number
+  /** It is in the project of the chat that asked. */
+  here: boolean
+}
+
+/**
+ * A paired machine's boards (`canvas.list` there). `allBoards`: the list is the
+ * whole machine's. False from a machine without `canvas-machine-boards`, which
+ * answers for the one workspace, with `note` saying so.
+ */
+export type MeshCanvasBoardsResult =
+  | { ok: true; boards: MeshCanvasBoard[]; allBoards: boolean; note: string | null }
+  | { ok: false; code: string; message: string }
+
+/** A picture of a board on a paired machine (`canvas.screenshot` there). */
+export type MeshCanvasScreenshotResult =
+  | { ok: true; mimeType: string; data: string; width: number; height: number }
+  | { ok: false; code: string; message: string }
+
 /**
  * A paired machine's answers to its chat's Create PR (`chat-create-pull-request`),
  * one per step, as the shell's own channels answer them for a chat here
@@ -574,6 +604,9 @@ export const MESH_CHANGE_CONVERSATION_CHANNEL = 'mesh:change-conversation'
 /** One remote workspace's checkout facts (branch, branches, worktrees) over `workspace.checkout`. */
 export const MESH_WORKSPACE_CHECKOUT_CHANNEL = 'mesh:workspace-checkout'
 export const MESH_WORKSPACE_EXTENSIONS_CHANNEL = 'mesh:workspace-extensions'
+/** A paired machine's Canvas boards and a picture of one, over the `canvas.*` tools there. */
+export const MESH_CANVAS_BOARDS_CHANNEL = 'mesh:canvas-boards'
+export const MESH_CANVAS_SCREENSHOT_CHANNEL = 'mesh:canvas-screenshot'
 /** A remote chat's Create PR, one channel per step (`chat-create-pull-request`). */
 export const MESH_CONVERSATION_PULL_REQUEST_STATE_CHANNEL = 'mesh:conversation-pull-request-state'
 export const MESH_CONVERSATION_PULL_REQUEST_DRAFT_CHANNEL = 'mesh:conversation-pull-request-draft'
@@ -728,6 +761,11 @@ export type MeshConversationFrame =
  * that chat's provider can (its listed `capabilities.stopSubagent`). False for
  * a machine that does not, where an agent's lane offers no Stop.
  *
+ * `messageSubagents`: the machine advertises `conversation-agent-message` — the
+ * person's words may be passed to one agent a chat of its own spawned, where
+ * that chat's provider can (its listed `capabilities.messageSubagent`). False
+ * for a machine that does not, where that agent's chat draws no box.
+ *
  * `handoff`: the machine advertises `conversation-handoff` — a chat of its own
  * may be handed off to a fresh session from here, where that chat's provider
  * can (its listed `capabilities.handoff`). False for a machine that does not,
@@ -833,6 +871,7 @@ export type MeshConversationListResult =
       sendSkills?: boolean
       steerSends?: boolean
       stopSubagents?: boolean
+      messageSubagents?: boolean
       handoff?: boolean
       rewind?: boolean
       checkpointRevert?: boolean
@@ -883,6 +922,7 @@ export type MeshConversationCommand =
   | { kind: 'resolveApproval'; requestId: string; decision: 'always' }
   | { kind: 'cancelQueued'; queuedId: string }
   | { kind: 'stopSubagent'; toolUseId: string }
+  | { kind: 'messageSubagent'; toolUseId: string; message: string }
   | { kind: 'handoff' }
   | { kind: 'rewind'; turnSeq: number }
   | { kind: 'revert'; turnSeq: number; undo?: true; confirmed?: true; files?: string[] }

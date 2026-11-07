@@ -3,12 +3,15 @@ import assert from 'node:assert/strict'
 import {
   CANVAS_LEGACY_FOLDER,
   DEFAULT_CANVAS_BOARD_PATH,
+  canvasBoardId,
   canvasBoardIsInStore,
   canvasBoardKeyPath,
   canvasBoardName,
   canvasLegacyPathFor,
   canvasPathIsCaseInsensitive,
+  isCanvasStoreKey,
   normalizeCanvasPath,
+  parseCanvasBoardId,
 } from './paths'
 import { test } from 'vitest'
 
@@ -149,4 +152,35 @@ test('paths', async () => {
   })
 
   console.log('canvas paths tests passed')
+})
+
+test('a board id names a store and a path, and nothing that merely looks like one', () => {
+  const store = `ws_${'0'.repeat(24)}`
+  assert.equal(canvasBoardId(store, 'arch.excalidraw'), `canvas://${store}/arch.excalidraw`)
+  assert.deepEqual(parseCanvasBoardId(`canvas://${store}/arch`), {
+    ok: true,
+    value: { store, path: 'arch.excalidraw' },
+  })
+  assert.deepEqual(parseCanvasBoardId(`canvas://${store}/diagrams/arch.excalidraw`), {
+    ok: true,
+    value: { store, path: 'diagrams/arch.excalidraw' },
+  })
+  // Without the scheme it is still an id: read as a path it would land in the repository.
+  assert.deepEqual(parseCanvasBoardId(`${store}/arch`), { ok: true, value: { store, path: 'arch.excalidraw' } })
+  // Ordinary names and paths are not ids.
+  assert.equal(parseCanvasBoardId('arch'), null)
+  assert.equal(parseCanvasBoardId('docs/arch.excalidraw'), null)
+  assert.equal(parseCanvasBoardId('ws_short/arch'), null)
+  // Anything that claims the scheme is an id or a refusal, never a path.
+  for (const bad of ['canvas://elsewhere/arch', `canvas://${store}`, `canvas://${store}/../arch`]) {
+    const parsed = parseCanvasBoardId(bad)
+    assert.equal(parsed?.ok, false, bad)
+  }
+})
+
+test('a store key is exactly the shape the hash makes', () => {
+  assert.equal(isCanvasStoreKey(`ws_${'a'.repeat(24)}`), true)
+  for (const bad of ['ws_x', `ws_${'A'.repeat(24)}`, `../ws_${'a'.repeat(24)}`, '', null, 7]) {
+    assert.equal(isCanvasStoreKey(bad), false)
+  }
 })

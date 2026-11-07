@@ -15,7 +15,6 @@ import { paneTabItem, paneTabLabel } from '../paneTabItem'
 import { useAgentPresentTabIds } from '../agentPresence'
 import { closePaneTabAndItsTerminal, paneTerminalSessionId } from '../paneTerminals'
 import { WorkspacePaneBody } from '../WorkspacePaneBody'
-import { adoptAgentFocusRequest } from '../agents/agentsPaneFocus'
 import { composePaneKinds, type PaneLaunchKind } from '../paneKinds'
 import { WorkspacePaneAddMenu } from '../WorkspacePaneAddMenu'
 import { popOutAddKinds } from './panePopOutHost'
@@ -72,7 +71,6 @@ export default function PanePopOutWindow({ popOutId, workspaceId }: Props) {
   const viewRef = useRef<PaneView | null>(null)
   const activeRef = useRef<string | null>(null)
   const revealKeyRef = useRef<number | null>(null)
-  const agentFocusSerialRef = useRef<number | null>(null)
   const workspaceName = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.name ?? '')
   const workspacePresent = useWorkspaceStore((s) => s.workspaces.some((w) => w.id === workspaceId))
   const pageVisible = useWindowPageVisible()
@@ -143,20 +141,15 @@ export default function PanePopOutWindow({ popOutId, workspaceId }: Props) {
         // Told, so docking back lands where the person was looking.
         if (front) act({ type: 'activate', tabId: front })
       }
-      // The owner's chat in focus, for an Agents tab here: this window
-      // focuses no chat of its own, so it follows the one the person is
-      // working with there, and takes the owner's requests for an agent lane.
+      // The owner's chat in focus, for a Library tab here: this window focuses
+      // no chat of its own, so it follows the one the person is working with
+      // there.
       if (state.focusedAgentId !== undefined) {
         const focused = state.focusedAgentId
         useWorkspaceStore.setState((draft) => {
           if (typeof focused === 'string' && focused) draft.focusedAgentByWorkspaceId[workspaceId] = focused
           else delete draft.focusedAgentByWorkspaceId[workspaceId]
         })
-      }
-      const request = state.agentFocus
-      if (request && typeof request.agentId === 'string' && request.serial !== agentFocusSerialRef.current) {
-        agentFocusSerialRef.current = request.serial
-        adoptAgentFocusRequest(workspaceId, request.agentId, request.laneId ?? null)
       }
     }
     const off = window.api.onPanePopOutState((push) => {

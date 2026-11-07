@@ -108,6 +108,20 @@ export type ChatBinding = {
    * chat's own, which it reads off this machine's checkout and pull request
    * record instead.
    */
+  /**
+   * Set where this chat is a sub-agent of another, drawn in its parent's place.
+   * It is a chat of its own, but it works for its parent: it stays reachable
+   * from Studio, so nothing here takes it out of Studio (resume in terminal,
+   * handoff), forks it free of its parent's cap, moves the files it shares with
+   * its parent back (rewind, checkpoints) or raises its permissions.
+   */
+  subagent?: {
+    parentAgentId: string
+    parentName: string
+    onGoToParent: () => void
+    /** Why it cannot take a message from this view, where it cannot: the bar is drawn for the box. */
+    blocked?: string
+  }
   listed?: {
     branch: string | null
     worktree: boolean

@@ -1169,7 +1169,7 @@ function railSideOfTabset(tabset: TabSetNode): RailSide | null {
   return railSideOfComponents(tabs.map((tab) => tab.getComponent() ?? ''))
 }
 
-// PanelSwitches click handler (also the command-palette/menu toggle route). Rail
+// panel toggle (also the command-palette/menu toggle route). Rail
 // switches route to their edge's exclusive strip-less pane; the Editor keeps
 // standard document-tab semantics so its open files stay switchable.
 export function togglePanelRailComponent(workspaceId: string, component: string, name: string): boolean {

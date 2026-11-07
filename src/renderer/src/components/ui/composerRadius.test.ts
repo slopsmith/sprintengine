@@ -21,7 +21,8 @@ const RENDERER = join(process.cwd(), 'src', 'renderer', 'src')
  * composers, and the strip both tuck under their box, whose lower corners are
  * `radius.composer-strip` — the same family, named for that one strip. The
  * tray docked on an open conversation's composer takes the family's
- * `radius.composer-companion` on its top corners, as New chat's tiles do.
+ * `radius.composer-companion` on its top corners, as New chat's tiles do. A
+ * subagent's chat is an open conversation, so its box is the same box.
  */
 const COMPOSERS = new Set([
   'components/ui/tokens.ts',
@@ -31,6 +32,7 @@ const COMPOSERS = new Set([
   'components/workspace/agentComposer/ComposerStrip.tsx',
   'components/panels/AgentChatView.tsx',
   'components/panels/agentChat/composerTray.tsx',
+  'components/panels/agentChat/LaneChatView.tsx',
 ])
 
 function sources(dir: string): string[] {

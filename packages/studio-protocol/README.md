@@ -109,6 +109,7 @@ The `welcome`'s `grant` is what the connection may do:
 | `conversation.setModel`            | operate        | `key`, `commandId`, `modelId`                   | `{ modelId, notice? }`                           |
 | `conversation.cancelQueued`        | operate, owner | `key`, `commandId`, `queuedId`                  | `{}`                                             |
 | `conversation.stopSubagent`        | operate, owner | `key`, `commandId`, `toolUseId`                 | `{}`                                             |
+| `conversation.messageSubagent` | operate, owner | `key`, `commandId`, `toolUseId`, `message` | `{}` | Passes the person's words to one agent, through the chat's model. |
 | `conversation.setReasoningEffort`  | operate, owner | `key`, `commandId`, `effort?`                   | `{ notice? }`                                    |
 | `conversation.mcpServerAction`     | operate, owner | `key`, `commandId`, `serverId`, `action`        | `{}`                                             |
 | `conversation.restartSession`      | operate, owner | `key`, `commandId`                              | `{ notice? }`                                    |
