@@ -273,6 +273,15 @@ under their `requestId`, as it answers `watchQueued`.
   and only then does the desktop leave tokens in the `text` of that socket's
   `user_message` events and held and scheduled messages. Without that a quote
   arrives as words: its passage as a blockquote, then `Comment: …`.
+- `conversation-subagents`: `{ type: 'watchSubagents', requestId }` has the
+  desktop send a `subagents` frame (`ConversationSubagentsFrame`: the chat's
+  `key` and its `subagents`, oldest first, whole each time) now and whenever
+  one starts, moves or ends. Each `ConversationSubagent` is a chat of its own,
+  which `subscribe` follows by its ids, and it names what a listed chat names
+  of itself beside `readOnly`, `status`, `task`, `startedAt`, `endedAt` and
+  `error`. The `list` leaves sub-agents out. A desktop without it refuses
+  `watchSubagents` as `invalid_frame`, and sends the frame only to a client
+  that asked.
 
 `conversation-message-images` (`CONVERSATION_MESSAGE_IMAGES_CAPABILITY`)
 names no frame. A `user_message`'s `attachments` record each picture the
