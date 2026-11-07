@@ -52,6 +52,19 @@ import type { PullRequestHost } from './pullRequestHost'
 // machine draws no button, because its git and `gh` are not here and nothing
 // there answers for them.
 
+/** What the slot needs to draw "Create PR": `createPullRequest` on the strip and the panel. */
+export type CreatePullRequestSlot = {
+  /** Where the checkout is read and the pull request opened: this computer, or the chat's paired machine. */
+  host: PullRequestHost
+  onSettled: () => void
+  /** Keeps the control in the slot while it shows its dialog, a step or a failure. */
+  onHoldChange?: (held: boolean) => void
+  /** Whether the checkout reads as ready now; a held failure is dismissed rather than retried when not. */
+  ready?: boolean
+  /** The forge the checkout's remote is on: GitLab's control says "Create MR". */
+  forge?: PullRequestForge | null
+}
+
 /** Which control the slot draws. */
 export type PullRequestSlotChoice = 'open' | 'create' | 'merged' | null
 

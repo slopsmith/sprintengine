@@ -71,10 +71,14 @@ export function useConversationStripFacts({
     [remoteName, workspaceRef],
   )
   const identity = useMachineIdentity(ref && ref.kind !== 'local' ? ref : null)
-  const machine =
-    ref && ref.kind !== 'local' && identity
-      ? { name: stripMachineName(ref, transport.kind === 'remote' ? null : workspace), identity }
-      : null
+  const machineName =
+    ref && ref.kind !== 'local' ? stripMachineName(ref, transport.kind === 'remote' ? null : workspace) : null
+  // Held from render to render, as the chat renders on every token and the
+  // panel it publishes these to redraws when one is a new object.
+  const machine = useMemo(
+    () => (machineName !== null && identity ? { name: machineName, identity } : null),
+    [machineName, identity],
+  )
 
   // ── The checkout ──────────────────────────────────────────────────────────
   // Only a folder this computer can read: the working root is the agent's
@@ -117,33 +121,36 @@ export function useConversationStripFacts({
 
   // A chat on a paired machine has no checkout here; its machine names the
   // branch in its list, and there is no explorer here to open it in.
-  const branch: ConversationStripBranch | null =
-    checkout && branchName
-      ? {
-          name: displayBranchName(branchName),
-          worktree: inWorktree,
-          onOpen: filesEnabled && folderPath ? openFiles : null,
-        }
-      : transport.kind === 'remote' && listed?.branch
-        ? { name: displayBranchName(listed.branch), worktree: listed.worktree, onOpen: null }
-        : null
+  const shownBranch =
+    checkout && branchName ? branchName : transport.kind === 'remote' ? (listed?.branch ?? null) : null
+  const shownWorktree = checkout && branchName ? inWorktree : (listed?.worktree ?? false)
+  const onOpenBranch = checkout && branchName && filesEnabled && folderPath ? openFiles : null
+  const branch = useMemo<ConversationStripBranch | null>(
+    () =>
+      shownBranch ? { name: displayBranchName(shownBranch), worktree: shownWorktree, onOpen: onOpenBranch } : null,
+    [shownBranch, shownWorktree, onOpenBranch],
+  )
 
   const counts = useCheckoutChanges(checkout, NO_PULL_REQUESTS, 'conversation-strip')
   // A remote chat's counts are its machine's; there is no Git panel here on
   // that checkout to open them in.
   const remoteFiles = transport.kind === 'remote' ? (listed?.files ?? null) : null
   const remoteMarks = remoteFiles ? changedFileMarks(remoteFiles) : null
-  const changes: ConversationStripChanges | null =
-    counts.hasCounts && counts.marks && counts.files
-      ? {
-          added: counts.marks.plus,
-          removed: counts.marks.minus,
-          phrase: changedFilesPhrase(counts.files),
-          onOpen: gitEnabled ? openChanges : null,
-        }
-      : remoteFiles && remoteMarks && (remoteMarks.plus > 0 || remoteMarks.minus > 0)
-        ? { added: remoteMarks.plus, removed: remoteMarks.minus, phrase: changedFilesPhrase(remoteFiles), onOpen: null }
-        : null
+  const localChanges = counts.hasCounts && counts.marks && counts.files ? counts : null
+  const remoteChanged = remoteFiles && remoteMarks && (remoteMarks.plus > 0 || remoteMarks.minus > 0)
+  const added = localChanges?.marks?.plus ?? (remoteChanged ? remoteMarks.plus : null)
+  const removed = localChanges?.marks?.minus ?? (remoteChanged ? remoteMarks.minus : null)
+  const phrase = localChanges?.files
+    ? changedFilesPhrase(localChanges.files)
+    : remoteChanged
+      ? changedFilesPhrase(remoteFiles)
+      : null
+  const onOpenChanges = localChanges && gitEnabled ? openChanges : null
+  const changes = useMemo<ConversationStripChanges | null>(
+    () =>
+      added !== null && removed !== null && phrase !== null ? { added, removed, phrase, onOpen: onOpenChanges } : null,
+    [added, removed, phrase, onOpenChanges],
+  )
 
   return { machine, branch, changes }
 }

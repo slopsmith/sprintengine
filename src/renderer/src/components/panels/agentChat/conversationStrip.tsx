@@ -7,12 +7,10 @@ import type { OverflowMenuItem } from '../../ui/OverflowMenu'
 import { FOCUS_RING_CLASS } from '../../ui/tokens'
 import { ComposerStrip } from '../../workspace/agentComposer/ComposerStrip'
 import type { BranchPullRequest } from '../../../../../shared/git/pull-request'
-import type { PullRequestForge } from '../../../../../shared/git/pr-url'
 import type { StudioLocalServer } from '../../../../../../packages/studio-protocol/src/public'
 import { LocalServersStripButton, localServersStripCopy } from '../../workspace/LocalServerMarks'
 import { PullRequestStripButton, stripPullRequestCopy } from '../../workspace/PullRequestMark'
-import { CreatePullRequestControl, pullRequestSlotChoice } from './createPullRequest'
-import type { PullRequestHost } from './pullRequestHost'
+import { CreatePullRequestControl, pullRequestSlotChoice, type CreatePullRequestSlot } from './createPullRequest'
 import { fitComposerStrip, fullComposerStripFit, sameComposerStripFit, type ComposerStripFit } from './composerStripFit'
 import type { UsageLimitSnapshot, UsageLimitsState } from '../../../../../shared/usage-limits'
 import { UsageLimitsStripButton } from './usageLimits'
@@ -116,17 +114,7 @@ export function ConversationComposerStrip({
   /** Stop Studio watching one of them; absent where this window cannot, and then none is offered. */
   onStopWatchingPullRequest?: (url: string) => void
   /** The checkout is ready to propose: "Create PR" may take the slot. Null when it is not, or nothing can open one. */
-  createPullRequest?: {
-    /** Where the checkout is read and the pull request opened: this computer, or the chat's paired machine. */
-    host: PullRequestHost
-    onSettled: () => void
-    /** Keeps the control in the slot while it shows its dialog, a step or a failure. */
-    onHoldChange?: (held: boolean) => void
-    /** Whether the checkout reads as ready now; a held failure is dismissed rather than retried when not. */
-    ready?: boolean
-    /** The forge the checkout's remote is on: GitLab's control says "Create MR". */
-    forge?: PullRequestForge | null
-  } | null
+  createPullRequest?: CreatePullRequestSlot | null
   /**
    * The local servers this conversation's agents linked, and the workspace
    * whose browser pane opens them. Null, or no servers, draws nothing.

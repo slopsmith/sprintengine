@@ -92,6 +92,8 @@ import { lockedChatEngineOption, isModelDerivedChatName } from './agentChat/chat
 import { EnginePickerChip } from '../workspace/agentComposer/enginePicker'
 import type { CliRuntimeOption } from '../ui/CliModelPicker'
 import { PermissionFooter, usePermissionModeOptions } from '../workspace/agentComposer/spawnFooter'
+import type { PermissionModeOption } from '../workspace/agentComposer/agentSpawnShared'
+import { labelForCliRuntime } from '../workspace/newWorkspace/cliRuntimeOptions'
 import {
   PRESET_CHIP_LABEL,
   agentPermissionChipLabel,
@@ -140,6 +142,7 @@ import type { ContextBreakdownSource } from './agentChat/ContextBreakdown'
 import { ConversationComposerStrip } from './agentChat/conversationStrip'
 import { useConversationStripFacts } from './agentChat/conversationStripFacts'
 import { useChatActivityCard } from './agentChat/ChatActivityCard'
+import { usePublishChatPanelFacts, type ChatPanelPermissions } from './agentChat/chatPanelStore'
 import { useUsageLimitSnapshot } from './agentChat/usageLimits'
 import { HostUsageLimitNoticeRow, UsageLimitResumeRow } from './agentChat/usageLimitResume'
 import {
@@ -4114,6 +4117,69 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
         : null,
     [pullRequestHost, createPullRequestState, createPullRequestHeld],
   )
+  // ── What the right-hand panel says about this chat ───────────────────────
+  // Published rather than drawn here: the panel stands beside the chat. Each
+  // field holds still from render to render unless it changed, so a streamed
+  // token wakes nothing over there.
+  const contextUsed = contextReading?.used ?? null
+  const contextTotal = contextReading?.total ?? null
+  const panelContext = useMemo(
+    () => (contextUsed !== null && contextTotal !== null ? { used: contextUsed, total: contextTotal } : null),
+    [contextUsed, contextTotal],
+  )
+  const changePermissionPresetRef = useRef(changePermissionPreset)
+  changePermissionPresetRef.current = changePermissionPreset
+  const selectPanelPermission = useCallback(
+    (next: PermissionModeOption) => void changePermissionPresetRef.current(next.value, next.mode),
+    [],
+  )
+  const permissionRefusalsKey = JSON.stringify(permissionDisabledReasons ?? null)
+  const panelPermissions = useMemo<ChatPanelPermissions | null>(
+    () =>
+      chatCli && permissionsEditable
+        ? {
+            options: permissionOptions,
+            preset: permissionPreset,
+            mode: permissionMode,
+            disabled: permissionChanging,
+            disabledReasons: JSON.parse(permissionRefusalsKey) ?? undefined,
+            onSelect: selectPanelPermission,
+          }
+        : null,
+    [
+      chatCli,
+      permissionsEditable,
+      permissionOptions,
+      permissionPreset,
+      permissionMode,
+      permissionChanging,
+      permissionRefusalsKey,
+      selectPanelPermission,
+    ],
+  )
+  usePublishChatPanelFacts(workspaceId, agentId, {
+    name: label,
+    cli: chatCli,
+    harnessLabel: chatCli ? labelForCliRuntime(chatCli) : assistantName,
+    modelLabel: currentModelLabel,
+    machine: stripFacts.machine,
+    remote: transport.kind === 'remote',
+    branch: stripFacts.branch,
+    changes: stripFacts.changes,
+    context: panelContext,
+    contextBreakdown: contextBreakdownSource,
+    pullRequests: conversationPullRequests,
+    ...(transport.kind !== 'remote'
+      ? { onStopWatchingPullRequest: stopWatchingPullRequest }
+      : remoteUnwatch
+        ? { onStopWatchingPullRequest: stopRemoteWatch }
+        : {}),
+    createPullRequest,
+    localServers: stripLocalServers,
+    usageLimits: stripUsageLimits,
+    ...(usageLimitsElsewhere ? { usageLimitsElsewhere } : {}),
+    permissions: panelPermissions,
+  })
   return (
     <ConversationLinkProvider
       workspaceId={workspaceId}
