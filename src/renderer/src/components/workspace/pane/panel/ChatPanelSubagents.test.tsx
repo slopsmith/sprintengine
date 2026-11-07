@@ -37,6 +37,8 @@ const family = (over: Partial<SubagentFamily> = {}): SubagentFamily => ({
   ...over,
 })
 
+const HARNESS_LOGO = 'path[fill="#D97757"]' // design-tokens-allow: the harness's own brand colour, as its logo draws it
+
 let root: Root | null = null
 let host: HTMLElement
 
@@ -62,12 +64,12 @@ afterEach(() => {
 // the generic glyph while the same agent wore its logo in the transcript.
 test("a lane wears its parent chat's harness logo, though the panel is outside the chat", () => {
   render(<ChatPanelSubagents family={family()} />)
-  expect(host.querySelector('path[fill="#D97757"]')).not.toBeNull()
+  expect(host.querySelector(HARNESS_LOGO)).not.toBeNull()
 })
 
 test('a lane of a chat whose harness is unknown keeps the generic glyph', () => {
   render(<ChatPanelSubagents family={family({ children: [member({ cli: null })] })} />)
-  expect(host.querySelector('path[fill="#D97757"]')).toBeNull()
+  expect(host.querySelector(HARNESS_LOGO)).toBeNull()
 })
 
 test('a row goes where the family says', () => {
