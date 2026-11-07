@@ -13,7 +13,7 @@ import {
   newChatProjectOptionsOf,
   sessionsAttentionTone,
 } from './workspaceManagerHelpers'
-import type { SessionItem } from './WorkspaceActions'
+import type { SessionItem } from './topbar/SessionsPopover'
 import { test } from 'vitest'
 
 test('workspaceManagerHelpers', async () => {

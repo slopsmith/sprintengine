@@ -132,7 +132,7 @@ import {
 } from './extensionsDrawer'
 import { dispatchExtensionsSurfaceTarget } from './globalSurface/extensions/extensionsSurfaceTarget'
 import { resolveDefaultParentPath } from './newWorkspace/folderCreation'
-import SidebarAccountBar from './SidebarAccountBar'
+import SidebarAccountBar, { AccountControl } from './SidebarAccountBar'
 import type { SidebarSection } from '../../store/slices/settingsSlice'
 import { isHiddenFromRail } from '../../utils/workspaceVisibility'
 import { revealAgentTerminalTab } from '../../utils/agentTabReveal'
@@ -221,7 +221,10 @@ import { clientSupports } from '../../clientCapabilities'
 import { WindowControls, paneStripOwnsCaptionCorner, windowCaptionReserve } from './WindowControls'
 import { WorkspaceFolderReveal } from './WorkspaceFolderReveal'
 import { WorkspaceIdentity } from './WorkspaceIdentity'
-import { WorkspaceActions, type SessionGroup, type SessionItem } from './WorkspaceActions'
+import { WorkspaceActions } from './WorkspaceActions'
+import { AccountSurfaces, useAccountSurfaces } from './AccountSurfaces'
+import { NotificationBell } from './NotificationBell'
+import type { SessionGroup, SessionItem } from './topbar/SessionsPopover'
 import {
   buildSidebarWorkspaceOrder,
   getSessionItems,
@@ -814,9 +817,7 @@ export default function WorkspaceManager() {
     isMaximized: false,
     isFullScreen: false,
   })
-  const sessionsRef = useRef<HTMLDivElement>(null)
   const viewMenuRef = useRef<HTMLDivElement>(null)
-  const notificationsRef = useRef<HTMLDivElement>(null)
   const reportedTerminalLastInputRef = useRef<Map<string, number>>(new Map())
   const reportedUserMessageRef = useRef<Map<string, number>>(new Map())
   const reportedTurnEndRef = useRef<Map<string, number>>(new Map())
@@ -941,6 +942,16 @@ export default function WorkspaceManager() {
     conversationSessions,
   ).filter((item) => item.group.kind === 'detached' || visibleWorkspaceIdSet.has(item.group.id))
   const sidebarWorkspaceOrder = useMemo(() => buildSidebarWorkspaceOrder(railWorkspaces), [railWorkspaces])
+  const accountSurfaces = useAccountSurfaces({
+    sessions,
+    sessionsOffered: visibleWorkspaces.length > 0,
+    setSessionsOpen,
+    setNotificationsOpen,
+  })
+  const closeTopPopovers = useCallback(() => {
+    setSessionsOpen(false)
+    setNotificationsOpen(false)
+  }, [])
   // The bell badge is an error counter: only unread errors increment it (and
   // drive the red just-changed pulse), so a flood of info/warning notifications
   // never inflates the count. Warnings/info still appear in the popover list and
@@ -5114,6 +5125,31 @@ export default function WorkspaceManager() {
     [contextRailSurfaceKey, surfaceLabel, contextRailActive],
   )
 
+  // The bell and the account stand at the rail's foot, and in the window's band
+  // while the rail is hidden. Exactly one place holds them, so what opens the
+  // list when something fails has a trigger on screen to anchor to.
+  const railHoldsAccount = !narrowViewport || narrowSidebarShown
+  const notificationBell = (onRail: boolean) => (
+    <NotificationBell
+      notifications={notifications}
+      unreadErrorCount={unreadErrorCount}
+      open={notificationsOpen}
+      onOpenChange={(next) => {
+        setNotificationsOpen(next)
+        if (next) {
+          setSessionsOpen(false)
+          accountSurfaces.setRemoteOpen(false)
+        }
+      }}
+      markNotificationRead={markNotificationRead}
+      markAllNotificationsRead={markAllNotificationsRead}
+      clearNotifications={clearNotifications}
+      resolveNotificationActions={resolveNotificationActions}
+      onRail={onRail}
+      placement={onRail ? 'top-start' : 'bottom-end'}
+    />
+  )
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[color:var(--bg-canvas)] text-[color:var(--text-strong)]">
       {workspaceTypeSupervisors.map((supervisor) => (
@@ -5127,6 +5163,19 @@ export default function WorkspaceManager() {
       {/* The Studio server's state in words while it is not there (phase 6). */}
       <StudioServerBanner />
       <WorkspaceFolderReveal activeWorkspace={activeWorkspace} activeWorkspaceId={windowActiveWorkspaceId} />
+      <AccountSurfaces
+        sessionsOpen={sessionsOpen}
+        onCloseSessions={() => setSessionsOpen(false)}
+        sessions={sessions}
+        workspaceOrder={sidebarWorkspaceOrder}
+        onOpenSession={openSession}
+        onPauseSession={pauseSession}
+        onStopSession={stopSession}
+        onStopSessionGroup={stopSessionGroup}
+        remoteOpen={accountSurfaces.remoteOpen}
+        onCloseRemote={() => accountSurfaces.setRemoteOpen(false)}
+        presence={accountSurfaces.presence}
+      />
 
       <div className="relative flex min-h-0 flex-1 flex-row">
         {/* The app rail (app shell, 2026-09-05): the window's far-left
@@ -5154,6 +5203,11 @@ export default function WorkspaceManager() {
                 startLogin={startLogin}
                 refreshAuthState={refreshAuthState}
                 logout={logout}
+                remoteRow={accountSurfaces.remoteRow}
+                sessionsRow={accountSurfaces.sessionsRow}
+                accountBadge={accountSurfaces.badge}
+                bellSlot={railHoldsAccount ? notificationBell(true) : null}
+                accountInBand={!railHoldsAccount}
                 openSettings={openSettings}
                 settingsOpen={settingsOpen}
                 settingsBadge={settingsUpdateBadges.rail}
@@ -5255,34 +5309,37 @@ export default function WorkspaceManager() {
               onOpenDiagnostics={
                 window.api.isDevelopment || window.api.isDiagnosticsEnabled ? () => setDiagnosticsOpen(true) : null
               }
+              accountSlot={
+                railHoldsAccount ? null : (
+                  <>
+                    {notificationBell(false)}
+                    <AccountControl
+                      authState={authState}
+                      authMessage={authMessage}
+                      accountOpen={accountOpen}
+                      setAccountOpen={setAccountOpen}
+                      startLogin={startLogin}
+                      refreshAuthState={refreshAuthState}
+                      logout={logout}
+                      remoteRow={accountSurfaces.remoteRow}
+                      sessionsRow={accountSurfaces.sessionsRow}
+                      accountBadge={accountSurfaces.badge}
+                      onRail={false}
+                      placement="bottom-end"
+                    />
+                  </>
+                )
+              }
               actionsSlot={
                 <WorkspaceActions
-                  workspaces={visibleWorkspaces}
                   activeWorkspace={activeWorkspace}
                   workspaceActionsEnabled={workspaceActionsEnabled}
-                  sessionsRef={sessionsRef}
                   viewMenuRef={viewMenuRef}
-                  notificationsRef={notificationsRef}
-                  sessions={sessions}
-                  sidebarWorkspaceOrder={sidebarWorkspaceOrder}
-                  sessionsOpen={sessionsOpen}
-                  setSessionsOpen={setSessionsOpen}
-                  openSession={openSession}
-                  pauseSession={pauseSession}
-                  stopSession={stopSession}
-                  stopSessionGroup={stopSessionGroup}
                   viewMenuOpen={viewMenuOpen}
                   setViewMenuOpen={setViewMenuOpen}
                   viewMenuTick={viewMenuTick}
                   setViewMenuTick={setViewMenuTick}
-                  notifications={notifications}
-                  unreadErrorCount={unreadErrorCount}
-                  notificationsOpen={notificationsOpen}
-                  setNotificationsOpen={setNotificationsOpen}
-                  markNotificationRead={markNotificationRead}
-                  markAllNotificationsRead={markAllNotificationsRead}
-                  clearNotifications={clearNotifications}
-                  resolveNotificationActions={resolveNotificationActions}
+                  onViewMenuOpened={closeTopPopovers}
                 />
               }
             />

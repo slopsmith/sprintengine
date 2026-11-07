@@ -60,6 +60,8 @@ type WorkspaceHeaderProps<MenuItem extends string> = {
   // slots so this header never threads the ~50 workspace/agent props they need.
   identitySlot: React.ReactNode
   actionsSlot: React.ReactNode
+  // The bell and the account, while the rail that holds them is hidden.
+  accountSlot?: React.ReactNode
   // True when a global "door" surface (Design, Reviews, Automations) covers the
   // workspace card. The workspace-scoped left cluster (panel switches + identity)
   // is chrome for the active workspace — with the card hidden behind a full-page
@@ -168,6 +170,7 @@ export function WorkspaceHeader<MenuItem extends string>({
   onShowMenu,
   identitySlot,
   actionsSlot,
+  accountSlot = null,
   globalSurfaceActive,
   surfaceBarSlotRef,
   onOpenDiagnostics,
@@ -236,6 +239,7 @@ export function WorkspaceHeader<MenuItem extends string>({
         {/* What the focused chat's agent touched, as a pill of glyphs. */}
         {globalSurfaceActive ? null : <ChatActivityPill workspaceId={activeWorkspaceId} />}
         {actionsSlot}
+        {accountSlot ? <div className="app-no-drag flex items-center gap-1 pl-1">{accountSlot}</div> : null}
         {/* The toolbar's two remaining members are both conditional now that the
             attention cue is gone, so the host renders nothing rather than an
             empty labelled toolbar carrying only its own padding: on a release
