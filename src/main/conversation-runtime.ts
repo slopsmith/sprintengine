@@ -113,6 +113,7 @@ import type {
   ConversationRenameInput,
 } from '../shared/conversation-index'
 import { presentToolItem } from '../shared/conversation/presentation'
+import { isLooserCliPermissionPreset, type CliPermissionPreset } from '../shared/cli-permission-preset'
 import { plainLineBreaks } from '../shared/conversation/lineBreaks'
 import { STUDIO_NOTICE_PREFIX } from '../shared/studio-notice'
 import { expandQuotesForAgent, quotesToInlineText } from '../shared/chat-quotes'
@@ -293,6 +294,16 @@ export type ConversationRuntimeOptions = {
    * session is started again by whichever side reaches it first.
    */
   heldChatMode?: (chat: { workspaceId: string; agentId: string }) => 'plan' | 'ask' | undefined
+  /**
+   * The loosest preset a chat may be switched to, for a sub-agent: its parent's,
+   * or for a read-only one the preset it was started on. The cap otherwise
+   * applies only when a sub-agent starts, and its record is what says it is one.
+   */
+  subagentPresetCeiling?: (chat: {
+    workspaceId: string
+    agentId: string
+    current: CliPermissionPreset | undefined
+  }) => CliPermissionPreset | undefined
   approvalRules?: ConversationApprovalRuleStore
   attachmentStore?: ConversationAttachmentStore
   /**
@@ -493,6 +504,7 @@ export class ConversationRuntime {
   private readonly resolveSkills: ConversationSkillsResolver
   private readonly prepareChatFolder: NonNullable<ConversationRuntimeOptions['prepareChatFolder']>
   private readonly heldChatMode: ConversationRuntimeOptions['heldChatMode']
+  private readonly subagentPresetCeiling: ConversationRuntimeOptions['subagentPresetCeiling']
   private readonly worktreeLeases: WorktreeLeases
   // Starts waiting for their folder's hold, by session id, or by chat for a
   // session start or a revert (`chatWaitKey`): see `holdChatFolder`.
@@ -611,6 +623,7 @@ export class ConversationRuntime {
     this.randomId = options.randomId ?? (() => Math.random().toString(36).slice(2, 10))
     this.resolveSkills = options.resolveSkills ?? createConversationSkillsResolver()
     this.heldChatMode = options.heldChatMode
+    this.subagentPresetCeiling = options.subagentPresetCeiling
     this.prepareChatFolder = options.prepareChatFolder ?? (() => Promise.resolve({ ok: true }))
     this.worktreeLeases = options.worktreeLeases ?? worktreeLeases
     this.approvalRules = options.approvalRules ?? new ConversationApprovalRuleStore()
@@ -1903,6 +1916,13 @@ export class ConversationRuntime {
     if (!adapter.setPermissionPreset) {
       return { ok: false, message: 'This conversation provider cannot change tool permissions mid-conversation.' }
     }
+    const ceiling = this.subagentPresetCeiling?.({
+      workspaceId: session.workspaceId,
+      agentId: session.agentId,
+      current: session.permissionPreset,
+    })
+    if (ceiling && isLooserCliPermissionPreset(input.permissionPreset, ceiling))
+      return { ok: false, message: 'A subagent cannot run with more permission than its parent.' }
     const applied = await adapter.setPermissionPreset({
       ...session,
       permissionPreset: input.permissionPreset,

@@ -316,6 +316,7 @@ test('every method the server serves has its call in the SDK, under the same sco
     'conversation.cancelQueued': 'request',
     // So is stopping one agent of a chat, an owner's for now: no SDK call names it yet.
     'conversation.stopSubagent': 'request',
+    'conversation.messageSubagent': 'request',
     // And a chat's effort, its MCP servers and its agent's restart, owners' for
     // now, as a chat followed from another desktop uses them.
     'conversation.setReasoningEffort': 'request',
