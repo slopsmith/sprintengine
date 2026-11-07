@@ -42,6 +42,8 @@ test('studio-plugin-skills', async () => {
    * like `family_verb` is read as a tool the skill tells an agent to call.
    */
   const NON_TOOL_TOKENS = new Set([
+    // An error code a canvas tool answers with.
+    'foreign_board',
     'bypass_all',
     'canvas_module_disabled',
     // A browser error code, not a tool: a page's dialog holds the tab.
