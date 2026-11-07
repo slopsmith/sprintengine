@@ -194,6 +194,7 @@ import { showToast, useToastStore } from '../../store/toastStore'
 import { chatsWaitingOnYou, nextWaitingChatId } from './nextWaitingChat'
 import { createNewChatStay, NEW_CHAT_STAY_WATCH_MS, type NewChatStay } from './newChatStay'
 import { WorkspaceBand, WorkspaceBandGround } from './WorkspaceBand'
+import { paneShowsMenu } from '../../store/slices/workspacePaneSlice'
 import { GlobalSurfaceBarSlotContext } from './globalSurface/surfaceBarSlot'
 import { ModalSurfaceFrame } from './globalSurface/GlobalSurfaceShell'
 import { GlobalSurfaceErrorBoundary } from './globalSurface/surfaceErrorBoundary'
@@ -919,6 +920,7 @@ export default function WorkspaceManager() {
     if (
       pane?.open &&
       selectModuleEnabled(moduleEnablement, 'git') &&
+      !paneShowsMenu(pane) &&
       pane.tabs.some((tab) => tab.id === pane.activeTabId && tab.kind === 'git')
     ) {
       context.gitPanelActive = true
@@ -4365,6 +4367,15 @@ export default function WorkspaceManager() {
         // from the render closure: this callback is retained across renders and
         // a stale `paneState` would close (and kill) the wrong tab.
         const pane = useWorkspaceStore.getState().workspaces.find((w) => w.id === windowActiveWorkspaceId)?.paneState
+        // With the menu up the tab in front is not on screen, and a close is not
+        // for something nobody can see: it closes the panel.
+        if (pane?.open && paneShowsMenu(pane) && isWorkspacePaneFocused()) {
+          keepFocusOutOfClosedPane(
+            () => setPaneOpen(windowActiveWorkspaceId, false),
+            paneOpenOf(windowActiveWorkspaceId),
+          )
+          return true
+        }
         if (pane?.open && pane.activeTabId && isWorkspacePaneFocused()) {
           const tab = pane.tabs.find((candidate) => candidate.id === pane.activeTabId)
           if (tab) closePaneTabAndItsTerminal(windowActiveWorkspaceId, tab)

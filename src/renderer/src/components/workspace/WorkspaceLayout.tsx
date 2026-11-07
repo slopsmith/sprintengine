@@ -125,6 +125,22 @@ interface Props {
 // Count the live tabs in a model. A workspace whose last tab was closed leaves
 // FlexLayout with an empty grid (sometimes empty tabsets), so we look for real
 // TabNodes rather than trusting tabset presence.
+type BandRect = { x: number; y: number; width: number; height: number }
+
+/**
+ * Where a tabset's strip stands in the window's band: on the layout's top row or
+ * not at all, and at either end of it, where it keeps clear of what stands there.
+ * Null for a strip under a split, which stays in the column.
+ */
+export function bandStripMarks(rect: BandRect, layout: BandRect): Record<string, string> | null {
+  if (rect.y > layout.y + 1) return null
+  return {
+    'data-band-strip': '',
+    ...(rect.x <= layout.x + 1 ? { 'data-band-start': '' } : {}),
+    ...(rect.x + rect.width >= layout.x + layout.width - 1 ? { 'data-band-end': '' } : {}),
+  }
+}
+
 function countOpenTabs(model: Model | null): number {
   if (!model) return 0
   let count = 0
@@ -1826,16 +1842,8 @@ function WorkspaceLayoutBody({
       // to style a strip by where it is, so the strip carries a marker the band's
       // rules read (assets/index.css).
       const rect = tabSetNode.getRect()
-      const layoutRect = tabSetNode.getModel().getRootRow()?.getRect() ?? rect
-      if (rect.y <= layoutRect.y + 1)
-        values.leading = (
-          <span
-            hidden
-            data-band-strip=""
-            {...(rect.x <= layoutRect.x + 1 ? { 'data-band-start': '' } : {})}
-            {...(rect.x + rect.width >= layoutRect.x + layoutRect.width - 1 ? { 'data-band-end': '' } : {})}
-          />
-        )
+      const marks = bandStripMarks(rect, tabSetNode.getModel().getRootRow()?.getRect() ?? rect)
+      if (marks) values.leading = <span hidden {...marks} />
       if (!onNewAgentTab) return
       if (tabSetNode.getChildren().length === 0) return
       const hostsAgents = tabSetNode.getChildren().some((child) => {

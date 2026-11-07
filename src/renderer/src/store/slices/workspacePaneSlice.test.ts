@@ -564,7 +564,10 @@ test('workspacePaneSlice', async () => {
     slice.setPaneOpen(WS, false)
     slice.setPaneOpen(WS, true)
     assert.equal(paneShowsMenu(pane()), false, 'an agent opening the column lands on its tab')
-    assert.equal(pane().tabs.some((tab) => tab.id === git), true)
+    assert.equal(
+      pane().tabs.some((tab) => tab.id === git),
+      true,
+    )
   })
 
   run('a background open leaves the menu where it is', () => {
@@ -612,7 +615,8 @@ test('workspacePaneSlice', async () => {
     })
     assert.equal(record?.menu, undefined)
     assert.equal(
-      normalizeWorkspacePaneState({ open: true, activeTabId: 'a', menu: true, tabs: [{ id: 'a', kind: 'files' }] })?.menu,
+      normalizeWorkspacePaneState({ open: true, activeTabId: 'a', menu: true, tabs: [{ id: 'a', kind: 'files' }] })
+        ?.menu,
       true,
       'every write normalizes, so the normalizer carries it',
     )

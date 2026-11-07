@@ -19,3 +19,22 @@ test('no room is left with the sidebar open, in fullscreen, or off macOS', () =>
     expect(bandTrafficLightInset({ ...mac, isMac: false, besideRail })).toBe(0)
   }
 })
+
+test('a strip on the top row stands in the band, and at its ends keeps clear of what stands there', async () => {
+  const { bandStripMarks } = await import('./WorkspaceLayout')
+  const layout = { x: 0, y: 0, width: 1000, height: 800 }
+  expect(bandStripMarks({ x: 0, y: 0, width: 1000, height: 800 }, layout)).toEqual({
+    'data-band-strip': '',
+    'data-band-start': '',
+    'data-band-end': '',
+  })
+  expect(bandStripMarks({ x: 0, y: 0, width: 500, height: 800 }, layout)).toEqual({
+    'data-band-strip': '',
+    'data-band-start': '',
+  })
+  expect(bandStripMarks({ x: 500, y: 0, width: 500, height: 800 }, layout)).toEqual({
+    'data-band-strip': '',
+    'data-band-end': '',
+  })
+  expect(bandStripMarks({ x: 0, y: 400, width: 1000, height: 400 }, layout), 'under a split it stays put').toBe(null)
+})

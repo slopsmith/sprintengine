@@ -154,8 +154,12 @@ export function WorkspacePaneColumn({
           if (pane?.tabs.some((tab) => tab.id === tabId)) store.setActivePaneTab(workspaceId, tabId)
         } else if (url) {
           if (!openUrlInPane(workspaceId, url, { forceNewTab: true })) return
-        } else if (!pane?.tabs.some((tab) => tab.kind === 'browser')) {
-          store.openPaneTab(workspaceId, { kind: 'browser' })
+        } else {
+          // The menu may be up over the browser tab: the agent's page comes
+          // forward, as `openPaneTab` brings a new one.
+          const browser = pane?.tabs.find((tab) => tab.kind === 'browser')
+          if (browser) store.setActivePaneTab(workspaceId, browser.id)
+          else store.openPaneTab(workspaceId, { kind: 'browser' })
         }
         store.setPaneOpen(workspaceId, true)
       }),
