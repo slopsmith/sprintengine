@@ -66,12 +66,12 @@ async function renderSwitches(paneState: WorkspacePaneState, maximised: boolean)
     ],
     workspacePaneMaximised: maximised,
   })
-  const { PanelSwitches } = await import('./PanelSwitches')
+  const { BandPanelToggle } = await import('./BandPanelToggle')
   host = dom.window.document.createElement('div')
   dom.window.document.body.appendChild(host)
   root = createRoot(host as unknown as Element)
   act(() => {
-    root?.render(React.createElement(PanelSwitches, { activeWorkspaceId: WS, cluster: 'right' }))
+    root?.render(React.createElement(BandPanelToggle, { activeWorkspaceId: WS }))
   })
   return host
 }
@@ -92,6 +92,7 @@ test('a closed pane keeps the header switch, which opens it', async () => {
   const { useWorkspaceStore } = await import('../../store/workspaceStore')
   const pane = useWorkspaceStore.getState().workspaces.find((workspace) => workspace.id === WS)?.paneState
   assert.equal(pane?.open, true, 'the click opened the pane')
+  assert.equal(pane?.menu, true, 'on its menu, whatever tab it last showed')
   assert.equal(paneSwitch(container), null, 'once docked open, the switch steps aside for the strip’s own close')
 })
 

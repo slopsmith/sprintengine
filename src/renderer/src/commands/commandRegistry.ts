@@ -548,7 +548,7 @@ export const COMMAND_REGISTRY = [
   //
   // Consequence of routing to the cluster: it acts only while the workspace bar
   // is on screen. A door surface replaces the identity cluster with its own bar
-  // (WorkspaceHeader), so this is inert there — the same shape as the git.*
+  // (WorkspaceBand), so this is inert there — the same shape as the git.*
   // panel commands, which gate on `gitPanelActive` for the same reason.
   command({
     id: 'workspace.folder.reveal',
@@ -747,7 +747,7 @@ export const COMMAND_REGISTRY = [
   // No Fleet command: the Fleet panel was retired on 2026-09-05
   // (remote-sessions-in-the-sidebar). Paired machines' sessions are rows in
   // the sidebar's Remote band; machine management is Settings → Remote and
-  // the top bar's Remote glyph (WorkspaceActions → RemotePopover).
+  // the account menu's Remote row (AccountSurfaces → RemotePopover).
   command({
     id: 'terminal.new',
     title: 'Open plain terminal',

@@ -61,7 +61,7 @@ function RestoreGlyph({ className }: { className?: string }) {
   )
 }
 
-// The same panel-right rect the header's pane switch draws: one glyph for the
+// The same panel-right rect the band's toggle draws: one glyph for the
 // column on both ends of the gesture.
 function ClosePaneGlyph({ className }: { className?: string }) {
   return (
@@ -172,7 +172,7 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
   )
 
   // Closing the column with focus inside it would strand the keyboard in
-  // hidden chrome; the header's pane switch, back once the pane is closed, is
+  // hidden chrome; the band's toggle, back once the pane is closed, is
   // where reopening it lives.
   const closePane = useCallback(() => {
     setPaneOpen(workspaceId, false)
@@ -332,9 +332,9 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
             </Tooltip>
           )}
           {/* One close-pane control on screen at a time. Docked, it is this
-              one, and the WorkspaceHeader's pane switch steps aside
-              (PanelSwitches). Maximised, this strip sits directly under the
-              header, so the header's switch takes it back and this one goes. */}
+              one, and the band's toggle steps aside (BandPanelToggle). Maximised,
+              this strip sits directly under the band, so the band's toggle
+              takes it back and this one goes. */}
           {maximised ? null : (
             <Tooltip content="Close panel" placement="bottom">
               <IconButton onClick={closePane} aria-label="Close panel" pressed>
@@ -346,7 +346,7 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
         {/* Docked, the pane is the window's rightmost column, so on win/linux
             the floating caption buttons sit over THIS strip's corner: leave
             them their width, or Close-pane hides under Close-window. Maximised,
-            the strip starts below the WorkspaceHeader and the header takes the
+            the strip starts below the band and the band takes the
             corner and the reserve (paneStripOwnsCaptionCorner). */}
         <WindowCaptionReserve
           width={

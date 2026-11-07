@@ -1,6 +1,6 @@
 // Pure decisions behind the workspace bar's open-in-editor split button (item
 // 1990): which targets the menu offers, which one the primary half runs, and
-// what each is called. Kept out of WorkspaceIdentity.tsx so the probe-hide rule
+// what each is called. Kept out of WorkspaceFolderReveal.tsx so the probe-hide rule
 // and the stale-remembered-target fallback are testable without a render.
 
 import {

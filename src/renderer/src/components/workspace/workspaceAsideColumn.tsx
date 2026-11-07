@@ -150,7 +150,7 @@ export function WorkspaceAsideColumn({
         // workspace's FlexLayout tab strip straight through its own tab strip.
         fill ? 'bg-[color:var(--bg-surface)]' : 'bg-[color:var(--bg-canvas)]',
         // Filling: the column floats over the card row (the caller's
-        // `relative` wrapper) below the 36px WorkspaceHeader rather than
+        // `relative` wrapper) below the 36px band rather than
         // growing beside the content, so the header's controls stay reachable
         // and the terminals underneath keep their size — nothing reflows on
         // maximise.

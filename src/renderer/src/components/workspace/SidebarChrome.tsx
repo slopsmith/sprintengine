@@ -21,7 +21,7 @@
 // above both the workspaces rail and a door's context rail, and outside the
 // tree's scroll container — so a drill-in that swaps the rail underneath leaves
 // the row untouched, and the row never scrolls away. Collapsed, the whole
-// sidebar is hidden and the expand control moves to WorkspaceHeader's launcher.
+// sidebar is hidden and the expand control moves to WorkspaceBand's launcher.
 
 import React from 'react'
 import { IconButton, MenuItem, Popover, Tooltip } from '../ui'
@@ -57,7 +57,7 @@ type SidebarChromeProps<MenuItem extends string> = {
 // Sidebar toggle: white (text-strong) while its
 // panel — the sidebar — is open. This button only renders in the expanded chrome
 // row, so it's always the open state here; the collapsed-state open button lives
-// in WorkspaceHeader's launcher and stays muted. That is why it is the one glyph
+// in WorkspaceBand's launcher and stays muted. That is why it is the one glyph
 // in the row brighter than its neighbours: the pair is a state contrast read
 // across the two states, not decoration.
 function CollapseButton({ onToggle }: { onToggle: () => void }) {
@@ -119,7 +119,7 @@ function NavHistoryButton({ direction, onClick }: { direction: 'back' | 'forward
 }
 
 // The win/linux app menu, always a single hamburger here (no inline label bar).
-// Exported so the collapsed-sidebar launcher (WorkspaceHeader) can host the same
+// Exported so the collapsed-sidebar launcher (WorkspaceBand) can host the same
 // menu when the sidebar is hidden and this strip is gone.
 export function AppMenuButton<MenuItem extends string>({
   menuItems,
@@ -194,7 +194,7 @@ export function SidebarChrome<MenuItem extends string>({
   onShowMenu,
 }: SidebarChromeProps<MenuItem>) {
   // Only rendered while the sidebar is expanded (the whole sidebar is hidden when
-  // collapsed — the collapsed launcher lives in WorkspaceHeader instead).
+  // collapsed — the collapsed launcher lives in WorkspaceBand instead).
   //
   // The app rail stands between this column and the window's left edge
   // (app shell, 2026-09-05), and the native macOS traffic lights start
@@ -205,7 +205,7 @@ export function SidebarChrome<MenuItem extends string>({
 
   return (
     // ONE row (owner, 2026-07-30): one chrome row per content region. Height-
-    // locked to WorkspaceHeader's 36px so the two halves of the split chrome meet
+    // locked to WorkspaceBand's 36px so the two halves of the split chrome meet
     // at the same line across the column seam, and no divider under it — the rail
     // below owns the single "the list starts here" rule (principles.md,
     // Composition).

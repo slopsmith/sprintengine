@@ -193,7 +193,7 @@ import { bootComposerLive, dropBootComposerSnapshot, releaseBootComposer } from 
 import { showToast, useToastStore } from '../../store/toastStore'
 import { chatsWaitingOnYou, nextWaitingChatId } from './nextWaitingChat'
 import { createNewChatStay, NEW_CHAT_STAY_WATCH_MS, type NewChatStay } from './newChatStay'
-import { WorkspaceHeader } from './WorkspaceHeader'
+import { WorkspaceBand } from './WorkspaceBand'
 import { GlobalSurfaceBarSlotContext } from './globalSurface/surfaceBarSlot'
 import { ModalSurfaceFrame } from './globalSurface/GlobalSurfaceShell'
 import { GlobalSurfaceErrorBoundary } from './globalSurface/surfaceErrorBoundary'
@@ -220,8 +220,7 @@ import { terminateWorkspaceTerminals } from './workspaceTerminalTermination'
 import { clientSupports } from '../../clientCapabilities'
 import { WindowControls, paneStripOwnsCaptionCorner, windowCaptionReserve } from './WindowControls'
 import { WorkspaceFolderReveal } from './WorkspaceFolderReveal'
-import { WorkspaceIdentity } from './WorkspaceIdentity'
-import { WorkspaceActions } from './WorkspaceActions'
+import { BandActions } from './BandActions'
 import { AccountSurfaces, useAccountSurfaces } from './AccountSurfaces'
 import { NotificationBell } from './NotificationBell'
 import type { SessionGroup, SessionItem } from './topbar/SessionsPopover'
@@ -714,7 +713,7 @@ export default function WorkspaceManager() {
   // Whether the workspace pane column stands at the window's right edge. On
   // win/linux the floating caption buttons sit over whichever top strip owns
   // that corner, and that strip leaves them room (WindowCaptionReserve): the
-  // pane's own strip while it is open, the WorkspaceHeader otherwise.
+  // pane's own strip while it is open, the band otherwise.
   // `paneOwnsRightEdge` itself is derived below, once the New chat door's state
   // is known: the door hides the active workspace's pane.
   const activeWorkspacePaneOpen = useWorkspaceStore(
@@ -1117,7 +1116,7 @@ export default function WorkspaceManager() {
     : ''
 
   // Destination element for the active door surface's lifted bar. The surface
-  // portals its bar (title · status · context · actions) into the WorkspaceHeader
+  // portals its bar (title · status · context · actions) into the band
   // strip via GlobalSurfaceBarSlotContext, collapsing the door's own bar row into
   // the top strip. A fresh object identity only on element change keeps the
   // context stable across unrelated re-renders.
@@ -5273,15 +5272,13 @@ export default function WorkspaceManager() {
           />
         </div>
         {/* The content column and the workspace pane column share this row so
-          the pane can (a) stand beside the WorkspaceHeader at full height and
+          the pane can (a) stand beside the band at full height and
           (b) float over the content column when maximised without reflowing
           the terminals underneath. */}
         <div className={`relative min-w-0 flex-1 flex-row ${narrowViewport && narrowSidebarShown ? 'hidden' : 'flex'}`}>
-          {/* Content column: the workspace header (identity + controls) sits above
-          the active workspace's card, so the chrome reads as tied to the
-          workspace rather than floating in a full-width bar. */}
+          {/* Content column: the band above the active workspace's card. */}
           <div className="flex min-w-0 flex-1 flex-col">
-            <WorkspaceHeader
+            <WorkspaceBand
               activeWorkspaceId={windowActiveWorkspaceId}
               isMac={nativeMacChrome}
               captionReserve={paneOwnsCaptionCorner || !captionButtons ? 0 : windowCaptionReserve(nativeMacChrome)}
@@ -5293,22 +5290,8 @@ export default function WorkspaceManager() {
               onNewChat={() => openNewChatPanel()}
               menuItems={menubarItems}
               onShowMenu={(event, label) => void handleShowMenubarMenu(event, label)}
-              // The New chat door has no lifted bar of its own; passing it here drops
-              // the workspace-scoped left cluster (panel switches + identity), which
-              // was still naming the workspace open behind the surface.
               globalSurfaceActive={activeGlobalSurfaceEntry !== null || newChatPanelOpen}
               surfaceBarSlotRef={setSurfaceBarEl}
-              identitySlot={
-                <WorkspaceIdentity
-                  activeWorkspace={activeWorkspace}
-                  activeWorkspaceId={windowActiveWorkspaceId}
-                  sidebarCollapsed={narrowViewport || sidebarCollapsed}
-                  onToggleSidebar={() => runCommand('workspace.sidebar.toggle')}
-                />
-              }
-              onOpenDiagnostics={
-                window.api.isDevelopment || window.api.isDiagnosticsEnabled ? () => setDiagnosticsOpen(true) : null
-              }
               accountSlot={
                 railHoldsAccount ? null : (
                   <>
@@ -5331,7 +5314,7 @@ export default function WorkspaceManager() {
                 )
               }
               actionsSlot={
-                <WorkspaceActions
+                <BandActions
                   activeWorkspace={activeWorkspace}
                   workspaceActionsEnabled={workspaceActionsEnabled}
                   viewMenuRef={viewMenuRef}
@@ -5343,7 +5326,7 @@ export default function WorkspaceManager() {
                 />
               }
             />
-            {/* Card row under the WorkspaceHeader. */}
+            {/* Card row under the band. */}
             <div className="flex min-h-0 flex-1 flex-row">
               {/* The workspace card: everything inside the rounded surface belongs to
           the active workspace. With the pane column open the card also rounds
@@ -5386,9 +5369,6 @@ export default function WorkspaceManager() {
                   paneOwnsRightEdge ? '' : 'mr-[var(--shell-card-gap)]'
                 }`}
               >
-                {/* The workspace identity + control groups live in the WorkspaceHeader
-          above this card (WorkspaceIdentity / WorkspaceActions slots), so the
-          card opens directly with content. */}
                 <div className="relative min-h-0 flex-1">
                   <div
                     className="absolute inset-0"

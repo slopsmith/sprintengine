@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 import type { ChatActivityKind } from './chatActivity'
 
-// What each open chat says it touched, for the title bar's pill, which draws
+// What each open chat says it touched, for the right-hand panel, which draws
 // the rows outside the chat. The chat view publishes; nothing here reads a
 // transcript.
 

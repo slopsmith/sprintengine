@@ -12,7 +12,7 @@ import { useRecordingWorkspaceIds } from './browser/recordingTabs'
 import { revealPoppedOutTab, showPaneTab, usePanePopOutHost } from './popout/panePopOutHost'
 
 // The pane column (browser-pane epic): the full-height column on the shell
-// row's right edge, beside the WorkspaceHeader, that hosts every retained
+// row's right edge, beside the band, that hosts every retained
 // workspace's pane. One is visible — the active workspace's — and the others
 // stay mounted invisibly, the same retention the workspace layers use, so a
 // pane terminal (later a browser page) survives a workspace switch. Width is

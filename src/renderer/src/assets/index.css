@@ -4018,7 +4018,7 @@ body:has([data-selection-pane]:focus-within)
 }
 
 /* Active tab: ink change + the same 2px inset underline the panel switches
-   use (PanelSwitches.tsx). The accent belongs to the focused tabset only; in
+   use. The accent belongs to the focused tabset only; in
    an unfocused tabset the active tab keeps a neutral underline + default ink
    so tiled grids stay quiet. Focus is never color-only — underline hue and
    ink weight move together. */

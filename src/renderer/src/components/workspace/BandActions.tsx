@@ -1,12 +1,12 @@
-// The active workspace's control-group cluster — Sessions, View panels,
-// Notifications and voice dictation — hoisted out of the retired 48px
-// WorkspaceTopBar row into the merged AppTitleBar title strip (it fills the title bar's right-cluster-prefix slot, ahead of the
-// app-level toggles). The whole cluster opts out of the strip's drag region via
-// `app-no-drag` so the window never drags on a control click.
+// What modules put in the window's band: a workspace type's view panels, and
+// the controls registered with `registerTopBarItem` (the microphone and its
+// siblings). Both are public SDK surfaces, so they keep a home when everything
+// else leaves the top row. The shell's own controls live on the rail, behind the
+// avatar, or on the panel.
 //
-// The at-rest control groups are capped at five via `{/* top-bar-group: <name>
-// */}` markers asserted by scripts/lint-panel-composition.mjs; keep this file
-// and CANONICAL_TOP_BAR_GROUPS (the TopBar inventory) in lockstep.
+// The at-rest control groups are capped via `{/* top-bar-group: <name> */}`
+// markers asserted by scripts/lint-panel-composition.mjs; keep this file and
+// CANONICAL_TOP_BAR_GROUPS (the TopBar inventory) in lockstep.
 
 import React from 'react'
 import { CheckIcon, resolveEnabledWorkspaceType } from '../AppIcons'
@@ -25,7 +25,7 @@ import { useWorkspaceStore } from '../../store/workspaceStore'
 import { getRendererHost, selectModuleEnabled } from '../../modules'
 import { ModuleContributionBoundary } from '../../modules/ModuleContributionBoundary'
 
-export type WorkspaceActionsProps = {
+export type BandActionsProps = {
   activeWorkspace: Workspace | null
   workspaceActionsEnabled: boolean | null
 
@@ -38,13 +38,7 @@ export type WorkspaceActionsProps = {
   onViewMenuOpened: () => void
 }
 
-// The shared AppIcons branch fork (mirrored in
-// design-system/glyphs/git-branch.svg since remote-sessions-ux /
-// two-line-session-rows). This file drew its own; the tab popover, the
-// layout header, and the sidebar rows now share the single export.
-export { GitBranchGlyph } from '../AppIcons'
-
-export function WorkspaceActions({
+export function BandActions({
   activeWorkspace,
   workspaceActionsEnabled,
   viewMenuRef,
@@ -53,7 +47,7 @@ export function WorkspaceActions({
   viewMenuTick,
   setViewMenuTick,
   onViewMenuOpened,
-}: WorkspaceActionsProps) {
+}: BandActionsProps) {
   const moduleOverrides = useWorkspaceStore((state) => state.appSettings.modules)
   // Module-contributed top-bar controls, gated on live enablement so a module
   // toggle adds/removes its control without a reload (registry references are
@@ -86,22 +80,12 @@ export function WorkspaceActions({
   }, [])
   return (
     <div className="app-no-drag flex shrink-0 items-center gap-1.5">
-      {/*
-       * WorkspaceActions at-rest control inventory — capped at five groups.
-       * The Git change-count badge migrated to the PanelRail Git icon
-       * (`workspace-context` retired) and the agent split-button was
-       * deleted when `agent-spawn` retired ( spawning is New chat's
-       * and the tab strip's job), so the row carries two canonical groups;
-       * adding a sixth top-bar-group marker fails
-       * scripts/lint-panel-composition.mjs, which holds the canonical
-       * TopBar inventory.
-       */}
-      {/* top-bar-group: activity-and-views */}
+      {/* top-bar-group: views */}
       {workspaceActionsEnabled && activeWorkspace && activeWorkspaceViews ? (
         /*
          * The trigger condenses to an icon-only 30px square below ~1000px so
-         * the right cluster gives way before the hoisted workspace name is
-         * squeezed out at narrow widths; the label and chevron re-appear at
+         * the band gives way before its tabs are squeezed out at narrow
+         * widths; the label and chevron re-appear at
          * >= 1000px. The WIDTH lives here rather than on the control because
          * `TriggerButton` fills its track — one `w-*` on the element, not two
          * for a stylesheet to choose between.
@@ -127,8 +111,7 @@ export function WorkspaceActions({
                       bar among ghost icon buttons, so it is a control inside a
                       surface and takes no edge or ground until the pointer
                       arrives (owner ruling 2026-10-04). Open, it holds the
-                      neutral `--bg-selected` fill the Sessions toggle beside it
-                      takes when thrown. The tooltip and `aria-label` carry the
+                      neutral `--bg-selected` fill. The tooltip and `aria-label` carry the
                       meaning in the icon-only state. */}
                 <TriggerButton
                   ref={ref}
@@ -195,10 +178,9 @@ export function WorkspaceActions({
         </div>
       ) : null}
 
-      {/* top-bar-group: communication */}
+      {/* top-bar-group: module-items */}
       {/* Module-contributed top-bar controls (registerTopBarItem): the mic
-       * button and its siblings render here, in the communication cluster's
-       * module slot. Enablement-filtered above, so a module toggle
+       * button and its siblings. Enablement-filtered above, so a module toggle
        * adds/removes its control live. A control that crashes drops out of
        * the bar rather than taking the bar with it. */}
       {moduleTopBarItems.map((item) => (
@@ -213,11 +195,6 @@ export function WorkspaceActions({
           </React.Suspense>
         </ModuleContributionBoundary>
       ))}
-
-      {/* Account + Settings relocated to the sidebar bottom (SidebarAccountBar).
-            The former `account-and-settings` top-bar group is
-            retired; see CANONICAL_TOP_BAR_GROUPS in
-            scripts/lint-panel-composition.mjs for the TopBar inventory. */}
     </div>
   )
 }

@@ -45,7 +45,7 @@ test('surfaceBarLift', async () => {
 
     const container = dom.window.document.createElement('div')
     dom.window.document.body.append(container)
-    // Stands in for WorkspaceHeader's slot div: the app's one 36px top strip.
+    // Stands in for WorkspaceBand's slot div: the app's one 36px top strip.
     const strip = dom.window.document.createElement('div')
     strip.setAttribute('data-testid', 'top-strip')
     dom.window.document.body.append(strip)

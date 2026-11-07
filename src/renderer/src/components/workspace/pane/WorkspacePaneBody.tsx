@@ -277,7 +277,7 @@ type PaneTabPanelProps = {
 function PaneTabPanel({ workspaceId, tab, active, onDiffCountChange }: PaneTabPanelProps) {
   const moduleOverrides = useWorkspaceStore((s) => s.appSettings.modules)
   // The diff reads the worktree the workspace is mounted on, not the parent
-  // checkout a run workspace's folderPath names (the WorkspaceIdentity rule).
+  // checkout a run workspace's folderPath names (the panel's rule).
   const diffRepoRoot = useWorkspaceStore((s) => {
     const ws = s.workspaces.find((w) => w.id === workspaceId)
     if (!ws) return null
