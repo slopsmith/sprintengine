@@ -71,7 +71,11 @@ test('what the person wrote sits between the turns, with what the agent did afte
 
 test('a running lane streams; a failed one says why, with no retry to promise; a stopped one reads as interrupted', () => {
   expect(of(laneTranscript(lane({ status: 'running', output: undefined })), 'assistant')[0]!.status).toBe('streaming')
-  const failed = lane({ agent: { state: 'failed', error: 'It ran out of room.' }, output: undefined })
+  const failed = lane({
+    agent: { state: 'failed', error: 'It ran out of room.' },
+    output: undefined,
+    messages: [],
+  })
   const [turn] = of(laneTranscript(failed), 'assistant')
   expect(turn).toMatchObject({ status: 'complete', text: 'It ran out of room.' })
   const reported = lane({ agent: { state: 'failed', error: 'Six suites.' } })
