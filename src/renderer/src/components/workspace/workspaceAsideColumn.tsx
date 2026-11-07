@@ -157,13 +157,15 @@ export function WorkspaceAsideColumn({
         // once, on body), which is why a maximised pane on glass showed the
         // workspace's FlexLayout tab strip straight through its own tab strip.
         fill || overlay ? 'bg-[color:var(--bg-surface)]' : 'bg-[color:var(--bg-canvas)]',
+        // Overlaying, it floats and takes the overlay pair: the modal shadow and
+        // `--radius-lg`, as a floating tab does.
         // Filling: the column floats over the card row (the caller's
         // `relative` wrapper) below the 36px band rather than
         // growing beside the content, so the header's controls stay reachable
         // and the terminals underneath keep their size — nothing reflows on
         // maximise.
         overlay
-          ? 'absolute bottom-[var(--shell-card-gap)] right-[var(--shell-card-gap)] top-[36px] z-[var(--z-pane)] rounded-[var(--shell-card-radius)] border border-[color:var(--border-default)] shadow-[var(--shadow-modal)]'
+          ? 'absolute bottom-[var(--shell-card-gap)] right-[var(--shell-card-gap)] top-[36px] z-[var(--z-pane)] rounded-[var(--radius-lg)] border border-[color:var(--border-default)] shadow-[var(--shadow-modal)]'
           : fill
             ? 'absolute inset-x-0 bottom-0 top-[36px] z-[var(--z-pane)]'
             : 'relative h-full',
