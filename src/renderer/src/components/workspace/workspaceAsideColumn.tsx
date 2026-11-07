@@ -40,6 +40,11 @@ type WorkspaceAsideColumnProps = {
   keepInteractive?: boolean
   /** Take the whole row (the caller hides the neighbour); no inner hairline. */
   fill?: boolean
+  /**
+   * Float over the neighbour rather than share the row with it, where the row
+   * is too narrow for two columns (a window below 640px).
+   */
+  overlay?: boolean
   children: React.ReactNode
 }
 
@@ -49,6 +54,7 @@ export function WorkspaceAsideColumn({
   onWidthChange,
   collapsed = false,
   fill = false,
+  overlay = false,
   keepInteractive = false,
   children,
 }: WorkspaceAsideColumnProps) {
@@ -122,14 +128,16 @@ export function WorkspaceAsideColumn({
     [width, onWidthChange, rowWidth],
   )
 
-  const resizable = !collapsed && !fill
+  const resizable = !collapsed && !fill && !overlay
   const columnStyle: React.CSSProperties = collapsed
     ? { width: 0 }
-    : fill
-      ? {}
-      : // Never wider than its row, so a width chosen on a wider window does
-        // not push the column off the edge of a narrower one.
-        { width: clampWorkspaceAsideWidth(dragWidthRef.current ?? width), maxWidth: '100%' }
+    : overlay
+      ? { width: 'min(320px, calc(100% - 2 * var(--shell-card-gap)))' }
+      : fill
+        ? {}
+        : // Never wider than its row, so a width chosen on a wider window does
+          // not push the column off the edge of a narrower one.
+          { width: clampWorkspaceAsideWidth(dragWidthRef.current ?? width), maxWidth: '100%' }
 
   return (
     <aside
@@ -148,13 +156,17 @@ export function WorkspaceAsideColumn({
         // canvas layers go clear so the OS frost shows and the tint is painted
         // once, on body), which is why a maximised pane on glass showed the
         // workspace's FlexLayout tab strip straight through its own tab strip.
-        fill ? 'bg-[color:var(--bg-surface)]' : 'bg-[color:var(--bg-canvas)]',
+        fill || overlay ? 'bg-[color:var(--bg-surface)]' : 'bg-[color:var(--bg-canvas)]',
         // Filling: the column floats over the card row (the caller's
         // `relative` wrapper) below the 36px band rather than
         // growing beside the content, so the header's controls stay reachable
         // and the terminals underneath keep their size — nothing reflows on
         // maximise.
-        fill ? 'absolute inset-x-0 bottom-0 top-[36px] z-[var(--z-pane)]' : 'relative h-full',
+        overlay
+          ? 'absolute bottom-[var(--shell-card-gap)] right-[var(--shell-card-gap)] top-[36px] z-[var(--z-pane)] rounded-[var(--shell-card-radius)] border border-[color:var(--border-default)] shadow-[var(--shadow-modal)]'
+          : fill
+            ? 'absolute inset-x-0 bottom-0 top-[36px] z-[var(--z-pane)]'
+            : 'relative h-full',
         // Inset-card layout: no hairline on the inner edge.
         // The gap IS the separator and it is the CARD's margin, not this
         // column's padding (WorkspacePane) — padding here would inset the

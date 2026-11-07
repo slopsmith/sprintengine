@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getRendererHost, onThirdPartyRendererModulesLoaded, selectModuleEnabled } from '../../../modules'
 import { paneShowsMenu } from '../../../store/slices/workspacePaneSlice'
+import { useNarrowViewport } from '../../../hooks/useNarrowViewport'
 import { useWorkspaceStore } from '../../../store/workspaceStore'
 import type { WorkspacePaneTab, WorkspacePaneTabKind } from '../../../types/workspace'
 import {
@@ -97,6 +98,10 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
   const paneState = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.paneState)
   const moduleOverrides = useWorkspaceStore((s) => s.appSettings.modules)
   const maximised = useWorkspaceStore((s) => s.workspacePaneMaximised)
+  // Floating over a narrow window the column sits below the band, as it does
+  // maximised: the band has its toggle and the corner.
+  const narrow = useNarrowViewport()
+  const belowBand = maximised || narrow
   const workspaceName = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.name ?? '')
   const openPaneTab = useWorkspaceStore((s) => s.openPaneTab)
   const openModalSurface = useWorkspaceStore((s) => s.openModalSurface)
@@ -247,7 +252,7 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
           outside it), so the strip has to take itself out of the tab order —
           otherwise focus lands in chrome nobody can see. */}
       <div
-        className="chrome-bar app-drag flex h-[36px] shrink-0 items-end pl-1.5 pr-1"
+        className={`chrome-bar app-drag h-[36px] shrink-0 items-end pl-1.5 pr-1 ${narrow && showsMenu ? 'hidden' : 'flex'}`}
         inert={collapsedWithFloatingPlayer}
       >
         {/* A tool's strip: Back to the menu, then a glyph per open tab, which is
@@ -335,7 +340,7 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
               one, and the band's toggle steps aside (BandPanelToggle). Maximised,
               this strip sits directly under the band, so the band's toggle
               takes it back and this one goes. */}
-          {maximised ? null : (
+          {belowBand ? null : (
             <Tooltip content="Close panel" placement="bottom">
               <IconButton onClick={closePane} aria-label="Close panel" pressed>
                 <ClosePaneGlyph className="icon-sm" />
@@ -350,7 +355,7 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
             corner and the reserve (paneStripOwnsCaptionCorner). */}
         <WindowCaptionReserve
           width={
-            paneStripOwnsCaptionCorner({ open: true, maximised })
+            paneStripOwnsCaptionCorner({ open: true, maximised: belowBand })
               ? windowCaptionReserve(window.api.platform === 'darwin')
               : 0
           }

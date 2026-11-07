@@ -61,6 +61,7 @@ export function ServerRow({ localServers }: { localServers: NonNullable<ChatPane
       servers={servers}
       ariaLabel={single ? `Local server ${single.title}` : 'Local servers from this conversation'}
       placement="bottom-end"
+      fill
       {...(elsewhere ? { elsewhere } : {})}
       renderTrigger={({ ref, togglePopover, triggerProps }) => (
         <PanelRow

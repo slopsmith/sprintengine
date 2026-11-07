@@ -572,6 +572,7 @@ export function ContextPopover({
       ariaLabel="Context window"
       popupRole="dialog"
       placement={placement}
+      className="w-full"
       surfaceClassName="w-[360px] max-h-[min(560px,70vh)] overflow-y-auto p-3"
       onOpenAutoFocus={focusIntoDialog}
       renderTrigger={(args) =>

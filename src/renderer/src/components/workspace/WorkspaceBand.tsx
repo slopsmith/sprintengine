@@ -5,9 +5,24 @@
 //   window launcher (sidebar hidden) · a door's lifted bar ····· module items ·
 //   bell and account (rail hidden) · panel toggle · caption reserve
 //
-// It is an `app-drag` region and interactive controls opt out. Non-mac window
-// controls are NOT here — they pin to the window's absolute top-right corner
-// (WorkspaceManager), since the pane column can own that corner.
+// Two pieces, because FlexLayout's tab strips have to stand between them. They
+// cannot be lifted out of the layout: FlexLayout offers no portal for them, and
+// one tabset is one strip, so a split has several. So the layout reaches the top
+// of the column and its top row of strips IS the band, with `WorkspaceBandGround`
+// under them and `WorkspaceBand` over them:
+//
+//   - The ground comes first in the tree. It paints the band and is the window's
+//     drag region, so the band still drags where nothing stands on it: past the
+//     tabs, with no workspace, and over a door. Controls standing on it opt out
+//     (the tab rules in assets/index.css, and `app-no-drag` here).
+//   - The clusters come last and ignore the pointer between them, so a tab under
+//     the empty run is pressed, not the band. Each reports its width in
+//     `--band-inset-left` and `--band-inset-right`, which the strips at the
+//     band's edges keep clear of (assets/index.css), so nothing runs under the
+//     launcher, the toggle or the caption buttons.
+//
+// Non-mac window controls are NOT here — they pin to the window's absolute
+// top-right corner (WorkspaceManager), since the pane column can own that corner.
 //
 // Its ground is --bg-chrome-bar, the token the whole 36px band shares (rail
 // reserve, sidebar chrome, this row, the pane's strip). On a solid window that
@@ -126,6 +141,33 @@ export function bandTrafficLightInset({
   return besideRail ? TRAFFIC_LIGHT_RESERVE - APP_RAIL_WIDTH : TRAFFIC_LIGHT_RESERVE
 }
 
+/** The band's ground and drag region, under the layout's strips. */
+export function WorkspaceBandGround() {
+  return (
+    <div
+      aria-hidden="true"
+      className="chrome-bar app-drag absolute inset-x-0 top-0 h-[36px] bg-[color:var(--bg-chrome-bar)]"
+    />
+  )
+}
+
+/** Says how wide a cluster is, on the column that holds the band, for the strips under it. */
+function useBandInset(variable: '--band-inset-left' | '--band-inset-right') {
+  const ref = React.useRef<HTMLDivElement | null>(null)
+  React.useLayoutEffect(() => {
+    const cluster = ref.current
+    const column = cluster?.closest<HTMLElement>('[data-band-column]')
+    if (!cluster || !column) return
+    const say = () => column.style.setProperty(variable, `${cluster.getBoundingClientRect().width}px`)
+    say()
+    if (typeof ResizeObserver !== 'function') return
+    const observer = new ResizeObserver(say)
+    observer.observe(cluster)
+    return () => observer.disconnect()
+  }, [variable])
+  return ref
+}
+
 export function WorkspaceBand<MenuItem extends string>({
   activeWorkspaceId,
   isMac,
@@ -153,39 +195,51 @@ export function WorkspaceBand<MenuItem extends string>({
   // and takes the same inset — without it the launcher's first glyph sat under
   // the green light. In fullscreen the lights are hidden and the inset collapses.
   const trafficLightInset = bandTrafficLightInset({ isMac, isFullScreen, sidebarCollapsed, besideRail })
+  const leftRef = useBandInset('--band-inset-left')
+  const rightRef = useBandInset('--band-inset-right')
   return (
-    <div className="chrome-bar app-drag flex h-[36px] shrink-0 items-center bg-[color:var(--bg-chrome-bar)]">
-      <div className="flex min-w-0 flex-1 items-center">
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-[var(--z-float)] flex h-[36px] items-center">
+      <div ref={leftRef} className="app-no-drag pointer-events-auto flex shrink-0 items-center">
         {trafficLightInset > 0 ? (
-          <div aria-hidden="true" className="shrink-0" style={{ width: trafficLightInset }} />
+          // No control stands here: the traffic lights do, and a press on the
+          // window's own band reaches them.
+          <div aria-hidden="true" className="app-drag h-[36px] shrink-0" style={{ width: trafficLightInset }} />
         ) : null}
         {sidebarCollapsed ? (
-          <div className="flex shrink-0 items-center gap-0.5 pl-1.5">
+          <div className="flex shrink-0 items-center gap-0.5 pl-1.5 pr-1">
             {!isMac && menuItems.length > 0 ? <AppMenuButton menuItems={menuItems} onShowMenu={onShowMenu} /> : null}
             <OpenSidebarButton onToggle={onToggleSidebar} />
             <LauncherSearchButton onOpen={onOpenSearch} />
             <NewChatButton onClick={onNewChat} />
           </div>
         ) : null}
-        {/* The door's lifted bar. `pl-5` is the door gutter, not a nudge: the
-            door's name sits on the same 20px left edge as the content under it
-            (the tab row, the canvas body), so the title and the page it names
-            share one vertical line. */}
-        {globalSurfaceActive ? (
-          <div ref={surfaceBarSlotRef} className="app-no-drag flex min-w-0 flex-1 items-center gap-2.5 pl-5 pr-2" />
-        ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-0.5 pr-1.5">
-        {actionsSlot}
-        {accountSlot ? <div className="app-no-drag flex items-center gap-1 pl-1">{accountSlot}</div> : null}
-        {/* Workspace-scoped, so it goes with the rest while a door paints over the
-            card: toggling a pane beside a page nobody asked it for would be a
-            control that visibly does nothing. */}
-        {globalSurfaceActive ? null : <BandPanelToggle activeWorkspaceId={activeWorkspaceId} />}
+      {/* The door's lifted bar. `pl-5` is the door gutter, not a nudge: the door's
+          name sits on the same 20px left edge as the content under it (the tab
+          row, the canvas body), so the title and the page it names share one
+          vertical line. It stays mounted for as long as a door is up: a door with
+          nowhere to lift its bar to draws a second one in its body. */}
+      {globalSurfaceActive ? (
+        <div
+          ref={surfaceBarSlotRef}
+          className="app-no-drag pointer-events-auto flex min-w-0 flex-1 items-center gap-2.5 pl-5 pr-2"
+        />
+      ) : (
+        <div className="min-w-0 flex-1" aria-hidden="true" />
+      )}
+      <div ref={rightRef} className="pointer-events-auto flex shrink-0 items-center">
+        <div className="app-no-drag flex shrink-0 items-center gap-0.5 pl-1 pr-1.5">
+          {actionsSlot}
+          {accountSlot ? <div className="flex items-center gap-1 pl-1">{accountSlot}</div> : null}
+          {/* Workspace-scoped, so it goes with the rest while a door paints over
+              the card: toggling a pane beside a page nobody asked it for would
+              be a control that visibly does nothing. */}
+          {globalSurfaceActive ? null : <BandPanelToggle activeWorkspaceId={activeWorkspaceId} />}
+        </div>
+        {/* Win/linux: the caption buttons float over this corner, so the band's
+            controls stop short of them, and the strips under it stop short too. */}
+        <WindowCaptionReserve width={captionReserve} />
       </div>
-      {/* Win/linux: the caption buttons float over this corner, so the band's
-          controls stop short of them rather than sitting under Close. */}
-      <WindowCaptionReserve width={captionReserve} />
     </div>
   )
 }

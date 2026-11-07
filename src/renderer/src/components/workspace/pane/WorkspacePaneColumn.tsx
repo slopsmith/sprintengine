@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 
+import { useNarrowViewport } from '../../../hooks/useNarrowViewport'
 import { useWorkspaceStore } from '../../../store/workspaceStore'
 import type { WorkspaceId } from '../../../types/workspace'
 import { WorkspaceAsideColumn } from '../workspaceAsideColumn'
@@ -98,6 +99,8 @@ export function WorkspacePaneColumn({
   const width = useWorkspaceStore((s) => s.workspacePaneWidth)
   const setWidth = useWorkspaceStore((s) => s.setWorkspacePaneWidth)
   const maximised = useWorkspaceStore((s) => s.workspacePaneMaximised)
+  // Too narrow for two columns, the panel floats over the chat.
+  const narrow = useNarrowViewport()
   const activeOpen =
     useWorkspaceStore((s) => s.workspaces.find((w) => w.id === activeWorkspaceId)?.paneState?.open ?? false) &&
     !suppressed
@@ -219,6 +222,7 @@ export function WorkspacePaneColumn({
       // its pane (below), so nothing outside the column is left to reach.
       keepInteractive={activeFloating && !suppressed}
       fill={activeOpen && maximised}
+      overlay={activeOpen && !maximised && narrow}
     >
       {ids.map((workspaceId) => {
         // The door hides the active pane the way a workspace switch hides any

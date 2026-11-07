@@ -81,7 +81,7 @@ export function PanelRow({
     </RowButton>
   )
   return tooltip ? (
-    <Tooltip content={tooltip} placement="left" wrapperClassName="flex">
+    <Tooltip content={tooltip} placement="left" wrapperClassName="flex w-full">
       {row}
     </Tooltip>
   ) : (

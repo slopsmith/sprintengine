@@ -3990,7 +3990,7 @@ body:has([data-selection-pane]:focus-within)
    element (tabbar_outer), not the tabset container — strip-focus styling
    lives with the strip rules below. */
 .flexlayout__tabset {
-  background: var(--bg-surface);
+  background: transparent;
   background-image: none !important;
 }
 
@@ -4268,13 +4268,12 @@ body:has([data-selection-pane]:focus-within)
   outline-offset: calc(-1 * var(--focus-ring-offset));
 }
 
-/* The strip sits flat on the terminal ground under a hairline — a slim caption
-   row (~29px: 28px tabs + the hairline), not a raised toolbar. Focus is
-   signaled per-tab (accent underline + ink), so the focused tabset gets no
-   raised bar of its own. */
+/* The strip stands on the frost above its card, a slim caption row of 28px tabs
+   and not a raised toolbar. Focus is signaled per-tab (accent underline + ink),
+   so the focused tabset gets no raised bar of its own. */
 .flexlayout__layout .flexlayout__tabset_tabbar_outer {
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--terminal-bg);
+  border-bottom: none;
+  background: transparent;
   background-image: none !important;
 }
 
@@ -4284,32 +4283,100 @@ body:has([data-selection-pane]:focus-within)
   border-top: none;
 }
 
-/* A tabset is a CARD, the same card the sidebar and the pane are (owner,
-   2026-09-09). It used to carry `border: 1px solid var(--border-default)` plus
-   an inset `--border-subtle` rule; with one tabset filling the region that
-   border was the thin light line down the workspace card's left and right
-   edges, and with two it was the divider between two terminals. Both are gone:
-   the separator is now the frost showing through the splitter, and the card's
-   own silhouette is its edge. `overflow: hidden` is what keeps an xterm canvas
-   inside the corners. */
+/* A tab's CONTENT is the CARD, the same card the sidebar and the pane are
+   (owner, 2026-09-09). The tabset used to be, with its strip inside it; since
+   the top row of strips went up into the window's band (owner ruling
+   2026-11-07) a strip stands on the frost above its card, in a split as at the
+   top, so a tabset paints nothing and draws no edge. The separator is the frost
+   showing through the splitter, and the card's own silhouette is its edge.
+   `overflow: hidden` on the content is what keeps an xterm canvas inside the
+   corners. */
 .flexlayout__tabset {
   border: none;
-  border-radius: var(--shell-card-radius);
-  overflow: hidden;
-  background-color: var(--bg-surface) !important;
+  border-radius: 0;
+  background-color: transparent !important;
   background-image: none !important;
   box-shadow: none;
 }
 
-/* The tab CONTENT is clipped by the tabset above, so it needs no radius of its
-   own — and must not have one. Rounding all four corners here drew a second
-   curve UNDER the tab strip, in the middle of the card, which read as a card
-   inside a card. Only the two corners that coincide with the tabset's bottom
-   edge round, and only so an xterm canvas cannot square them off from inside. */
 .flexlayout__layout .flexlayout__tab {
-  border-bottom-left-radius: var(--shell-card-radius);
-  border-bottom-right-radius: var(--shell-card-radius);
+  border-radius: var(--shell-card-radius);
+  background-color: var(--bg-surface);
   overflow: hidden;
+}
+
+/* The strips in the window's band (WorkspaceLayout marks them). The band is 36px
+   and every piece of it lines up on that, so the strip takes the height rather
+   than leaving it to its tabs. The window drags from the band's ground under
+   them (WorkspaceBandGround), so whatever is pressed instead opts out here: a
+   drag region swallows the pointer before the app sees it. */
+.flexlayout__layout .flexlayout__tabset_tabbar_outer:has([data-band-strip]) {
+  height: 36px;
+  align-items: center;
+}
+
+.flexlayout__layout .flexlayout__tabset_tabbar_outer:has([data-band-strip]) .flexlayout__tab_button {
+  height: 36px;
+}
+
+.flexlayout__layout .flexlayout__tabset_tabbar_outer:has([data-band-start]) {
+  padding-left: var(--band-inset-left, 0px);
+}
+
+.flexlayout__layout .flexlayout__tabset_tabbar_outer:has([data-band-end]) {
+  padding-right: var(--band-inset-right, 0px);
+}
+
+.flexlayout__layout .flexlayout__tabset_tabbar_outer:has([data-band-strip]) .flexlayout__tab_button,
+.flexlayout__layout .flexlayout__tabset_tabbar_outer:has([data-band-strip]) .flexlayout__tab_button_textbox,
+.flexlayout__layout .flexlayout__tabset_tabbar_outer:has([data-band-strip]) .flexlayout__tab_toolbar,
+.flexlayout__layout .flexlayout__tabset_tabbar_outer:has([data-band-strip]) .flexlayout__tab_toolbar_sticky_buttons_container {
+  -webkit-app-region: no-drag;
+}
+
+.flexlayout__layout > .flexlayout__splitter {
+  -webkit-app-region: no-drag;
+}
+
+/* A door or New chat has the card: the strips go with what they name. A tab's
+   close takes `visibility` back for itself, so it is named as well, and the same
+   goes for the workspaces retained behind this one: their strips stand on the
+   band's bare ground now, with no card over them to hide them. */
+[data-band-covered] .flexlayout__tabset_tabbar_outer,
+[data-band-covered] .flexlayout__tabset_tabbar_outer * ,
+[data-layer-state="warm"] .flexlayout__tabset_tabbar_outer *,
+[data-layer-state="cold"] .flexlayout__tabset_tabbar_outer * {
+  visibility: hidden !important;
+}
+
+/* The only tab in the layout is the band's pill: its name, centred over the
+   column with its "+" beside it, which toggles the panel. It closes from its
+   menu and the keyboard, so it wears no close of its own. */
+.flexlayout__layout .flexlayout__tabset_tabbar_inner:has([data-tab-pill]) {
+  justify-content: center;
+}
+
+.flexlayout__layout .flexlayout__tabset_tabbar_outer .flexlayout__tab_button:has([data-tab-pill]) {
+  height: var(--control-xs);
+  max-width: 430px;
+  padding: 0 12px 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-strong);
+  font-weight: 500;
+}
+
+.flexlayout__layout .flexlayout__tab_button:has([data-tab-pill]):hover {
+  background: var(--bg-selected);
+}
+
+.flexlayout__layout .flexlayout__tab_button:has([data-tab-pill]) .flexlayout__tab_button_trailing {
+  display: none;
+}
+
+.flexlayout__layout .flexlayout__tab_button:has([data-tab-pill])::after {
+  content: none;
 }
 
 /* Focused strip stays flat and identical to an unfocused one — focus is
@@ -4317,21 +4384,8 @@ body:has([data-selection-pane]:focus-within)
    bar. (`tabset-selected` sits on the strip element itself, so this is a
    compound selector, not a descendant one.) */
 .flexlayout__layout .flexlayout__tabset_tabbar_outer.flexlayout__tabset-selected {
-  background: var(--terminal-bg);
+  background: transparent;
   background-image: none !important;
-  border-bottom-color: var(--border-subtle);
-}
-
-/* Over a conversation the strip is the conversation's ground, not the
-   terminal's: the pane reads as one surface with its tabs on top, rather than
-   a near-black bar across the top of the theme's paper (owner ruling
-   2026-10-04). The pane is not inside the tabset in FlexLayout's DOM, so the
-   selected tab's label carries `data-tab-surface="agent"` (WorkspaceLayout's
-   renderTab) and the strip reads it from there. Covers the focused strip too:
-   this out-specifies the `.flexlayout__tabset-selected` rule above. */
-.flexlayout__layout
-  .flexlayout__tabset_tabbar_outer:has(.flexlayout__tab_button--selected [data-tab-surface="agent"]) {
-  background: var(--agent-surface);
 }
 
 /* Focus ring for the terminal you're currently using — the documented terminal

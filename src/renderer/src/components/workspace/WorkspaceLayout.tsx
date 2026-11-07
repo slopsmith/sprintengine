@@ -1010,6 +1010,16 @@ function WorkspaceLayoutBody({
   // A middle-click closes a tab on its auxclick, after the button comes back
   // up. Left alone, that release has Chromium on Linux paste the primary
   // selection into the focused field (the composer) as the tab closes.
+  // FlexLayout does nothing with a press on the tab already selected, so the
+  // pill's own press is taken here, from anywhere on it.
+  const handleClickCapture = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const tab = (event.target as Element).closest?.('.flexlayout__tab_button')
+      if (!tab?.querySelector('[data-tab-pill]')) return
+      useWorkspaceStore.getState().togglePaneMenu(workspaceId)
+    },
+    [workspaceId],
+  )
   const handleMouseUpCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 1) return
     if (!(event.target instanceof Element) || !event.target.closest('.flexlayout__tab_button')) return
@@ -1344,21 +1354,29 @@ function WorkspaceLayoutBody({
 
       // A remote pane's tab says its agent's name, and the machine mark after
       // it says where it runs (`remotePaneTabLabel`).
-      if (isMeshConversationPane(tabComponentId))
+      if (isMeshConversationPane(tabComponentId) && countOpenTabs(modelRef.current) > 1)
         renderValues.content = remotePaneTabLabel(
           node.getName(),
           (node.getConfig() as { machineName?: string } | undefined)?.machineName,
         )
 
+      // The only tab in the layout is the band's pill (owner ruling 2026-11-07):
+      // the chat's name, centred, which toggles the panel. It is the same tab
+      // restyled, never a strip turned off: `enableTabStrip` persists through the
+      // model and would refit every terminal as the tab count changed.
+      const pill = countOpenTabs(modelRef.current) === 1
       const tabNameSpan = (
         <span
           className={`min-w-0 truncate ${isLiveTab ? 'font-semibold' : ''}`}
           data-tab-surface={tabSurface}
+          {...(pill ? { 'data-tab-pill': '' } : {})}
           draggable={canDragOut}
           onDragStart={handleTabDragStart}
           onDragEnd={handleTabDragEnd}
           onContextMenu={(event) => openTabContextMenu(event, node)}
-          onDoubleClick={canRenameTab ? (event) => startRename(event, node) : undefined}
+          // Pressed, the pill toggles the panel, so a second press is not a
+          // rename: that is on the tab's menu.
+          onDoubleClick={canRenameTab && !pill ? (event) => startRename(event, node) : undefined}
         >
           {renderValues.content}
         </span>
@@ -1435,10 +1453,10 @@ function WorkspaceLayoutBody({
             renderValues.content = (
               <span className="inline-flex min-w-0 items-center gap-1.5">
                 {tabContent}
-                {workspaceMachineIdentity && workspaceMachineName
+                {workspaceMachineIdentity && workspaceMachineName && !pill
                   ? tabMachineMark(workspaceMachineIdentity, workspaceMachineName)
                   : null}
-                {indicator}
+                {pill ? null : indicator}
               </span>
             )
             return
@@ -1472,7 +1490,7 @@ function WorkspaceLayoutBody({
           const identity = machineName
             ? resolveMachineIdentity({ kind: 'paired', name: machineName }, machineMarks)
             : null
-          const machineMark = tabMachineMark(identity, machineName ?? 'a paired machine')
+          const machineMark = pill ? null : tabMachineMark(identity, machineName ?? 'a paired machine')
           if (!meshFacts || !meshSessionId) {
             renderValues.content = (
               <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -1512,14 +1530,16 @@ function WorkspaceLayoutBody({
             <AgentTabIdentityPopover identity={remoteIdentity} lookupPullRequests={false}>
               {tabNameSpan}
               {machineMark}
-              {activityDotMark(dot, meshSessionId)}
-              {finishedAt !== null ? <TabRecencyText at={finishedAt} label={tabRecencyLabel('finished')} /> : null}
+              {pill ? null : activityDotMark(dot, meshSessionId)}
+              {finishedAt !== null && !pill ? (
+                <TabRecencyText at={finishedAt} label={tabRecencyLabel('finished')} />
+              ) : null}
             </AgentTabIdentityPopover>
           )
           return
         }
         // A terminal in a workspace on another machine says which one.
-        if (componentId === 'terminal' && workspaceMachineIdentity && workspaceMachineName) {
+        if (componentId === 'terminal' && workspaceMachineIdentity && workspaceMachineName && !pill) {
           renderValues.content = (
             <span className="inline-flex min-w-0 items-center gap-1.5">
               {tabContent}
@@ -1753,10 +1773,10 @@ function WorkspaceLayoutBody({
           lookupBranch={agentSnapshot?.observedCheckout?.branch ?? null}
         >
           {tabNameSpan}
-          {workspaceMachineIdentity && workspaceMachineName
+          {workspaceMachineIdentity && workspaceMachineName && !pill
             ? tabMachineMark(workspaceMachineIdentity, workspaceMachineName)
             : null}
-          {trailing}
+          {pill ? null : trailing}
         </AgentTabIdentityPopover>
       )
     },
@@ -1800,8 +1820,23 @@ function WorkspaceLayoutBody({
   // beside it. Sticky, so it stays put when the tabs overflow and scroll.
   const renderTabSet = useCallback<(tabSetNode: TabSetNode | BorderNode, values: ITabSetRenderValues) => void>(
     (tabSetNode, values) => {
-      if (!onNewAgentTab) return
       if (!(tabSetNode instanceof TabSetNode)) return
+      // A strip on the layout's top row stands in the window's band, and one at
+      // the band's end keeps clear of what stands there. FlexLayout gives no way
+      // to style a strip by where it is, so the strip carries a marker the band's
+      // rules read (assets/index.css).
+      const rect = tabSetNode.getRect()
+      const layoutRect = tabSetNode.getModel().getRootRow()?.getRect() ?? rect
+      if (rect.y <= layoutRect.y + 1)
+        values.leading = (
+          <span
+            hidden
+            data-band-strip=""
+            {...(rect.x <= layoutRect.x + 1 ? { 'data-band-start': '' } : {})}
+            {...(rect.x + rect.width >= layoutRect.x + layoutRect.width - 1 ? { 'data-band-end': '' } : {})}
+          />
+        )
+      if (!onNewAgentTab) return
       if (tabSetNode.getChildren().length === 0) return
       const hostsAgents = tabSetNode.getChildren().some((child) => {
         if (!(child instanceof TabNode)) return false
@@ -1876,26 +1911,31 @@ function WorkspaceLayoutBody({
         initialTab: moduleAbsence.kind === 'disabled' ? MODULES_SETTINGS_TAB : EXTENSIONS_BROWSE_DEEPLINK,
       })
     return (
-      <ModuleNotInstalledSurface
-        label={moduleAbsence.label}
-        installed={moduleAbsence.kind === 'disabled'}
-        {...(moduleAbsence.kind === 'disabled' ? { actionLabel: 'Open module settings' } : {})}
-        onOpenMarketplace={openSettings}
-      />
+      <div className="h-full pt-[36px]">
+        <ModuleNotInstalledSurface
+          label={moduleAbsence.label}
+          installed={moduleAbsence.kind === 'disabled'}
+          {...(moduleAbsence.kind === 'disabled' ? { actionLabel: 'Open module settings' } : {})}
+          onOpenMarketplace={openSettings}
+        />
+      </div>
     )
   }
 
   return (
-    // A column so an agent's note (AgentRevealStrip) takes its own line above
-    // the layout rather than covering its tab strips. The layout's own box is
-    // always the same element, whether or not a note is showing, so a note
-    // arriving never remounts a terminal.
+    // An agent's note (AgentRevealStrip) stands just under the band, over the
+    // tab's content: above the layout it would push the top row of strips out of
+    // the band. The layout's own box is always the same element, whether or not a
+    // note is showing, so a note arriving never remounts a terminal.
     <div
       className="relative flex h-full flex-col"
       onMouseDownCapture={handleMouseDownCapture}
       onMouseUpCapture={handleMouseUpCapture}
+      onClickCapture={handleClickCapture}
     >
-      <AgentRevealStrip workspaceId={workspaceId} />
+      <div className="absolute inset-x-0 top-[36px] z-[var(--z-float)]">
+        <AgentRevealStrip workspaceId={workspaceId} />
+      </div>
       <div className="relative min-h-0 flex-1">
         <Layout
           model={modelRef.current}
@@ -1920,6 +1960,17 @@ function WorkspaceLayoutBody({
           onClose={() => setTabMenu(null)}
           surfaceClassName="min-w-[196px]"
         >
+          {tabMenu.node.getComponent() !== 'file-editor' ? (
+            <MenuItem
+              onClick={(event) => {
+                const { node } = tabMenu
+                setTabMenu(null)
+                startRename(event, node)
+              }}
+            >
+              Rename
+            </MenuItem>
+          ) : null}
           <MenuItem
             disabled={!tabMenu.canHideTab}
             onClick={() => {

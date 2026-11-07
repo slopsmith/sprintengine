@@ -3,10 +3,12 @@
 //
 // It steps aside while the column is docked open: the column's own strip ends
 // in a close control with the same glyph, on the same line, in the same place at
-// the window's edge. Closed, it is the way back in; maximised, the strip sits
-// below the band and drops its own close, and this one is the only one.
+// the window's edge. Closed, it is the way back in; maximised, or floating over
+// a narrow window, the column sits below the band and drops its own close, and
+// this one is the only one.
 
 import { IconButton, Tooltip } from '../ui'
+import { useNarrowViewport } from '../../hooks/useNarrowViewport'
 import { useWorkspaceStore } from '../../store/workspaceStore'
 import type { WorkspaceId } from '../../types/workspace'
 import { getEffectiveKeybindingLabel, platformKeybindingsFromApiPlatform } from '../../commands/effectiveKeybindings'
@@ -18,9 +20,10 @@ export function BandPanelToggle({ activeWorkspaceId }: { activeWorkspaceId: Work
     (state) => state.workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.paneState?.open ?? false,
   )
   const paneMaximised = useWorkspaceStore((state) => state.workspacePaneMaximised)
+  const narrow = useNarrowViewport()
   const togglePaneMenu = useWorkspaceStore((state) => state.togglePaneMenu)
   const keybindingSettings = useWorkspaceStore((state) => state.appSettings.keybindings)
-  if (!activeWorkspaceId || (paneOpen && !paneMaximised)) return null
+  if (!activeWorkspaceId || (paneOpen && !paneMaximised && !narrow)) return null
   const label = paneOpen ? 'Close panel' : 'Open panel'
   const shortcut = getEffectiveKeybindingLabel(
     'pane.toggle',

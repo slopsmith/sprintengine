@@ -220,6 +220,7 @@ export function UsageLimitsPopover({
       ariaLabel="Usage limits"
       popupRole="dialog"
       placement={placement}
+      className="w-full"
       surfaceClassName="w-[300px] p-3"
       renderTrigger={(args) =>
         renderTrigger({ ...args, label, window, warn: window ? usageWindowIsWarning(window, now) : false })

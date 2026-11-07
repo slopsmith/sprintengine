@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 
 import { subagentEnded } from '../../../../../shared/conversation/subagentStatus'
-import { useStudioSubagents, type StudioSubagent } from '../../workspace/pane/agents/studioSubagents'
+import { studioSubagentsOf, useStudioSubagents, type StudioSubagent } from '../../workspace/pane/agents/studioSubagents'
 import type { TranscriptEntry, TranscriptToolEntry } from './conversationProjection'
+import { useRemoteChat } from './remoteChatRegistry'
 
 // The agents a chat sent off to work, for the right-hand panel's Subagents
 // section: the seam between who they are and how they are opened. The chat
@@ -82,12 +83,15 @@ export function usePublishChatSubagents(
   entries: readonly TranscriptEntry[],
 ): void {
   const lanes = useMemo(() => ownAgentLanes(entries), [entries])
-  const standing = lanes.map((lane) => `${lane.id}:${lane.status}:${lane.outputStatus ?? ''}:${lane.completedAt ?? ''}`)
-  const lanesRef = lanes
-  const laneKey = standing.join('\n')
-  const studio = useStudioSubagents(workspaceId, agentId)
+  const laneKey = lanes
+    .map((lane) => `${lane.id}:${lane.status}:${lane.outputStatus ?? ''}:${lane.completedAt ?? ''}`)
+    .join('\n')
+  // A chat on a paired machine has no records here: its machine names them.
+  const hereStudio = useStudioSubagents(workspaceId, agentId)
+  const named = useRemoteChat(workspaceId, agentId)?.subagents
+  const studio = useMemo(() => (named ? studioSubagentsOf(named) : hereStudio), [named, hereStudio])
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `laneKey` is what about the lanes a row shows
-  const subagents = useMemo(() => chatSubagentsOf(lanesRef, studio), [laneKey, studio])
+  const subagents = useMemo(() => chatSubagentsOf(lanes, studio), [laneKey, studio])
   useEffect(() => {
     publish(workspaceId, agentId, subagents)
   }, [workspaceId, agentId, subagents])

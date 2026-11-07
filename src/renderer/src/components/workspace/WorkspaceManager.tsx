@@ -193,7 +193,7 @@ import { bootComposerLive, dropBootComposerSnapshot, releaseBootComposer } from 
 import { showToast, useToastStore } from '../../store/toastStore'
 import { chatsWaitingOnYou, nextWaitingChatId } from './nextWaitingChat'
 import { createNewChatStay, NEW_CHAT_STAY_WATCH_MS, type NewChatStay } from './newChatStay'
-import { WorkspaceBand } from './WorkspaceBand'
+import { WorkspaceBand, WorkspaceBandGround } from './WorkspaceBand'
 import { GlobalSurfaceBarSlotContext } from './globalSurface/surfaceBarSlot'
 import { ModalSurfaceFrame } from './globalSurface/GlobalSurfaceShell'
 import { GlobalSurfaceErrorBoundary } from './globalSurface/surfaceErrorBoundary'
@@ -756,9 +756,12 @@ export default function WorkspaceManager() {
   // terminals — stays out of view until the door closes, rather than reading
   // as part of the chat about to be made. The pane stays mounted (collapsed,
   // like a closed pane), so cancelling the door brings it back as it was.
-  const paneOwnsRightEdge = activeWorkspacePaneOpen && !newChatPanelOpen
+  // Below 640px the column floats over the content instead (WorkspacePaneColumn),
+  // so the card keeps the edge and the band keeps the corner.
+  const narrowViewport = useNarrowViewport()
+  const paneOwnsRightEdge = activeWorkspacePaneOpen && !newChatPanelOpen && !narrowViewport
   // The caption corner is narrower than the right edge: a MAXIMISED pane fills
-  // the row below the header, so the header keeps the corner and its own
+  // the row below the band, so the band keeps the corner and its own
   // reserve (paneStripOwnsCaptionCorner). The card's right-edge gap below still
   // reads `paneOwnsRightEdge`, so maximising reflows nothing under the pane.
   const paneOwnsCaptionCorner = paneStripOwnsCaptionCorner({ open: paneOwnsRightEdge, maximised: paneMaximised })
@@ -767,7 +770,6 @@ export default function WorkspaceManager() {
   // toggle switches between them, and choosing a chat, New chat or another
   // surface shows the content again. The desktop's own collapsed state is left
   // as it was, so a phone does not fold the sidebar of the desktop app.
-  const narrowViewport = useNarrowViewport()
   const [narrowSidebarShown, setNarrowSidebarShown] = useState(false)
   const narrowViewportRef = useRef(narrowViewport)
   narrowViewportRef.current = narrowViewport
@@ -5276,58 +5278,12 @@ export default function WorkspaceManager() {
           (b) float over the content column when maximised without reflowing
           the terminals underneath. */}
         <div className={`relative min-w-0 flex-1 flex-row ${narrowViewport && narrowSidebarShown ? 'hidden' : 'flex'}`}>
-          {/* Content column: the band above the active workspace's card. */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <WorkspaceBand
-              activeWorkspaceId={windowActiveWorkspaceId}
-              isMac={nativeMacChrome}
-              captionReserve={paneOwnsCaptionCorner || !captionButtons ? 0 : windowCaptionReserve(nativeMacChrome)}
-              isFullScreen={windowState.isFullScreen}
-              sidebarCollapsed={narrowViewport || sidebarCollapsed}
-              besideRail={!narrowViewport}
-              onToggleSidebar={() => runCommand('workspace.sidebar.toggle')}
-              onOpenSearch={() => runCommand('commandPalette.open')}
-              onNewChat={() => openNewChatPanel()}
-              menuItems={menubarItems}
-              onShowMenu={(event, label) => void handleShowMenubarMenu(event, label)}
-              globalSurfaceActive={activeGlobalSurfaceEntry !== null || newChatPanelOpen}
-              surfaceBarSlotRef={setSurfaceBarEl}
-              accountSlot={
-                railHoldsAccount ? null : (
-                  <>
-                    {notificationBell(false)}
-                    <AccountControl
-                      authState={authState}
-                      authMessage={authMessage}
-                      accountOpen={accountOpen}
-                      setAccountOpen={setAccountOpen}
-                      startLogin={startLogin}
-                      refreshAuthState={refreshAuthState}
-                      logout={logout}
-                      remoteRow={accountSurfaces.remoteRow}
-                      sessionsRow={accountSurfaces.sessionsRow}
-                      accountBadge={accountSurfaces.badge}
-                      onRail={false}
-                      placement="bottom-end"
-                    />
-                  </>
-                )
-              }
-              actionsSlot={
-                <BandActions
-                  activeWorkspace={activeWorkspace}
-                  workspaceActionsEnabled={workspaceActionsEnabled}
-                  viewMenuRef={viewMenuRef}
-                  viewMenuOpen={viewMenuOpen}
-                  setViewMenuOpen={setViewMenuOpen}
-                  viewMenuTick={viewMenuTick}
-                  setViewMenuTick={setViewMenuTick}
-                  onViewMenuOpened={closeTopPopovers}
-                />
-              }
-            />
-            {/* Card row under the band. */}
-            <div className="flex min-h-0 flex-1 flex-row">
+          {/* Content column: the workspace's card reaches its top, with the band
+              over it and the band's ground under it (WorkspaceBand), so the
+              layout's top row of tab strips stands in the 36px band. */}
+          <div data-band-column="" className="relative flex min-w-0 flex-1 flex-col">
+            <WorkspaceBandGround />
+            <div className="relative flex min-h-0 flex-1 flex-row">
               {/* The workspace card: everything inside the rounded surface belongs to
           the active workspace. With the pane column open the card also rounds
           its right edge, reading as a card floating between two pieces of
@@ -5365,13 +5321,19 @@ export default function WorkspaceManager() {
           check compares it now, but a subscription to one boolean is still
           the right size for one boolean.) */}
               <div
-                className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--shell-card-radius)] mb-[var(--shell-card-gap)] ${
+                className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-b-[var(--shell-card-radius)] mb-[var(--shell-card-gap)] ${
                   paneOwnsRightEdge ? '' : 'mr-[var(--shell-card-gap)]'
                 }`}
               >
                 <div className="relative min-h-0 flex-1">
                   <div
                     className="absolute inset-0"
+                    // A door or New chat has the card: the strips in the band go
+                    // with what they name. `visibility`, not a change of size,
+                    // which would refit every terminal behind the door.
+                    {...(activeGlobalSurfaceEntry !== null || newChatPanelState !== null
+                      ? { 'data-band-covered': '' }
+                      : {})}
                     aria-hidden={activeGlobalSurfaceEntry !== null || undefined}
                     // Browser automation inside still works: it reaches each
                     // guest over CDP (verified; see WorkspacePaneBody).
@@ -5382,7 +5344,11 @@ export default function WorkspaceManager() {
                         railWorkspaceCount: railWorkspaces.length,
                         hasActiveWorkspace: Boolean(activeWorkspace),
                         newChatPanelOpen: newChatPanelState !== null,
-                      }) && <EmptyState onNew={() => openNewChatPanel()} />}
+                      }) && (
+                        <div className="absolute inset-x-0 bottom-0 top-[36px]">
+                          <EmptyState onNew={() => openNewChatPanel()} />
+                        </div>
+                      )}
                       {renderedWorkspaceIds.map((workspaceId) => {
                         const active = workspaceId === windowActiveWorkspaceId
                         // Cold = retained but neither active nor warm. Cold layers keep
@@ -5428,7 +5394,7 @@ export default function WorkspaceManager() {
                       {newChatPanelState ? (
                         <div
                           data-new-chat-door=""
-                          className="absolute inset-0 z-10 isolate overflow-auto bg-[color:var(--bg-app)]"
+                          className="absolute inset-x-0 bottom-0 top-[36px] z-10 isolate overflow-auto rounded-[var(--shell-card-radius)] bg-[color:var(--bg-app)]"
                         >
                           <React.Suspense fallback={<SuspenseFallback label="Loading new chat" />}>
                             {/* New chat opens the SAME launch surface the tab
@@ -5553,7 +5519,7 @@ export default function WorkspaceManager() {
                       // makes a click on the door's own empty canvas land here instead of on
                       // `<body>`, which is what keeps Escape armed for the whole visit.
                       tabIndex={-1}
-                      className="absolute inset-0 z-[var(--z-pane)] bg-[color:var(--bg-surface)] outline-none"
+                      className="absolute inset-x-0 bottom-0 top-[36px] z-[var(--z-pane)] overflow-hidden rounded-[var(--shell-card-radius)] bg-[color:var(--bg-surface)] outline-none"
                     >
                       <GlobalSurfaceBarSlotContext.Provider value={surfaceBarSlot}>
                         {/* The rail lifts into the app sidebar's column; the surface just
@@ -5652,6 +5618,54 @@ export default function WorkspaceManager() {
                 </div>
               </div>
             </div>
+            <WorkspaceBand
+              activeWorkspaceId={windowActiveWorkspaceId}
+              isMac={nativeMacChrome}
+              captionReserve={paneOwnsCaptionCorner || !captionButtons ? 0 : windowCaptionReserve(nativeMacChrome)}
+              isFullScreen={windowState.isFullScreen}
+              sidebarCollapsed={narrowViewport || sidebarCollapsed}
+              besideRail={!narrowViewport}
+              onToggleSidebar={() => runCommand('workspace.sidebar.toggle')}
+              onOpenSearch={() => runCommand('commandPalette.open')}
+              onNewChat={() => openNewChatPanel()}
+              menuItems={menubarItems}
+              onShowMenu={(event, label) => void handleShowMenubarMenu(event, label)}
+              globalSurfaceActive={activeGlobalSurfaceEntry !== null || newChatPanelOpen}
+              surfaceBarSlotRef={setSurfaceBarEl}
+              accountSlot={
+                railHoldsAccount ? null : (
+                  <>
+                    {notificationBell(false)}
+                    <AccountControl
+                      authState={authState}
+                      authMessage={authMessage}
+                      accountOpen={accountOpen}
+                      setAccountOpen={setAccountOpen}
+                      startLogin={startLogin}
+                      refreshAuthState={refreshAuthState}
+                      logout={logout}
+                      remoteRow={accountSurfaces.remoteRow}
+                      sessionsRow={accountSurfaces.sessionsRow}
+                      accountBadge={accountSurfaces.badge}
+                      onRail={false}
+                      placement="bottom-end"
+                    />
+                  </>
+                )
+              }
+              actionsSlot={
+                <BandActions
+                  activeWorkspace={activeWorkspace}
+                  workspaceActionsEnabled={workspaceActionsEnabled}
+                  viewMenuRef={viewMenuRef}
+                  viewMenuOpen={viewMenuOpen}
+                  setViewMenuOpen={setViewMenuOpen}
+                  viewMenuTick={viewMenuTick}
+                  setViewMenuTick={setViewMenuTick}
+                  onViewMenuOpened={closeTopPopovers}
+                />
+              }
+            />
           </div>
           <React.Suspense fallback={null}>
             <WorkspacePaneColumn
