@@ -48,7 +48,8 @@ it took `files` (a message's files attached by path), both on 2026-10-07. It
 went to 5 when `sendTurn` took `composedAt` and `confirmedStale` and could
 answer `stale` (2026-10-20), and to 6 when it gained `handoffConversation`, a
 chat handed off to a fresh session, and `sendTurn`'s `origin` the reason
-`auto-compact` (2026-10-21).
+`auto-compact` (2026-10-21), and to 7 when it gained `messageSubagent`, and
+`sendTurn` `subagentMessage` and the `origin` reason `agent-message` (2026-11-07).
 
 A session's summary, which that wire pushes with every chat event, carries
 three optional clocks a reader must not count on: `lastTurnEndedAt` (when
@@ -517,6 +518,24 @@ sends it only where it is advertised (a desktop following another machine's
 chat refuses it there in words first). The Studio RPC advertises it too: its
 `conversation.stopSubagent` method, an owner's for now, reads the lane's own
 validator and reaches the same host.
+The person's words for one agent are the `conversation-agent-message`
+capability (2026-11-07): a `messageSubagent` command names an agent as
+`stopSubagent` does and carries `message`. No harness delivers to an agent
+directly, and a user message aimed at one reaches its parent, so the desktop
+asks the chat's own model to use its messaging tool, addressed by the agent's
+task id: steered into a running turn, or as a turn of its own. It costs that
+model a turn. The `user_message` it records has the `origin` reason
+`agent-message` and a `subagentMessage` (`toolUseId`, `text`), which is what a
+lane shows; a reader that knows neither draws Studio's notice, as it would any.
+Each listed chat says whether its provider can as `capabilities.messageSubagent`,
+an optional boolean, and a `subagent_status` may say `canContinue: false`. All of
+it is additive: a desktop without the capability refuses the kind as
+`unsupported_command`, and a client sends it only where it is advertised (a
+desktop following another machine's chat refuses it there in words first). A
+client draws an agent's box only with both, and otherwise no box at all, only a
+way to the parent (owner ruling 2026-11-07). The Studio RPC advertises it too:
+its `conversation.messageSubagent` method, an owner's for now, reads the lane's
+own validator and reaches the same host. `BACKEND_WIRE_VERSION` went to 7 for it.
 A chat handed off from a paired device is the `conversation-handoff`
 capability (2026-10-25): a `handoff` command, carrying nothing but its command
 id, hands the chat off to a fresh session as the desktop's own Handoff does,

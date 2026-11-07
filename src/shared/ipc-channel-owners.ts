@@ -81,6 +81,7 @@ const SERVER_IPC_CHANNEL_TABLE = {
   'conversation:sessions:set-model': {},
   'conversation:sessions:mcp-action': {},
   'conversation:sessions:stop-subagent': {},
+  'conversation:sessions:message-subagent': {},
   'conversation:sessions:side-question': {},
   'conversation:sessions:cancel-side-question': {},
   'conversation:sessions:context-breakdown': { retry: 'once' },

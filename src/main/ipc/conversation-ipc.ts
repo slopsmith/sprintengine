@@ -36,6 +36,7 @@ import type {
   ConversationSessionActionResult,
   ConversationSetModelInput,
   ConversationMcpServerActionInput,
+  ConversationMessageSubagentInput,
   ConversationStopSubagentInput,
   ConversationCancelSideQuestionInput,
   ConversationSideQuestionInput,
@@ -83,6 +84,7 @@ import {
   parseSessionIdInput,
   parseSetModelInput,
   parseMcpServerActionInput,
+  parseMessageSubagentInput,
   parseStopSubagentInput,
   parseSideQuestionInput,
   parseCancelSideQuestionInput,
@@ -128,6 +130,7 @@ export type ConversationIpcHandlers = {
   setModel?(input: ConversationSetModelInput): Promise<ConversationSessionActionResult>
   mcpServerAction?(input: ConversationMcpServerActionInput): Promise<ConversationMcpServerActionResult>
   stopSubagent?(input: ConversationStopSubagentInput): Promise<ConversationSessionActionResult>
+  messageSubagent?(input: ConversationMessageSubagentInput): Promise<ConversationSessionActionResult>
   askSideQuestion?(input: ConversationSideQuestionInput): Promise<ConversationSideQuestionResult>
   cancelSideQuestion?(
     input: ConversationCancelSideQuestionInput,
@@ -388,6 +391,9 @@ export function createConversationIpcHandlers(
     },
     stopSubagent(input: ConversationStopSubagentInput): Promise<ConversationSessionActionResult> {
       return runtime.stopSubagent(input)
+    },
+    messageSubagent(input: ConversationMessageSubagentInput): Promise<ConversationSessionActionResult> {
+      return runtime.messageSubagent(input)
     },
     askSideQuestion(input: ConversationSideQuestionInput): Promise<ConversationSideQuestionResult> {
       return runtime.askSideQuestion(input)
@@ -858,6 +864,20 @@ export function registerConversationIpc(
       if (!handlers.stopSubagent) return { ok: false, message: 'Stopping one agent is unavailable.' }
       try {
         return await handlers.stopSubagent(parsed.input)
+      } catch (err) {
+        return { ok: false, message: formatError(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'conversation:sessions:message-subagent',
+    async (_, input: unknown): Promise<ConversationSessionActionResult> => {
+      const parsed = parseMessageSubagentInput(input)
+      if (!parsed.ok) return parsed
+      if (!handlers.messageSubagent) return { ok: false, message: 'Writing to one agent is unavailable.' }
+      try {
+        return await handlers.messageSubagent(parsed.input)
       } catch (err) {
         return { ok: false, message: formatError(err) }
       }

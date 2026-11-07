@@ -4,12 +4,14 @@ import { useWorkspaceStore } from '../../../../store/workspaceStore'
 import { EmptyState, GhostButton, InlineNotice, PanelHeader, RowButton, Spinner } from '../../../ui'
 import { useLocalChatBinding, type ChatBinding } from '../../../panels/agentChat/chatBinding'
 import { ConversationLinkProvider } from '../../../panels/agentChat/conversationLinks'
+import { projectConversation, type TranscriptToolEntry } from '../../../panels/agentChat/conversationProjection'
 import {
-  projectConversation,
-  type TranscriptEntry,
-  type TranscriptToolEntry,
-} from '../../../panels/agentChat/conversationProjection'
-import { flattenToolEntries, subagentLaneLabel } from '../../../panels/agentChat/conversationTimeline'
+  collectAgentLanes,
+  flattenToolEntries,
+  placeAgentMessages,
+  subagentLaneLabel,
+} from '../../../panels/agentChat/conversationTimeline'
+import { studioSubagentsOf, useStudioSubagents, type StudioSubagent } from '../../../panels/agentChat/chatSubagents'
 import { useLiveRowMotion } from '../../../panels/agentChat/liveVisibility'
 import { SubagentLaneResult } from '../../../panels/agentChat/subagentResult'
 import {
@@ -27,16 +29,11 @@ import {
 import { TimedProse, WorkTimeline } from '../../../panels/agentChat/timelineRows'
 import { useChatViewActive } from '../../../panels/agentChat/chatViewActivity'
 import { useConversationSession } from '../../../panels/agentChat/useConversationSession'
+import { useThrottledValue } from '../../../panels/agentChat/useThrottledValue'
 import { ConversationTransportProvider } from '../../../panels/agentChat/conversationTransport'
 import { useRemoteChat, type RemoteChatEntry } from '../../../panels/agentChat/remoteChatRegistry'
 import { useAgentFocusRequest } from './agentsPaneFocus'
-import {
-  StudioSubagentRow,
-  StudioSubagentThread,
-  studioSubagentsOf,
-  useStudioSubagents,
-  type StudioSubagent,
-} from './studioSubagents'
+import { StudioSubagentRow, StudioSubagentThread } from './studioSubagents'
 
 // The Agents tab: every agent the focused chat sent off to work, the ones still
 // working first, and each one's own thread — what it was asked, the steps it
@@ -44,72 +41,10 @@ import {
 // subscription the chat holds, not a second one), so it is live while the
 // agents are and complete for a finished chat.
 
-/** Every agent a transcript spawned, nested ones included, in spawn order. */
-export function collectAgentLanes(entries: TranscriptEntry[]): TranscriptToolEntry[] {
-  const lanes: TranscriptToolEntry[] = []
-  const walk = (tool: TranscriptToolEntry) => {
-    if (tool.subagentLane) lanes.push(tool)
-    for (const child of tool.children ?? []) walk(child)
-  }
-  for (const entry of entries) if (entry.kind === 'tool') walk(entry)
-  return lanes
-}
-
-/**
- * Where an agent's own words go in its thread: each before the first step it
- * started after, as a turn's prose sits before the tools it explains, and the
- * rest after the last step. The last thing a finished agent says is its report,
- * which the thread shows as the report, so it is not said twice. Each keeps
- * when it was said, which the thread shows on hover.
- */
-export function placeAgentMessages(lane: TranscriptToolEntry): {
-  beforeSteps: { text: string; beforeToolUseId: string; at: number }[]
-  afterSteps: { text: string; at: number }[]
-} {
-  const steps = lane.children ?? []
-  const beforeSteps: { text: string; beforeToolUseId: string; at: number }[] = []
-  const afterSteps: { text: string; at: number }[] = []
-  for (const message of lane.messages ?? []) {
-    const next = steps.find((step) => step.startedAt !== undefined && step.startedAt > message.at)
-    if (next) beforeSteps.push({ text: message.text, beforeToolUseId: next.id, at: message.at })
-    else afterSteps.push({ text: message.text, at: message.at })
-  }
-  const report = lane.output?.trim()
-  const last = afterSteps.at(-1)?.text.trim()
-  if (lane.status !== 'running' && report && last && report.startsWith(last.slice(0, 200))) afterSteps.pop()
-  return { beforeSteps, afterSteps }
-}
-
 // How often the lanes may be refolded while the chat streams. The whole
 // transcript is folded each time, and a lane's words and steps read the same a
 // fraction of a second later.
 const LANE_REFRESH_MS = 400
-
-/**
- * `value`, following it at most once per `intervalMs` (the latest value lands
- * on the trailing edge), and not at all while `following` is false. Turned
- * back on, it catches up at once, as it does whenever `atOnce` says what is
- * shown cannot wait (nothing read yet).
- */
-function useThrottledValue<T>(value: T, intervalMs: number, following: boolean, atOnce: (shown: T) => boolean): T {
-  const [shown, setShown] = useState(value)
-  const shownAt = useRef(0)
-  useEffect(() => {
-    if (!following || Object.is(value, shown)) return undefined
-    const show = () => {
-      shownAt.current = Date.now()
-      setShown(() => value)
-    }
-    const wait = atOnce(shown) ? 0 : shownAt.current + intervalMs - Date.now()
-    if (wait <= 0) {
-      show()
-      return undefined
-    }
-    const timer = setTimeout(show, wait)
-    return () => clearTimeout(timer)
-  }, [value, shown, intervalMs, following, atOnce])
-  return shown
-}
 
 export function AgentsTab({ workspaceId, active }: { workspaceId: string; active: boolean }) {
   const focusedAgentId = useWorkspaceStore((s) => s.focusedAgentByWorkspaceId[workspaceId] ?? null)

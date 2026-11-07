@@ -761,6 +761,11 @@ export type MeshConversationFrame =
  * that chat's provider can (its listed `capabilities.stopSubagent`). False for
  * a machine that does not, where an agent's lane offers no Stop.
  *
+ * `messageSubagents`: the machine advertises `conversation-agent-message` — the
+ * person's words may be passed to one agent a chat of its own spawned, where
+ * that chat's provider can (its listed `capabilities.messageSubagent`). False
+ * for a machine that does not, where that agent's chat draws no box.
+ *
  * `handoff`: the machine advertises `conversation-handoff` — a chat of its own
  * may be handed off to a fresh session from here, where that chat's provider
  * can (its listed `capabilities.handoff`). False for a machine that does not,
@@ -866,6 +871,7 @@ export type MeshConversationListResult =
       sendSkills?: boolean
       steerSends?: boolean
       stopSubagents?: boolean
+      messageSubagents?: boolean
       handoff?: boolean
       rewind?: boolean
       checkpointRevert?: boolean
@@ -916,6 +922,7 @@ export type MeshConversationCommand =
   | { kind: 'resolveApproval'; requestId: string; decision: 'always' }
   | { kind: 'cancelQueued'; queuedId: string }
   | { kind: 'stopSubagent'; toolUseId: string }
+  | { kind: 'messageSubagent'; toolUseId: string; message: string }
   | { kind: 'handoff' }
   | { kind: 'rewind'; turnSeq: number }
   | { kind: 'revert'; turnSeq: number; undo?: true; confirmed?: true; files?: string[] }

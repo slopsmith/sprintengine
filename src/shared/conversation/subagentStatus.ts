@@ -26,3 +26,20 @@ export function subagentStatusOf(
   if (phase === 'starting' || summary.lastTurnEndedAt === undefined) return 'starting'
   return 'completed'
 }
+
+/**
+ * Where a sub-agent stands right now, for a person reading it: as above, except
+ * that a sub-agent is a chat, and one that has ended goes on working when a
+ * person writes to it. Its end stays on its record, which is what its parent's
+ * tools read, so the follow-up does not undo the task it reported; a row reads
+ * this, or it would say Done over a turn that is running.
+ */
+export function subagentLiveStatusOf(
+  agent: Pick<AgentState, 'subagentEnd'> | undefined,
+  summary: ConversationSessionSummary | undefined,
+): SubagentStatus {
+  if (!agent?.subagentEnd || !summary) return subagentStatusOf(agent, summary)
+  const phase = conversationSummaryPhase(summary)
+  if (phase === 'waiting_for_approval' || phase === 'waiting_for_input') return 'needs_input'
+  return phase === 'running' ? 'working' : agent.subagentEnd.status
+}

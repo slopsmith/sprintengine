@@ -1,5 +1,5 @@
-import { Fragment, useCallback, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Fragment, useCallback, useMemo, useState } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { CliLogo } from "../../components/glyphs/CliLogo";
 import { MarkdownDocument } from "../../components/document/MarkdownDocument";
@@ -7,9 +7,10 @@ import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 import { WorkingMark } from "../../components/WorkingMark";
 import { useNow, useSecondsClock } from "../../components/useNow";
-import { useThemedStyles } from "../../theme/ThemeProvider";
+import { useTheme, useThemedStyles } from "../../theme/ThemeProvider";
 import { fontWeight, radius, space, typography, type Theme } from "../../theme/tokens";
 import {
+  agentMessageOffer,
   agentStopOffer,
   agentTypeDescription,
   formatDuration,
@@ -35,10 +36,13 @@ export function ConversationAgentScreen({
   conversation,
   laneId,
   onBack,
+  onChat,
 }: {
   conversation: LiveConversationKey;
   laneId: string;
   onBack: () => void;
+  /** Back to the chat itself, past the list of its agents. */
+  onChat: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
   const live = useLiveConversation(conversation);
@@ -92,6 +96,11 @@ export function ConversationAgentScreen({
       if (!result.ok) live.setNotice(result.message);
     });
   };
+  // A box only where a message arrives; otherwise the way back to the chat.
+  const delivery = agentMessageOffer(lane, {
+    messagesAgents: live.messagesAgents,
+    chatCanMessage: live.effectiveThread.capabilities?.messageSubagent,
+  });
   const said = (text: string, key: string | number) => (
     <View key={key} style={styles.said}>
       <MarkdownDocument body={text} variant="chat" reply streaming={running} onLinkBlocked={onLinkBlocked} />
@@ -170,6 +179,12 @@ export function ConversationAgentScreen({
         </Text>
       )}
       {afterSteps.map((text, index) => said(text, index))}
+      {lane.sent?.map((message) => (
+        <View key={message.at} style={styles.sent}>
+          <Text style={styles.sentText}>{message.text}</Text>
+          <Text style={styles.meta}>Passed on through the main chat. It reads this at its next step.</Text>
+        </View>
+      ))}
       {!running ? (
         <>
           <Text accessibilityRole="header" style={styles.group}>
@@ -188,7 +203,52 @@ export function ConversationAgentScreen({
           </View>
         </>
       ) : null}
+      {delivery.kind === "box" ? (
+        <AgentMessageBox
+          live={live.state === "live"}
+          onSend={async (message) => {
+            const result = await live.messageAgent(lane.id, message);
+            if (!result.ok) live.setNotice(result.message);
+            return result.ok;
+          }}
+        />
+      ) : (
+        <View style={styles.blocked}>
+          <Text style={styles.sentText}>To reach this subagent, speak to the main chat.</Text>
+          <Text style={styles.meta}>{delivery.why}</Text>
+          <PrimaryButton label="Go to the main chat" onPress={onChat} />
+        </View>
+      )}
     </Screen>
+  );
+}
+
+/** The box under an agent: words only, since they go through the chat's model. */
+function AgentMessageBox({ live, onSend }: { live: boolean; onSend: (message: string) => Promise<boolean> }) {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const send = async () => {
+    const message = draft.trim();
+    if (!message || sending) return;
+    setSending(true);
+    if (await onSend(message)) setDraft("");
+    setSending(false);
+  };
+  return (
+    <View style={styles.box}>
+      <TextInput
+        accessibilityLabel="Message this subagent"
+        multiline
+        value={draft}
+        onChangeText={setDraft}
+        placeholder="Send a message"
+        placeholderTextColor={colors.textMuted}
+        style={styles.input}
+      />
+      <PrimaryButton label="Send" disabled={!live || !draft.trim() || sending} onPress={() => void send()} />
+    </View>
   );
 }
 
@@ -233,6 +293,32 @@ const createStyles = ({ colors }: Theme) =>
       marginLeft: space.xs,
       marginVertical: space.xs,
     },
+    sent: {
+      alignSelf: "flex-end",
+      maxWidth: "90%",
+      gap: space.xs,
+      padding: space.lg,
+      borderRadius: radius.overlay,
+      backgroundColor: colors.bgSurface,
+    },
+    sentText: { ...typography.meta, fontSize: 13.5, color: colors.textDefault },
+    blocked: {
+      gap: space.sm,
+      padding: space.lg,
+      borderRadius: radius.overlay,
+      borderWidth: 1,
+      borderStyle: "dashed",
+      borderColor: colors.borderDefault,
+    },
+    box: {
+      gap: space.sm,
+      padding: space.lg,
+      borderRadius: radius.overlay,
+      borderWidth: 1,
+      borderColor: colors.cardRing,
+      backgroundColor: colors.bgSurface,
+    },
+    input: { ...typography.meta, fontSize: 15, color: colors.textPrimary, minHeight: 44 },
     report: {
       padding: space.lg,
       borderRadius: radius.overlay,

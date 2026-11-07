@@ -34,6 +34,7 @@ import type {
   ConversationStartSessionInput,
   ConversationStartSessionResult,
   ConversationStopSessionInput,
+  ConversationMessageSubagentInput,
   ConversationStopSubagentInput,
   ConversationCancelSideQuestionInput,
   ConversationContextBreakdownInput,
@@ -112,7 +113,9 @@ import type {
   ConversationRenameInput,
 } from '../shared/conversation-index'
 import { presentToolItem } from '../shared/conversation/presentation'
+import { isLooserCliPermissionPreset, type CliPermissionPreset } from '../shared/cli-permission-preset'
 import { plainLineBreaks } from '../shared/conversation/lineBreaks'
+import { STUDIO_NOTICE_PREFIX } from '../shared/studio-notice'
 import { expandQuotesForAgent, quotesToInlineText } from '../shared/chat-quotes'
 import { applyPromptCacheEvent } from '../shared/prompt-cache'
 import { ConversationApprovalRuleStore } from './conversation-approval-rules'
@@ -291,6 +294,16 @@ export type ConversationRuntimeOptions = {
    * session is started again by whichever side reaches it first.
    */
   heldChatMode?: (chat: { workspaceId: string; agentId: string }) => 'plan' | 'ask' | undefined
+  /**
+   * The loosest preset a chat may be switched to, for a sub-agent: its parent's,
+   * or for a read-only one the preset it was started on. The cap otherwise
+   * applies only when a sub-agent starts, and its record is what says it is one.
+   */
+  subagentPresetCeiling?: (chat: {
+    workspaceId: string
+    agentId: string
+    current: CliPermissionPreset | undefined
+  }) => CliPermissionPreset | undefined
   approvalRules?: ConversationApprovalRuleStore
   attachmentStore?: ConversationAttachmentStore
   /**
@@ -491,6 +504,7 @@ export class ConversationRuntime {
   private readonly resolveSkills: ConversationSkillsResolver
   private readonly prepareChatFolder: NonNullable<ConversationRuntimeOptions['prepareChatFolder']>
   private readonly heldChatMode: ConversationRuntimeOptions['heldChatMode']
+  private readonly subagentPresetCeiling: ConversationRuntimeOptions['subagentPresetCeiling']
   private readonly worktreeLeases: WorktreeLeases
   // Starts waiting for their folder's hold, by session id, or by chat for a
   // session start or a revert (`chatWaitKey`): see `holdChatFolder`.
@@ -609,6 +623,7 @@ export class ConversationRuntime {
     this.randomId = options.randomId ?? (() => Math.random().toString(36).slice(2, 10))
     this.resolveSkills = options.resolveSkills ?? createConversationSkillsResolver()
     this.heldChatMode = options.heldChatMode
+    this.subagentPresetCeiling = options.subagentPresetCeiling
     this.prepareChatFolder = options.prepareChatFolder ?? (() => Promise.resolve({ ok: true }))
     this.worktreeLeases = options.worktreeLeases ?? worktreeLeases
     this.approvalRules = options.approvalRules ?? new ConversationApprovalRuleStore()
@@ -1277,6 +1292,7 @@ export class ConversationRuntime {
         mentionRefs: mentions.refs,
         files,
         ...(input.origin ? { origin: input.origin } : {}),
+        ...(input.subagentMessage ? { subagentMessage: input.subagentMessage } : {}),
         ...composedAtOf(input),
       })
 
@@ -1328,6 +1344,7 @@ export class ConversationRuntime {
             ...(mentions.refs.length ? { mentions: mentions.refs } : {}),
             ...(files.length ? { files } : {}),
             ...(input.origin ? { origin: input.origin } : {}),
+            ...(input.subagentMessage ? { subagentMessage: input.subagentMessage } : {}),
             ...composedAtOf(input),
           }),
           { turnId },
@@ -1548,6 +1565,7 @@ export class ConversationRuntime {
       mentionRefs: Awaited<ReturnType<typeof resolveConversationMentions>>['refs']
       files: ConversationAttachedFile[]
       origin?: ConversationSendTurnInput['origin']
+      subagentMessage?: ConversationSendTurnInput['subagentMessage']
       composedAt?: number
     },
   ): Promise<ConversationSessionActionResult> {
@@ -1605,6 +1623,7 @@ export class ConversationRuntime {
               ...(input.mentionRefs.length ? { mentions: input.mentionRefs } : {}),
               ...(input.files.length ? { files: input.files } : {}),
               ...(input.origin ? { origin: input.origin } : {}),
+              ...(input.subagentMessage ? { subagentMessage: input.subagentMessage } : {}),
               ...(input.composedAt !== undefined ? { composedAt: input.composedAt } : {}),
             }),
             { turnId },
@@ -1897,6 +1916,13 @@ export class ConversationRuntime {
     if (!adapter.setPermissionPreset) {
       return { ok: false, message: 'This conversation provider cannot change tool permissions mid-conversation.' }
     }
+    const ceiling = this.subagentPresetCeiling?.({
+      workspaceId: session.workspaceId,
+      agentId: session.agentId,
+      current: session.permissionPreset,
+    })
+    if (ceiling && isLooserCliPermissionPreset(input.permissionPreset, ceiling))
+      return { ok: false, message: 'A subagent cannot run with more permission than its parent.' }
     const applied = await adapter.setPermissionPreset({
       ...session,
       permissionPreset: input.permissionPreset,
@@ -2079,6 +2105,35 @@ export class ConversationRuntime {
     if (!(await adapter.stopSubagent(session.sessionId, input.toolUseId)))
       return { ok: false, message: 'That agent is not running any more.' }
     return { ok: true, session: this.toSummary(session) }
+  }
+
+  // Pass the person's words to one agent the chat spawned. No harness offers a
+  // way to reach one directly, and a user message aimed at the agent reaches the
+  // parent (tried with the real SDK), so the chat's own model is asked to use
+  // its messaging tool, by steering the turn or, with none running, as a turn of
+  // its own. The agent's task id is the address that also reaches one that was
+  // given no name. What the person typed is recorded for the lane to show.
+  async messageSubagent(input: ConversationMessageSubagentInput): Promise<ConversationSessionActionResult> {
+    const session = this.sessions.get(input.sessionId)
+    if (!session) return sessionNotFound()
+    if (session.status === 'stopped') return { ok: false, message: 'Conversation session is stopped.' }
+    const adapter = this.getAdapterForProviderId(session.providerId)
+    if (!adapter?.expectSubagentMessage || session.capabilities?.messageSubagent !== true)
+      return { ok: false, message: 'This chat cannot pass a message to one agent.' }
+    const taskId = [...session.subagentLanes].find(([, toolUseId]) => toolUseId === input.toolUseId)?.[0]
+    if (!taskId) return { ok: false, message: 'That agent cannot be reached any more.' }
+    const words = plainLineBreaks(input.message).trim()
+    if (!words) return { ok: false, message: 'Conversation turn message is required.' }
+    adapter.expectSubagentMessage(session.sessionId, taskId)
+    return this.sendTurn({
+      sessionId: session.sessionId,
+      message: subagentRelayMessage(taskId, words),
+      steer: true,
+      origin: { kind: 'studio', reason: 'agent-message' },
+      subagentMessage: { toolUseId: input.toolUseId, text: words },
+      ...(input.commandId ? { commandId: input.commandId } : {}),
+      ...(input.commandFingerprint ? { commandFingerprint: input.commandFingerprint } : {}),
+    })
   }
 
   /**
@@ -4912,6 +4967,11 @@ function isSessionBusy(session: RuntimeSession): boolean {
 // behind it. The running turn must have reached the provider, which is what
 // the message joins, and must not have ended there: a message sent then goes
 // as the next turn once this one is over.
+// What the chat's model is asked, in words shown to work on the real SDK.
+function subagentRelayMessage(taskId: string, words: string): string {
+  return `${STUDIO_NOTICE_PREFIX} The person wrote to one of your subagents. Pass it on now with the SendMessage tool, to: '${taskId}', summary: 'a message from the person', and the message below word for word. Do nothing else, and answer only with one short line saying it went or why it could not.\n\nMessage:\n${words}`
+}
+
 function steerRefusal(session: RuntimeSession, adapter: ConversationProviderAdapter): string | null {
   if (session.capabilities?.steer !== true || !adapter.steer)
     return 'This agent cannot take a message while it is working.'

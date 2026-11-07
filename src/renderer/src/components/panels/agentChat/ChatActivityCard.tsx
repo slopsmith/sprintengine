@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo } from 'react'
 import { useWorkspaceStore } from '../../../store/workspaceStore'
 import { selectModuleEnabled } from '../../../modules'
 import { dispatchFileReveal } from '../../../utils/fileReveal'
-import { openAgentsPane } from '../../workspace/pane/agents/agentsPaneFocus'
+import { openSubagentList } from './subagentViewStack'
 import type { TranscriptEntry } from './conversationProjection'
 import { deriveChatActivity, sharedEditFolder, type ChatActivity, type ChatActivityKind } from './chatActivity'
 import {
@@ -196,7 +196,7 @@ export function useChatActivityCard({
           return
         }
         case 'agents':
-          openAgentsPane(workspaceId, agentId, null)
+          openSubagentList(workspaceId, agentId)
           return
         case 'library':
           openPaneTab(workspaceId, { kind: 'library' })

@@ -34,6 +34,7 @@ export type ConversationBackendMember =
   | 'mcpServerAction'
   | 'interrupt'
   | 'stopSubagent'
+  | 'messageSubagent'
   | 'askSideQuestion'
   | 'cancelSideQuestion'
   | 'readContextBreakdown'

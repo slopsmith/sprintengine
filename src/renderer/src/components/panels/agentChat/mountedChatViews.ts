@@ -25,6 +25,8 @@ export type MountedChatView = {
   insertQuote?: (text: string) => void
   /** Open the side question drawer (`chat.sideQuestion`); absent where the chat cannot answer one. */
   openSideQuestion?: () => void
+  /** The chat's session, started if it has none: what a message to one of its subagents goes through. */
+  ensureSession?: () => Promise<string | null>
   /** Whether the conversation has a message in it yet: what Export chat offers itself on. */
   hasMessages?: () => boolean
   /** Export the conversation (`chat.export.*`); absent where the chat cannot be exported. */

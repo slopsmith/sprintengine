@@ -76,3 +76,19 @@ test('a machine that has not said it stops one agent is not asked to', async () 
     await machine.close()
   }
 })
+
+test('a machine that has not said it passes a message to one agent is not asked to', async () => {
+  const machine = await pairedMachine(['conversations', 'conversation-stop-subagent'])
+  try {
+    const before = machine.asked()
+    const sent = await machine.mesh.conversationCommand({
+      key: machine.key,
+      command: { kind: 'messageSubagent', toolUseId: 'toolu_agent', message: 'Check the e2e too' },
+    })
+    assert.ok(!sent.ok && sent.code === 'unsupported_command')
+    assert.ok(!sent.ok && sent.message.includes('Update SprintEngine Studio there'))
+    assert.equal(machine.asked(), before, 'nothing was sent over there')
+  } finally {
+    await machine.close()
+  }
+})

@@ -784,6 +784,31 @@ async function runAgent(h, frames) {
   });
   await settle();
 }
+test("an agent's box sends messageSubagent by its lane, and a refusal comes back in words", async () => {
+  const h = fixture({
+    capabilities: ["conversations", "conversation-agent-message"],
+    scopes: ["conversation:read", "conversation:operate"],
+  });
+  h.render();
+  await settle();
+  assert.equal(h.render().messagesAgents, true);
+  const frames = await runTurn(h);
+  await runAgent(h, frames);
+  const asked = h.render().messageAgent("toolu_agent", "Check the e2e too");
+  const sent = h.commands.at(-1);
+  assert.deepEqual(plain(sent.command), { kind: "messageSubagent", toolUseId: "toolu_agent", message: "Check the e2e too" });
+  frames.onFrame({ type: "commandResult", commandId: sent.id, ok: true });
+  assert.deepEqual(plain(await asked), { ok: true });
+  const refused = h.render().messageAgent("toolu_agent", "Again");
+  frames.onFrame({ type: "commandResult", commandId: h.commands.at(-1).id, ok: false, message: "It went wrong." });
+  assert.deepEqual(plain(await refused), { ok: false, message: "It went wrong." });
+});
+test("a desktop that does not take the command offers no agent a box", async () => {
+  const h = stoppingAgents();
+  h.render();
+  await settle();
+  assert.equal(h.render().messagesAgents, false);
+});
 test("an agent's Stop sends stopSubagent by its lane, and says Stopping until the agent reports its end", async () => {
   const h = stoppingAgents();
   h.render();

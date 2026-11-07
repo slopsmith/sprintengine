@@ -8,7 +8,7 @@ import type {
 import type { MeshConversationFrame, MeshConversationKey, MeshSubagent } from '../../../../../../shared/tailnet-mesh'
 import type { ConversationSessionEntry } from '../../../../hooks/conversationSessionsStore'
 import type { ConversationTransport } from '../../../panels/agentChat/conversationTransport'
-import { latestSessionOf } from './studioSubagents'
+import { latestSessionOf } from '../../../panels/agentChat/chatSubagents'
 
 let seq = 0
 function event(type: ConversationEventType, payload: Record<string, unknown>): ConversationEvent {
@@ -249,7 +249,7 @@ test('a chat asking for one of its agents opens the tab on that agent', async ()
 })
 
 test('an agent’s words sit before the step they lead into, and its report is not said twice', async () => {
-  const { placeAgentMessages } = await import('./AgentsTab')
+  const { placeAgentMessages } = await import('../../../panels/agentChat/conversationTimeline')
   const lane = {
     kind: 'tool' as const,
     id: 'lane',

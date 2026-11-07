@@ -2647,6 +2647,7 @@ export function createTailnetMeshService(options: TailnetMeshServiceOptions): Ta
             tailnetPeerSupports(identity.value.capabilities, 'workspace-extensions'),
           steerSends: tailnetPeerSupports(identity.value.capabilities, 'conversation-steer-sends'),
           stopSubagents: tailnetPeerSupports(identity.value.capabilities, 'conversation-stop-subagent'),
+          messageSubagents: tailnetPeerSupports(identity.value.capabilities, 'conversation-agent-message'),
           handoff: tailnetPeerSupports(identity.value.capabilities, 'conversation-handoff'),
           rewind: tailnetPeerSupports(identity.value.capabilities, 'conversation-rewind'),
           checkpointRevert: tailnetPeerSupports(identity.value.capabilities, 'conversation-checkpoint-revert'),
@@ -2828,6 +2829,15 @@ export function createTailnetMeshService(options: TailnetMeshServiceOptions): Ta
           ok: false,
           code: 'unsupported_command',
           message: `${connection.machineName} cannot stop one agent from here yet. Update SprintEngine Studio there.`,
+        }
+    }
+    if (command?.kind === 'messageSubagent') {
+      const connection = connectionFor(key.connectionId)
+      if (connection && !tailnetPeerSupports(peerCapabilities.get(connection.id), 'conversation-agent-message'))
+        return {
+          ok: false,
+          code: 'unsupported_command',
+          message: `${connection.machineName} cannot pass a message to one agent from here yet. Update SprintEngine Studio there.`,
         }
     }
     if (command?.kind === 'handoff') {

@@ -87,6 +87,7 @@ const COMMAND_KINDS: Record<ConversationCommandKind, true> = {
   setModel: true,
   cancelQueued: true,
   stopSubagent: true,
+  messageSubagent: true,
   handoff: true,
   rewind: true,
   revert: true,

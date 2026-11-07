@@ -1,15 +1,6 @@
-import React, { useCallback, useDeferredValue, useMemo, useRef, useState, type JSX } from 'react'
-import { cliForConversationProvider } from '../../../../../../shared/conversation-harness'
-import type { ConversationApprovalDecision } from '../../../../../../shared/conversation/approvalRules'
-import {
-  subagentEnded,
-  subagentStatusOf,
-  type SubagentStatus,
-} from '../../../../../../shared/conversation/subagentStatus'
-import type { MeshSubagent } from '../../../../../../shared/tailnet-mesh'
-import { useConversationSessions, type ConversationSessionEntry } from '../../../../hooks/conversationSessionsStore'
-import { useWorkspaceStore } from '../../../../store/workspaceStore'
-import type { AgentCli } from '../../../../types/workspace'
+import React, { useDeferredValue, useMemo, useRef, type JSX } from 'react'
+import { subagentEnded } from '../../../../../../shared/conversation/subagentStatus'
+import { useConversationSessions } from '../../../../hooks/conversationSessionsStore'
 import { Badge, GhostButton, InlineNotice, RowButton, Spinner, TruncatedText } from '../../../ui'
 import { ConversationLinkProvider, ConversationMarkdown } from '../../../panels/agentChat/conversationLinks'
 import {
@@ -18,9 +9,13 @@ import {
   type TranscriptToolEntry,
 } from '../../../panels/agentChat/conversationProjection'
 import { useConversationTransport } from '../../../panels/agentChat/conversationTransport'
-import { LiveElapsed } from '../../../panels/agentChat/liveElapsed'
+import {
+  latestSessionOf,
+  SubagentStatusWords,
+  useAnswerSubagentRequest,
+  type StudioSubagent,
+} from '../../../panels/agentChat/chatSubagents'
 import { ConversationPendingDock } from '../../../panels/agentChat/pendingDock'
-import { formatStepDuration } from '../../../panels/agentChat/stepDuration'
 import { SubagentIcon } from '../../../panels/agentChat/subagentIcon'
 import { AGENT_LINE_CLASS, AGENT_NAME_CLASS, AGENT_STATUS_CLASS } from '../../../panels/agentChat/subagentStatus'
 import { WorkTimeline } from '../../../panels/agentChat/timelineRows'
@@ -32,97 +27,6 @@ import { useConversationSession } from '../../../panels/agentChat/useConversatio
 // its thread is its own transcript rather than a lane of the parent's. A chat on
 // a paired machine has no record here: that machine reads them for it and names
 // them (`conversation-subagents`), and each is followed as a chat over there.
-
-export type StudioSubagent = {
-  id: string
-  name: string
-  cli: AgentCli | null
-  readOnly: boolean
-  status: SubagentStatus
-  task: string
-  startedAt: number
-  endedAt: number | null
-  error: string | null
-  /** What it runs on, for one a machine named; one here reads its record. */
-  providerId?: string
-  /** The session its answers go to, for one a machine named; one here is found among this window's. */
-  sessionId?: string
-}
-
-/** A sub-agent's current session: a follow-up to a rested one starts a new one, so it may have several. */
-export function latestSessionOf(
-  sessions: readonly ConversationSessionEntry[],
-  workspaceId: string,
-  agentId: string,
-): ConversationSessionEntry | undefined {
-  return sessions
-    .filter((session) => session.workspaceId === workspaceId && session.agentId === agentId)
-    .sort((a, b) => b.updatedAt - a.updatedAt)[0]
-}
-
-/** Every sub-agent of this chat, in the order they were started. */
-export function useStudioSubagents(workspaceId: string, agentId: string): StudioSubagent[] {
-  const agents = useWorkspaceStore((state) => state.workspaces.find((w) => w.id === workspaceId)?.agents)
-  const sessions = useConversationSessions()
-  return useMemo(() => {
-    const list: StudioSubagent[] = []
-    for (const [id, agent] of Object.entries(agents ?? {})) {
-      if (agent.subagentOf?.agentId !== agentId) continue
-      const summary = latestSessionOf(sessions, workspaceId, id)
-      list.push({
-        id,
-        name: agent.name,
-        cli: cliForConversationProvider(agent.conversation?.providerId) as AgentCli | null,
-        readOnly: agent.subagentReadOnly === true,
-        status: subagentStatusOf(agent, summary),
-        task: agent.subagentOf.task ?? '',
-        startedAt: agent.subagentOf.startedAt,
-        endedAt: agent.subagentEnd?.at ?? null,
-        error: agent.subagentEnd?.error ?? null,
-      })
-    }
-    return list.sort((a, b) => a.startedAt - b.startedAt)
-  }, [agents, agentId, sessions, workspaceId])
-}
-
-/**
- * The sub-agents a paired machine named for one of its chats, as this tab draws
- * them. That machine read them as a chat of its own there reads them, so a row
- * says here what it says there. The remote answer ignores the session id, which
- * is the pane's own stand-in for one at rest, as a remote chat's is.
- */
-export function studioSubagentsOf(named: readonly MeshSubagent[]): StudioSubagent[] {
-  return named.map((subagent) => ({
-    id: subagent.agentId,
-    name: subagent.title,
-    cli: cliForConversationProvider(subagent.providerId) as AgentCli | null,
-    readOnly: subagent.readOnly,
-    status: subagent.status,
-    task: subagent.task,
-    startedAt: subagent.startedAt,
-    endedAt: subagent.endedAt ?? null,
-    error: subagent.error ?? null,
-    providerId: subagent.providerId,
-    sessionId: subagent.sessionId ?? `remote:${subagent.agentId}`,
-  }))
-}
-
-/** How it is doing, in words: working and for how long, waiting on the person, or how it ended. */
-export function SubagentStatusWords({ subagent }: { subagent: StudioSubagent }): JSX.Element {
-  const { status, startedAt, endedAt } = subagent
-  if (status === 'needs_input') return <span className="text-[color:var(--tone-warn)]">Waiting on you</span>
-  if (!subagentEnded(status))
-    return (
-      <span className="text-[color:var(--accent-primary)]">
-        Working · <LiveElapsed startedAt={startedAt} />
-      </span>
-    )
-  const took = endedAt === null ? undefined : formatStepDuration(Math.max(0, endedAt - startedAt))
-  if (status === 'failed')
-    return <span className="text-[color:var(--tone-error)]">{took ? `Failed after ${took}` : 'Failed'}</span>
-  if (status === 'stopped') return <span>{took ? `Stopped after ${took}` : 'Stopped'}</span>
-  return <span>{took ? `Done in ${took}` : 'Done'}</span>
-}
 
 const ReadOnlyBadge = (): JSX.Element => (
   <Badge tone="neutral" ariaLabel="Read-only: it cannot change anything" className="shrink-0 whitespace-nowrap">
@@ -204,36 +108,8 @@ export const StudioSubagentThread = React.memo(function StudioSubagentThread({
   // folder here to resolve a file link against.
   const fileRoot = transport.kind === 'remote' ? '' : root
   const { operate } = transport.capabilities
-  const [responding, setResponding] = useState(false)
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const { responding, refusal, respond } = useAnswerSubagentRequest(sessionId)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const respond = useCallback(
-    async (
-      requestId: string,
-      approved: boolean,
-      answers?: Record<string, string>,
-      decision?: ConversationApprovalDecision,
-    ) => {
-      if (!sessionId) return
-      setResponding(true)
-      setRefusal(null)
-      try {
-        const result = await transport.respond({
-          sessionId,
-          requestId,
-          approved,
-          ...(answers ? { answers } : {}),
-          ...(decision ? { decision } : {}),
-        })
-        if (!result.ok) setRefusal(result.message)
-      } catch (error) {
-        setRefusal(error instanceof Error ? error.message : 'Could not record the answer.')
-      } finally {
-        setResponding(false)
-      }
-    },
-    [sessionId, transport],
-  )
   return (
     <ConversationLinkProvider
       workspaceId={workspaceId}

@@ -15,6 +15,7 @@ const {
   reportPreview,
   agentTypeDescription,
   agentStopOffer,
+  agentMessageOffer,
 } = require("../../../.mobile-test-build/src/features/conversations/agentLogic.js");
 
 const lane = (overrides = {}) => ({
@@ -115,4 +116,23 @@ test("an agent's own Stop is offered only for one running, where the desktop and
   assert.equal(agentStopOffer(lane(), { ...can, chatCanStop: false }), null, "a CLI that cannot stop one agent");
   assert.deepEqual(agentStopOffer(lane(), { ...can, live: false }), { label: "Stop this agent", disabled: true });
   assert.deepEqual(agentStopOffer(lane(), { ...can, stopping: true }), { label: "Stopping…", disabled: true });
+});
+
+test("an agent's box is offered only where a message arrives, and otherwise says why", () => {
+  const able = { messagesAgents: true, chatCanMessage: true };
+  const agent = (state, extra = {}) => ({ status: "done", agent: { state, taskId: "a1", ...extra } });
+  assert.deepEqual(agentMessageOffer(agent("running"), able), { kind: "box" });
+  assert.deepEqual(agentMessageOffer(agent("completed"), able), { kind: "box" });
+  for (const refused of [
+    agent("stopped"),
+    agent("failed"),
+    agent("unknown"),
+    agent("completed", { canContinue: false }),
+    agent("completed", { taskId: undefined }),
+    { ...agent("completed"), outcome: "declined" },
+  ])
+    assert.equal(agentMessageOffer(refused, able).kind, "bar");
+  assert.equal(agentMessageOffer(agent("running"), { ...able, messagesAgents: false }).kind, "bar");
+  assert.equal(agentMessageOffer(agent("running"), { ...able, chatCanMessage: false }).kind, "bar");
+  assert.match(agentMessageOffer(agent("running"), { ...able, chatCanMessage: undefined }).why, /at rest/);
 });

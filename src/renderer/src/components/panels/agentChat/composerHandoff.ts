@@ -3,6 +3,7 @@ import { useWorkspaceStore } from '../../../store/workspaceStore'
 import { composerDraftStore } from './draftStore'
 import { mountedChatViewFor } from './mountedChatViews'
 import { insertQuoteIntoDraft } from './quoteSelection'
+import { readSubagentViews, subagentViewOwner } from './subagentViewStack'
 
 // A quote handed to a workspace's chat from somewhere else in the app (the
 // diff viewer's "Add to chat", in this window or another): set into that
@@ -21,7 +22,7 @@ import { insertQuoteIntoDraft } from './quoteSelection'
  * rare, and the quote going to one the person is not looking at is the
  * mistake this order is there to avoid.
  */
-function chatAgentOf(workspaceId: string): string | null {
+function tabChatOf(workspaceId: string): string | null {
   const workspace = useWorkspaceStore.getState().workspaces.find((candidate) => candidate.id === workspaceId)
   const chats = Object.entries(workspace?.agents ?? {})
     .filter(([, agent]) => agent.conversation && !isSubagentRecord(agent))
@@ -34,6 +35,15 @@ function chatAgentOf(workspaceId: string): string | null {
   const last = workspace?.lastActiveAgentId
   if (last && chats.includes(last)) return last
   return chats[0]!
+}
+
+// The chat the person is looking at there: a sub-agent has no tab of its own to
+// be found by, but when one is drawn in its parent's place the quote is for it,
+// not for the parent hidden beneath it. A lane is part of the chat that holds it.
+function chatAgentOf(workspaceId: string): string | null {
+  const tabChat = tabChatOf(workspaceId)
+  const top = tabChat ? readSubagentViews(workspaceId, tabChat).at(-1) : undefined
+  return top ? subagentViewOwner(top) : tabChat
 }
 
 export function deliverQuoteToWorkspaceChat(workspaceId: string, text: string): string | null {

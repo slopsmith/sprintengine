@@ -296,6 +296,8 @@ export const meshApi = {
   meshConversationInterrupt: (input: { key: MeshConversationKey }) => command(input.key, { kind: 'interrupt' }),
   meshConversationStopSubagent: (input: { key: MeshConversationKey; toolUseId: string }) =>
     command(input.key, { kind: 'stopSubagent', toolUseId: input.toolUseId }),
+  meshConversationMessageSubagent: (input: { key: MeshConversationKey; toolUseId: string; message: string }) =>
+    command(input.key, { kind: 'messageSubagent', toolUseId: input.toolUseId, message: input.message }),
   meshConversationHandoff: (input: { key: MeshConversationKey }) => command(input.key, { kind: 'handoff' }),
   meshConversationRewind: (input: { key: MeshConversationKey; turnSeq: number }) =>
     command(input.key, { kind: 'rewind', turnSeq: input.turnSeq }),
@@ -475,6 +477,7 @@ export const meshApi = {
   | 'meshConversationCancelQueued'
   | 'meshConversationInterrupt'
   | 'meshConversationStopSubagent'
+  | 'meshConversationMessageSubagent'
   | 'meshConversationHandoff'
   | 'meshConversationRewind'
   | 'meshConversationRevert'

@@ -182,6 +182,16 @@ type StudioConversationMethodMap = {
    */
   'conversation.stopSubagent': { params: Addressed<{ toolUseId: string }>; result: StudioCommandAnswer }
   /**
+   * Passes the person's words to one agent the chat spawned, by the call that
+   * spawned it (the conversation lane's `messageSubagent`): the chat's model is
+   * asked to deliver them. Refused for a chat whose provider cannot. An owner's
+   * only for now: no SDK call names it yet.
+   */
+  'conversation.messageSubagent': {
+    params: Addressed<{ toolUseId: string; message: string }>
+    result: StudioCommandAnswer
+  }
+  /**
    * Sets the reasoning effort the chat runs at from its next turn (the
    * conversation lane's `setReasoningEffort`): one of the levels its listed
    * `capabilities.reasoningEfforts` names, or none for the provider's own
@@ -279,6 +289,7 @@ export const STUDIO_METHODS: { readonly [M in StudioMethod]: StudioMethodSpec } 
   'conversation.setModel': operate,
   'conversation.cancelQueued': { ...operate, owner: true },
   'conversation.stopSubagent': { ...operate, owner: true },
+  'conversation.messageSubagent': { ...operate, owner: true },
   'conversation.setReasoningEffort': { ...operate, owner: true },
   'conversation.mcpServerAction': { ...operate, owner: true },
   'conversation.restartSession': { ...operate, owner: true },
@@ -398,6 +409,7 @@ export const STUDIO_COMMAND_METHODS = {
   'conversation.setModel': 'setModel',
   'conversation.cancelQueued': 'cancelQueued',
   'conversation.stopSubagent': 'stopSubagent',
+  'conversation.messageSubagent': 'messageSubagent',
   'conversation.setReasoningEffort': 'setReasoningEffort',
   'conversation.mcpServerAction': 'mcpServerAction',
   'conversation.restartSession': 'restartSession',

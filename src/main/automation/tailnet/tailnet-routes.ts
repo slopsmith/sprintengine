@@ -216,6 +216,12 @@ export const TAILNET_CAPABILITIES = [
   // at a time, so a paired machine needs its own Stop for each.
   // CONVERSATION_STOP_SUBAGENT_CAPABILITY.
   'conversation-stop-subagent',
+  // The person's words may be passed to one agent a chat spawned (2026-11-07):
+  // `messageSubagent` names it as `stopSubagent` does, and the chat's model
+  // delivers them. A listed chat says whether its provider can
+  // (`capabilities.messageSubagent`); a client draws no box without both.
+  // CONVERSATION_AGENT_MESSAGE_CAPABILITY.
+  'conversation-agent-message',
   // A chat may be handed off to a fresh session from a paired machine, as its
   // own Handoff does here (2026-10-25): `handoff`, where a listed chat says
   // its provider can (`capabilities.handoff`). CONVERSATION_HANDOFF_CAPABILITY.

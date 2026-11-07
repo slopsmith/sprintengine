@@ -1,7 +1,12 @@
 // The chat's timeline: which rows a projected conversation turns into, and
 // how resolved approvals are grouped.
 
-import { type TranscriptToolEntry, type TranscriptEntry, type TurnRetry } from './conversationProjection.js'
+import {
+  type TranscriptAgentMessage,
+  type TranscriptToolEntry,
+  type TranscriptEntry,
+  type TurnRetry,
+} from './conversationProjection.js'
 import { toolActionVerb } from './protocol.js'
 import { proseShownToUser } from './shownProse.js'
 
@@ -22,6 +27,146 @@ export function flattenToolEntries(tools: TranscriptToolEntry[]): TranscriptTool
 export function subagentLaneLabel(tool: TranscriptToolEntry): string {
   const subagentType = tool.subagentType?.trim()
   return subagentType ? `${subagentType} agent` : 'Agent'
+}
+
+/** Every agent a transcript spawned, nested ones included, in spawn order. */
+export function collectAgentLanes(entries: readonly TranscriptEntry[]): TranscriptToolEntry[] {
+  const lanes: TranscriptToolEntry[] = []
+  const walk = (tool: TranscriptToolEntry) => {
+    if (tool.subagentLane) lanes.push(tool)
+    for (const child of tool.children ?? []) walk(child)
+  }
+  for (const entry of entries) if (entry.kind === 'tool') walk(entry)
+  return lanes
+}
+
+/** The agents a transcript's own turns spawned: not the ones those agents spawned in turn. */
+export function directAgentLanes(entries: readonly TranscriptEntry[]): TranscriptToolEntry[] {
+  return entries.filter((entry): entry is TranscriptToolEntry => entry.kind === 'tool' && entry.subagentLane === true)
+}
+
+/** The agents one lane spawned itself. */
+export function childAgentLanes(lane: TranscriptToolEntry): TranscriptToolEntry[] {
+  return (lane.children ?? []).filter((child) => child.subagentLane === true)
+}
+
+/** The lane an agent's approval came from, among `lanes`: its id is the agent's own, its task id. */
+export function laneOfOriginAgent(
+  lanes: readonly TranscriptToolEntry[],
+  originAgentId: string | undefined,
+): TranscriptToolEntry | undefined {
+  return originAgentId ? lanes.find((lane) => lane.agent?.taskId === originAgentId) : undefined
+}
+
+// The words an agent said in one stretch of its steps: each before the first
+// step it started after, as a turn's prose sits before the tools it explains,
+// and the rest after the last step.
+function placeMessages(
+  messages: readonly TranscriptAgentMessage[],
+  steps: readonly TranscriptToolEntry[],
+): {
+  beforeSteps: { text: string; beforeToolUseId: string; at: number }[]
+  afterSteps: { text: string; at: number }[]
+} {
+  const beforeSteps: { text: string; beforeToolUseId: string; at: number }[] = []
+  const afterSteps: { text: string; at: number }[] = []
+  for (const message of messages) {
+    const next = steps.find((step) => step.startedAt !== undefined && step.startedAt > message.at)
+    if (next) beforeSteps.push({ text: message.text, beforeToolUseId: next.id, at: message.at })
+    else afterSteps.push({ text: message.text, at: message.at })
+  }
+  return { beforeSteps, afterSteps }
+}
+
+/**
+ * Where an agent's own words go in its thread. The last thing a finished agent
+ * says is its report, which the thread shows as the report, so it is not said
+ * twice. Each keeps when it was said, which the thread shows on hover.
+ */
+export function placeAgentMessages(lane: TranscriptToolEntry): ReturnType<typeof placeMessages> {
+  const placed = placeMessages(lane.messages ?? [], lane.children ?? [])
+  const report = lane.output?.trim()
+  const last = placed.afterSteps.at(-1)?.text.trim()
+  if (lane.status !== 'running' && report && last && report.startsWith(last.slice(0, 200))) placed.afterSteps.pop()
+  return placed
+}
+
+/** What the agent was sent to do, as the call that spawned it worded it, where the call is still whole. */
+export function lanePrompt(lane: TranscriptToolEntry): string {
+  const input = lane.input
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return ''
+  const prompt = input.prompt
+  return typeof prompt === 'string' ? prompt.trim() : ''
+}
+
+/**
+ * A lane as a conversation of its own, for the timeline to draw: what it was
+ * asked, then a turn of its steps and words, and a message and another turn for
+ * each thing the person wrote to it. It holds nothing but what the lane does,
+ * so it is re-derived as the lane moves. Each step is stamped with its turn, or
+ * the timeline would not group it, and the last word of a finished agent is its
+ * report.
+ */
+export function laneTranscript(lane: TranscriptToolEntry): TranscriptEntry[] {
+  const running = lane.status === 'running'
+  const entries: TranscriptEntry[] = []
+  const asked = lanePrompt(lane) || lane.agent?.description || ''
+  if (asked)
+    entries.push({
+      kind: 'user',
+      id: `lane:${lane.id}:prompt`,
+      text: asked,
+      ...(lane.startedAt !== undefined ? { createdAt: lane.startedAt } : {}),
+    })
+  const sent = lane.sent ?? []
+  const steps = lane.children ?? []
+  const messages = lane.messages ?? []
+  const stretches = sent.length + 1
+  for (let stretch = 0; stretch < stretches; stretch += 1) {
+    const from = stretch === 0 ? -Infinity : sent[stretch - 1]!.at
+    const to = stretch === sent.length ? Infinity : sent[stretch]!.at
+    const within = (at: number | undefined) => (at ?? from) >= from && (at ?? from) < to
+    const last = stretch === sent.length
+    if (stretch > 0)
+      entries.push({
+        kind: 'user',
+        id: `lane:${lane.id}:sent:${stretch}`,
+        text: sent[stretch - 1]!.text,
+        createdAt: sent[stretch - 1]!.at,
+      })
+    const turnId = `lane:${lane.id}:${stretch}`
+    const tools = steps.filter((step) => within(step.startedAt)).map((step) => ({ ...step, turnId }))
+    const { beforeSteps, afterSteps } = placeMessages(
+      messages.filter((message) => within(message.at)),
+      tools,
+    )
+    const report = last && !running ? lane.output?.trim() : undefined
+    const said = afterSteps.at(-1)?.text.trim()
+    const reportSaysIt = Boolean(report && said && report.startsWith(said.slice(0, 200)))
+    const spoken = reportSaysIt ? afterSteps.slice(0, -1) : afterSteps
+    // A failed agent's turn is not a failed turn of a chat, whose card offers a
+    // retry and says the message is kept: nothing here can be retried. Why it
+    // ended is its last word, and the lane's status says that it failed.
+    const failure = last && lane.agent?.state === 'failed' ? lane.agent.error : undefined
+    const stopped = last && lane.agent?.state === 'stopped'
+    entries.push({
+      kind: 'assistant',
+      turnId,
+      text: [
+        ...spoken.map((message) => message.text),
+        ...(report ? [report] : []),
+        ...(failure && failure !== report ? [failure] : []),
+      ].join('\n\n'),
+      ...(beforeSteps.length ? { intermediateText: beforeSteps } : {}),
+      reasoning: '',
+      status: last && running ? 'streaming' : stopped ? 'interrupted' : 'complete',
+      ...(stretch === 0 && lane.startedAt !== undefined ? { startedAt: lane.startedAt } : {}),
+      ...(stretch > 0 ? { startedAt: from } : {}),
+      ...(last && lane.completedAt !== undefined ? { completedAt: lane.completedAt } : {}),
+    })
+    entries.push(...tools)
+  }
+  return entries
 }
 
 export function activeConversationStage(
