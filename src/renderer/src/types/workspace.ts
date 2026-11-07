@@ -786,6 +786,10 @@ export type WorkspacePaneState = {
   // The URLs this workspace's browser tabs visited last, newest first, for the
   // new-tab surface. Optional: records written before the browser child exist.
   recentUrls?: string[]
+  // The column is showing its menu (the chat's panel) rather than `activeTabId`,
+  // which stays what it was, so Back and a retained tab lose nothing. Session
+  // only: partialize strips it, because a restart opens on what was showing.
+  menu?: boolean
 }
 
 /**

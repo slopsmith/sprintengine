@@ -535,7 +535,14 @@ function WorkspaceLayoutBody({
   // diff cares about. `setFocusedAgent` keeps its narrower rule exactly.
   const followSelectedAgentTab = useCallback(
     (model: Model) => {
-      const selected = model.getActiveTabset()?.getSelectedNode()
+      // A layout nobody has touched yet has no active tabset, and its only tab
+      // is still the one the person is on.
+      let tabset: TabSetNode | undefined = model.getActiveTabset()
+      if (!tabset)
+        model.visitNodes((node) => {
+          if (!tabset && node instanceof TabSetNode) tabset = node
+        })
+      const selected = tabset?.getSelectedNode()
       if (!(selected instanceof TabNode)) return
       const agentId = agentIdOfTab(selected, terminalSessionsRef.current)
       if (agentId) setLastActiveAgent(workspaceId, agentId)

@@ -566,12 +566,12 @@ export const COMMAND_REGISTRY = [
   // their pane tab.
   command({
     id: 'pane.toggle',
-    title: 'Toggle workspace pane',
+    title: 'Toggle panel',
     category: 'panel',
     scopes: ['workspace'],
     defaultKeybindings: ['Primary+Alt+B'],
     availability: ['activeWorkspace'],
-    handlerPath: { kind: 'workspace-manager', handler: 'setPaneOpen(windowActiveWorkspaceId, !paneOpen)' },
+    handlerPath: { kind: 'workspace-manager', handler: 'togglePaneMenu(windowActiveWorkspaceId)' },
   }),
   // The pane's "+" from the keyboard: the menu of what can be opened there,
   // with the pane shown first if it was closed. T for "tab", as a new tab is

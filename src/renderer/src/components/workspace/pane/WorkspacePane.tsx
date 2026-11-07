@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getRendererHost, onThirdPartyRendererModulesLoaded, selectModuleEnabled } from '../../../modules'
+import { paneShowsMenu } from '../../../store/slices/workspacePaneSlice'
 import { useWorkspaceStore } from '../../../store/workspaceStore'
 import type { WorkspacePaneTab, WorkspacePaneTabKind } from '../../../types/workspace'
 import {
@@ -19,15 +20,16 @@ import { WORKSPACE_PANE_DATA_ATTRIBUTE } from './paneFocus'
 import { paneTabItem } from './paneTabItem'
 import { useAgentPresentTabIds } from './agentPresence'
 import { closePaneTabAndItsTerminal } from './paneTerminals'
-import { bringBackPaneTab, canPopOutPane, popOutPaneTabs, showPanePopOut } from './popout/panePopOutHost'
+import { bringBackPaneTab, canPopOutPane, popOutPaneTabs, showPaneTab, showPanePopOut } from './popout/panePopOutHost'
 import { WorkspacePaneAddMenu } from './WorkspacePaneAddMenu'
 import { PANEL_COMMAND_EVENT } from '../../../utils/panelCommands'
 import { WorkspacePaneBody } from './WorkspacePaneBody'
-import { WorkspacePaneLauncher } from './WorkspacePaneLauncher'
+import { ChatPanel } from './panel/ChatPanel'
 import { WindowCaptionReserve, paneStripOwnsCaptionCorner, windowCaptionReserve } from '../WindowControls'
 
-// One workspace's pane: the 36px strip (tabs · + · pop out · maximise · close)
-// over the tab bodies. Mounted once per retained workspace by
+// One workspace's pane: the 36px strip (Back · tabs · + · pop out · maximise ·
+// close) over the tab bodies, or over the menu (`ChatPanel`), which is what the
+// column opens on. Mounted once per retained workspace by
 // WorkspacePaneColumn so a terminal (later a browser) survives a workspace
 // switch; `active` says whether this is the one on screen.
 
@@ -70,6 +72,20 @@ function ClosePaneGlyph({ className }: { className?: string }) {
   )
 }
 
+function BackGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M10 3.5 5.5 8l4.5 4.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 type TabMenuState = { x: number; y: number; tabId: string }
 
 type WorkspacePaneProps = {
@@ -87,10 +103,15 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
   const setActivePaneTab = useWorkspaceStore((s) => s.setActivePaneTab)
   const movePaneTab = useWorkspaceStore((s) => s.movePaneTab)
   const setPaneOpen = useWorkspaceStore((s) => s.setPaneOpen)
+  const showPaneMenu = useWorkspaceStore((s) => s.showPaneMenu)
   const setMaximised = useWorkspaceStore((s) => s.setWorkspacePaneMaximised)
 
   const tabs = paneState?.tabs ?? []
-  const activeTabId = paneState?.activeTabId ?? null
+  const showsMenu = paneShowsMenu(paneState)
+  // What the column is showing: nothing of the strip's while its menu is up,
+  // so a retained tab parks and a kept one unmounts, as behind another tab.
+  // `activeTabId` stands through the menu: it is where Back returns to.
+  const activeTabId = showsMenu ? null : (paneState?.activeTabId ?? null)
   const collapsedWithFloatingPlayer = !(paneState?.open ?? false) && tabs.some((tab) => tab.floating)
   // What the agent tools act on when they name no tab: the browser tab the
   // person is looking at, or none when the active tab is not a browser. A
@@ -101,6 +122,12 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
   useEffect(() => {
     void window.api.browserNoteActive(workspaceId, activeBrowserTabId)
   }, [activeBrowserTabId, workspaceId])
+  // The menu is a column of rows, and a window's width of them says nothing
+  // more: it is the docked column, whatever the tool before it had.
+  const paneOpen = paneState?.open ?? false
+  useEffect(() => {
+    if (active && paneOpen && showsMenu && maximised) setMaximised(false)
+  }, [active, paneOpen, showsMenu, maximised, setMaximised])
   const [tabMenu, setTabMenu] = useState<TabMenuState | null>(null)
   // The "+" menu, held here so `pane.add` (⌘T) can open it: the window
   // routes the command to the pane on screen, opening the column first.
@@ -223,55 +250,66 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
         className="chrome-bar app-drag flex h-[36px] shrink-0 items-end pl-1.5 pr-1"
         inert={collapsedWithFloatingPlayer}
       >
-        {/* Scrolls sideways with no scrollbar and a fade at each overflowing
-            edge (TabsScroller): a 10px bar under a 36px strip is a second line
-            in a band that already has one, and a plain vertical wheel is the
-            gesture people make over a row of tabs. */}
-        {/* The scroller takes only the width its tabs need (it shrinks, it
-            never grows), so the "+" after it sits right of the last tab. Once
-            the tabs outgrow the strip the scroller is squeezed to what is
-            left, the tabs scroll inside it, and the "+" stays in view at its
-            end. The empty run between "+" and the controls is the spacer's,
-            and it is what drags the window. */}
-        <TabsScroller className="flex min-w-0 flex-initial items-end self-stretch">
-          {tabs.length > 0 && activeTabId ? (
-            <Tabs
-              ariaLabel="Pane tabs"
-              className="app-no-drag"
-              idPrefix={`pane-${workspaceId}`}
-              items={items}
-              value={activeTabId}
-              controlTabItems
-              onChange={(tabId) => setActivePaneTab(workspaceId, tabId)}
-              // Dragged into the order the person wants, which is the order
-              // the strip keeps: opening a tab adds it at the end and leaves
-              // the rest where they were put.
-              onReorder={(tabId, toIndex) => movePaneTab(workspaceId, tabId, toIndex)}
-              onCloseItem={closeTab}
-              onItemAuxClick={(tabId, event) => {
-                if (event.button === 1) {
+        {/* A tool's strip: Back to the menu, then a glyph per open tab, which is
+            where switching, Control-Tab, dragging a tab into place, a middle
+            click and the tab's menu live while a tool has the column. The
+            names are the menu's Open now list and each glyph's tooltip. While
+            the menu shows the strip holds nothing but the close control: the
+            list below is the tabs. */}
+        {!showsMenu && activeTabId ? (
+          <>
+            <div className="app-no-drag flex h-full shrink-0 items-center pr-0.5">
+              <Tooltip content="Back to the panel" placement="bottom">
+                <IconButton onClick={() => showPaneMenu(workspaceId)} aria-label="Back to the panel">
+                  <BackGlyph className="icon-sm" />
+                </IconButton>
+              </Tooltip>
+            </div>
+            {/* Scrolls sideways with no scrollbar and a fade at each overflowing
+                edge (TabsScroller): a 10px bar under a 36px strip is a second
+                line in a band that already has one. It takes only the width its
+                tabs need, so the "+" after it sits right of the last tab, and
+                the empty run after that is the spacer's, which drags the
+                window. */}
+            <TabsScroller className="flex min-w-0 flex-initial items-end self-stretch">
+              <Tabs
+                ariaLabel="Pane tabs"
+                className="app-no-drag"
+                idPrefix={`pane-${workspaceId}`}
+                items={items}
+                value={activeTabId}
+                iconOnly
+                controlTabItems
+                onChange={(tabId) => setActivePaneTab(workspaceId, tabId)}
+                // Dragged into the order the person wants, which is the order
+                // the list keeps: opening a tab adds it at the end and leaves
+                // the rest where they were put.
+                onReorder={(tabId, toIndex) => movePaneTab(workspaceId, tabId, toIndex)}
+                onItemAuxClick={(tabId, event) => {
+                  if (event.button === 1) {
+                    event.preventDefault()
+                    closeTab(tabId)
+                  }
+                }}
+                onItemContextMenu={(tabId, event) => {
                   event.preventDefault()
-                  closeTab(tabId)
-                }
-              }}
-              onItemContextMenu={(tabId, event) => {
-                event.preventDefault()
-                setTabMenu({ x: event.clientX, y: event.clientY, tabId })
-              }}
-              borderless
-            />
-          ) : null}
-        </TabsScroller>
-        <div className="app-no-drag flex h-full shrink-0 items-center pl-0.5">
-          <WorkspacePaneAddMenu kinds={kinds} onPick={openKind} open={addMenuOpen} onOpenChange={setAddMenuOpen} />
-        </div>
+                  setTabMenu({ x: event.clientX, y: event.clientY, tabId })
+                }}
+                borderless
+              />
+            </TabsScroller>
+            <div className="app-no-drag flex h-full shrink-0 items-center pl-0.5">
+              <WorkspacePaneAddMenu kinds={kinds} onPick={openKind} open={addMenuOpen} onOpenChange={setAddMenuOpen} />
+            </div>
+          </>
+        ) : null}
         <div className="min-w-0 flex-1 self-stretch" aria-hidden="true" />
         <div className="app-no-drag flex h-full shrink-0 items-center gap-0.5">
           {/* Out into a window of its own, which can be resized and taken full
               screen: the pane's whole strip, with its tab in front kept in
               front. The tabs stay in this strip, marked, and come back when
               the window closes. */}
-          {popOutOffered ? (
+          {popOutOffered && !showsMenu ? (
             <Tooltip content="Pop out pane" placement="bottom">
               <IconButton
                 onClick={() => void popOutPaneTabs(workspaceId, dockedTabIds)}
@@ -282,22 +320,24 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
               </IconButton>
             </Tooltip>
           ) : null}
-          <Tooltip content={maximised ? 'Restore pane' : 'Maximise pane'} placement="bottom">
-            <IconButton
-              onClick={() => setMaximised(!maximised)}
-              aria-label={maximised ? 'Restore pane' : 'Maximise pane'}
-              pressed={maximised}
-            >
-              {maximised ? <RestoreGlyph className="icon-sm" /> : <MaximiseGlyph className="icon-sm" />}
-            </IconButton>
-          </Tooltip>
+          {showsMenu ? null : (
+            <Tooltip content={maximised ? 'Restore pane' : 'Maximise pane'} placement="bottom">
+              <IconButton
+                onClick={() => setMaximised(!maximised)}
+                aria-label={maximised ? 'Restore pane' : 'Maximise pane'}
+                pressed={maximised}
+              >
+                {maximised ? <RestoreGlyph className="icon-sm" /> : <MaximiseGlyph className="icon-sm" />}
+              </IconButton>
+            </Tooltip>
+          )}
           {/* One close-pane control on screen at a time. Docked, it is this
               one, and the WorkspaceHeader's pane switch steps aside
               (PanelSwitches). Maximised, this strip sits directly under the
               header, so the header's switch takes it back and this one goes. */}
           {maximised ? null : (
-            <Tooltip content="Close pane" placement="bottom">
-              <IconButton onClick={closePane} aria-label="Close pane">
+            <Tooltip content="Close panel" placement="bottom">
+              <IconButton onClick={closePane} aria-label="Close panel" pressed>
                 <ClosePaneGlyph className="icon-sm" />
               </IconButton>
             </Tooltip>
@@ -328,9 +368,7 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
           above is deliberately not inset: it belongs to the band, and the band
           runs to the window edge. */}
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-[var(--shell-card-radius)] bg-[color:var(--bg-surface)] ml-[var(--shell-card-gap)] mr-[var(--shell-card-gap)] mb-[var(--shell-card-gap)]">
-        {tabs.length === 0 ? (
-          <WorkspacePaneLauncher kinds={kinds} onPick={openKind} />
-        ) : (
+        {tabs.length > 0 ? (
           <WorkspacePaneBody
             workspaceId={workspaceId}
             tabs={tabs}
@@ -351,7 +389,29 @@ export default function WorkspacePane({ workspaceId, active }: WorkspacePaneProp
             collapsed={!(paneState?.open ?? false)}
             onDiffCountChange={setDiffCount}
           />
-        )}
+        ) : null}
+        {showsMenu && paneOpen ? (
+          <div className="absolute inset-0">
+            <ChatPanel
+              workspaceId={workspaceId}
+              tabs={tabs}
+              items={items}
+              currentTabId={paneState?.activeTabId ?? null}
+              onOpenTab={(tabId) => showPaneTab(workspaceId, tabId, { focus: true })}
+              onCloseTab={closeTab}
+              onTabContextMenu={(tabId, event) => setTabMenu({ x: event.clientX, y: event.clientY, tabId })}
+              addControl={
+                <WorkspacePaneAddMenu
+                  kinds={kinds}
+                  onPick={openKind}
+                  open={addMenuOpen}
+                  onOpenChange={setAddMenuOpen}
+                />
+              }
+              onClose={closePane}
+            />
+          </div>
+        ) : null}
       </div>
       {tabMenu && active ? (
         <ContextMenu

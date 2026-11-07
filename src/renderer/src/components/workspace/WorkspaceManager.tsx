@@ -672,6 +672,7 @@ export default function WorkspaceManager() {
   const isPrimaryWorkspaceWindow = workspaceWindowId === (primaryWorkspaceWindowId || PRIMARY_WORKSPACE_WINDOW_ID)
   const openPaneTab = useWorkspaceStore((s) => s.openPaneTab)
   const setPaneOpen = useWorkspaceStore((s) => s.setPaneOpen)
+  const togglePaneMenu = useWorkspaceStore((s) => s.togglePaneMenu)
   const togglePaneKind = useWorkspaceStore((s) => s.togglePaneKind)
   const visibleWorkspaceIdSet = useMemo(
     () => new Set(currentWorkspaceWindow?.workspaceIds ?? workspaces.map((workspace) => workspace.id)),
@@ -4365,7 +4366,7 @@ export default function WorkspaceManager() {
       }
       if (commandId === 'pane.toggle' && windowActiveWorkspaceId) {
         const open = paneOpenOf(windowActiveWorkspaceId)
-        keepFocusOutOfClosedPane(() => setPaneOpen(windowActiveWorkspaceId, !open()), open)
+        keepFocusOutOfClosedPane(() => togglePaneMenu(windowActiveWorkspaceId), open)
         return true
       }
       if (commandId === 'pane.add') {

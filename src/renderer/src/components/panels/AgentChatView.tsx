@@ -143,6 +143,7 @@ import { ConversationComposerStrip } from './agentChat/conversationStrip'
 import { useConversationStripFacts } from './agentChat/conversationStripFacts'
 import { useChatActivityCard } from './agentChat/ChatActivityCard'
 import { usePublishChatPanelFacts, type ChatPanelPermissions } from './agentChat/chatPanelStore'
+import { usePublishChatSubagents } from './agentChat/chatSubagentsStore'
 import { useUsageLimitSnapshot } from './agentChat/usageLimits'
 import { HostUsageLimitNoticeRow, UsageLimitResumeRow } from './agentChat/usageLimitResume'
 import {
@@ -4157,6 +4158,7 @@ export function ConversationChatBody({ workspaceId, agentId, binding }: Props & 
       selectPanelPermission,
     ],
   )
+  usePublishChatSubagents(workspaceId, agentId, projection.entries)
   usePublishChatPanelFacts(workspaceId, agentId, {
     name: label,
     cli: chatCli,

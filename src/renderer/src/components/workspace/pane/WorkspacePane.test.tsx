@@ -68,7 +68,13 @@ beforeAll(() => {
   // Every bridge call the pane makes answers with nothing, but for opening a
   // pop-out window, which answers that it opened.
   domWindow.api = new Proxy(apiTarget, {
-    get: (target, key: string) => (key in target ? target[key] : () => Promise.resolve(undefined)),
+    get: (target, key: string) =>
+      key in target
+        ? target[key]
+        : // A subscription answers with its unsubscribe, as the preload's do.
+          /^on[A-Z]/u.test(key)
+          ? () => () => {}
+          : () => Promise.resolve(undefined),
   })
 })
 
@@ -133,10 +139,12 @@ function captionReserveWidth(container: HTMLElement): number {
   return spacer ? Number.parseFloat(spacer.style.width) : 0
 }
 
-test('a new Canvas tab opened from the launcher opens docked', async () => {
+test('a new Canvas tab opened from the panel opens docked', async () => {
   const container = await renderPane({ open: true, activeTabId: null, tabs: [] }, false)
-  const canvasCard = button(container, 'Canvas')
-  assert.ok(canvasCard, 'the empty pane offers a Canvas card')
+  const canvasCard = [...container.querySelectorAll<HTMLButtonElement>('[data-panel-row="action"]')].find((row) =>
+    row.textContent?.startsWith('Canvases'),
+  )
+  assert.ok(canvasCard, 'the empty pane is the panel, which offers the canvases')
   act(() => canvasCard.click())
 
   const { useWorkspaceStore } = await import('../../../store/workspaceStore')
@@ -148,7 +156,7 @@ test('a new Canvas tab opened from the launcher opens docked', async () => {
 
 test('a docked strip keeps its close-pane control and reserves the caption corner', async () => {
   const container = await renderPane({ open: true, activeTabId: 't1', tabs: [{ id: 't1', kind: 'files' }] }, false)
-  assert.ok(button(container, 'Close pane'), 'docked, the strip closes the pane itself')
+  assert.ok(button(container, 'Close panel'), 'docked, the strip closes the pane itself')
   assert.ok(button(container, 'Maximise pane'))
   assert.equal(captionReserveWidth(container), 120, 'docked, the strip owns the caption corner on win32')
 })
@@ -157,7 +165,7 @@ test('a maximised strip shows one close-pane control and leaves the corner to th
   const container = await renderPane({ open: true, activeTabId: 't1', tabs: [{ id: 't1', kind: 'files' }] }, true)
   // A boolean, not the element: a failing assertion that has to print a JSDOM
   // node walks the whole document and runs the worker out of memory.
-  assert.equal(button(container, 'Close pane') !== null, false, 'the header pane switch above is the one control')
+  assert.equal(button(container, 'Close panel') !== null, false, 'the header pane switch above is the one control')
   assert.ok(button(container, 'Restore pane'), 'restore stays in the strip beside "+"')
   assert.equal(captionReserveWidth(container), 0, 'maximised, the strip sits below the caption buttons')
 })
@@ -336,6 +344,36 @@ test('a pane never names a browser tab that is out in a window of its own', asyn
 
 // ⌘T: the window routes `pane.add` to the pane on screen, which opens its "+"
 // menu as a click on "+" would. Another workspace's command is not this pane's.
+test('the column shows the menu in place of a tab, and Back returns to the tab it left', async () => {
+  const container = await renderPane(
+    { open: true, activeTabId: 't1', menu: true, tabs: [{ id: 't1', kind: 'files' }] },
+    false,
+  )
+  assert.ok(container.querySelector('[data-chat-panel]'), 'the panel shows')
+  assert.equal(container.querySelector('[role="tablist"]'), null, 'its list is the tabs: the strip draws none')
+  assert.equal(button(container, 'Maximise pane'), null, 'nothing a tool wears is left in the strip')
+  assert.ok(button(container, 'Close panel'), 'the strip keeps its close')
+  assert.deepEqual(activeNotes, [null])
+
+  const row = container.querySelector<HTMLElement>('[data-open-now-tab="t1"] [data-panel-row="action"]')
+  assert.ok(row, 'an open tab is a row')
+  await act(async () => row.click())
+  const pane = await paneOf()
+  assert.equal(pane?.menu, undefined, 'pressing it leaves the menu')
+  assert.equal(container.querySelector('[data-chat-panel]'), null)
+  const back = button(container, 'Back to the panel')
+  assert.ok(back, 'a tool has the way back')
+  await act(async () => back.click())
+  assert.ok(container.querySelector('[data-chat-panel]'), 'and Back shows the menu again')
+  assert.equal((await paneOf())?.activeTabId, 't1', 'with the tab it left still in front behind it')
+})
+
+test('the panel is the docked column: asked for while maximised, it unmaximises', async () => {
+  await renderPane({ open: true, activeTabId: 't1', menu: true, tabs: [{ id: 't1', kind: 'files' }] }, true)
+  const { useWorkspaceStore } = await import('../../../store/workspaceStore')
+  assert.equal(useWorkspaceStore.getState().workspacePaneMaximised, false)
+})
+
 test('the "+" menu opens from the keyboard command for this workspace only', async () => {
   const { dispatchPanelCommandEvent } = await import('../../../utils/panelCommands')
   const container = await renderPane({ open: true, activeTabId: 't1', tabs: [{ id: 't1', kind: 'files' }] }, false)

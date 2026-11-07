@@ -37,7 +37,7 @@ export type PaneKindDefinition = {
   modalSurfaceId?: string
 }
 
-function TerminalGlyph({ className }: { className?: string }) {
+export function TerminalGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
       <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
@@ -65,7 +65,7 @@ export function FilesGlyph({ className }: { className?: string }) {
   )
 }
 
-function GitGlyph({ className }: { className?: string }) {
+export function GitGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
       <circle cx="4.5" cy="3.5" r="1.5" stroke="currentColor" strokeWidth="1.5" />

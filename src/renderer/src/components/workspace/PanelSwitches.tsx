@@ -77,8 +77,8 @@ const PANELS: PanelDescriptor[] = [
   {
     key: 'pane',
     commandId: 'pane.toggle',
-    label: 'Open pane',
-    activeLabel: 'Close pane',
+    label: 'Open panel',
+    activeLabel: 'Close panel',
     cluster: 'right',
     target: { kind: 'pane' },
     // SidebarChrome's collapse glyph mirrored: the same rect, the same 1.5
@@ -118,7 +118,7 @@ export function PanelSwitches({ activeWorkspaceId, leadingDivider = true, cluste
     return pane?.tabs.find((tab) => tab.id === pane.activeTabId)?.kind ?? null
   })
   const paneMaximised = useWorkspaceStore((state) => state.workspacePaneMaximised)
-  const setPaneOpen = useWorkspaceStore((state) => state.setPaneOpen)
+  const togglePaneMenu = useWorkspaceStore((state) => state.togglePaneMenu)
   const togglePaneKind = useWorkspaceStore((state) => state.togglePaneKind)
 
   // Hide a switch when its capability module is disabled — driven by each
@@ -149,7 +149,7 @@ export function PanelSwitches({ activeWorkspaceId, leadingDivider = true, cluste
       if (panel.target.kind === 'pane-tab') {
         togglePaneKind(activeWorkspaceId, panel.target.tabKind)
       } else {
-        setPaneOpen(activeWorkspaceId, !paneOpen)
+        togglePaneMenu(activeWorkspaceId)
       }
     }
     return (

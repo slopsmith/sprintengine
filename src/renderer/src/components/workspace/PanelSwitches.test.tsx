@@ -86,7 +86,7 @@ test('a closed pane keeps the header switch, which opens it', async () => {
   const container = await renderSwitches({ ...FILES_TAB, open: false }, false)
   const toggle = paneSwitch(container)
   assert.ok(toggle, 'closed, the switch is the way back in')
-  assert.equal(toggle.getAttribute('aria-label'), 'Open pane')
+  assert.equal(toggle.getAttribute('aria-label'), 'Open panel')
   act(() => toggle.click())
 
   const { useWorkspaceStore } = await import('../../store/workspaceStore')
@@ -104,5 +104,5 @@ test('a maximised pane gets the header switch back as its one close', async () =
   const container = await renderSwitches(FILES_TAB, true)
   const toggle = paneSwitch(container)
   assert.ok(toggle, 'maximised, the strip has no close of its own')
-  assert.equal(toggle.getAttribute('aria-label'), 'Close pane')
+  assert.equal(toggle.getAttribute('aria-label'), 'Close panel')
 })

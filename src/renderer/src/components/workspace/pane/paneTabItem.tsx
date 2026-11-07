@@ -34,7 +34,9 @@ export function paneTabItem(
     id: tab.id,
     label,
     closeLabel: `Close ${label}`,
-    ...(tab.kind === 'diff' && options.diffCount !== null && !poppedOut ? { count: options.diffCount } : {}),
+    ...(tab.kind === 'diff' && options.diffCount !== null && !poppedOut
+      ? { count: options.diffCount, tooltip: `${label} · ${options.diffCount}` }
+      : {}),
     // An agent wrote a tour and docked this tab with it. The strip draws no
     // corner count on a closable tab (its close glyph owns that corner), so
     // the tab wears the tour mark in its glyph slot instead, in the accent
