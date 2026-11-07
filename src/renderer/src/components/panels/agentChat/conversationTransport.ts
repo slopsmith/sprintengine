@@ -202,6 +202,12 @@ export type ConversationTransportCapabilities = {
    * False here, where this computer's main reads a local chat's.
    */
   hostUsageLimits: boolean
+  /**
+   * The person's words can be passed to one agent of a chat here. Always for a
+   * chat on this machine; a paired machine's says so where it advertises
+   * `conversation-agent-message`.
+   */
+  agentMessages: boolean
 }
 
 /** What an action answers: the local session API's result, or a remote command's. */
@@ -437,6 +443,7 @@ const LOCAL_CAPABILITIES: ConversationTransportCapabilities = {
   hostSchedule: false,
   // And reads a local chat's usage limits, and sends its resume, itself.
   hostUsageLimits: false,
+  agentMessages: true,
 }
 
 type LocalParts = Omit<ConversationTransport, 'kind' | 'capabilities' | 'services'>
@@ -660,6 +667,7 @@ export function createRemoteConversationTransport(input: {
       hostSchedule: false,
       // Turned on from the machine's list, when it says what it knows of its usage limits.
       hostUsageLimits: false,
+      agentMessages: false,
     },
     remoteExtensions: { connectionId: key.connectionId, workspaceId: key.workspaceId },
     commandsFolder: remoteCommandsFolder(key),

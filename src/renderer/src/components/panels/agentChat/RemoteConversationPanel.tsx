@@ -356,6 +356,8 @@ export default function RemoteConversationPanel({
   scheduledSendsRef.current = scheduledSends
   const usageLimitsRef = useRef(usageLimits)
   usageLimitsRef.current = usageLimits
+  const messageSubagentsRef = useRef(messageSubagents)
+  messageSubagentsRef.current = messageSubagents
   const threadRef = useRef(thread)
   threadRef.current = thread
   const transport = useMemo(() => {
@@ -408,6 +410,7 @@ export default function RemoteConversationPanel({
           commandList: commandListRef.current,
           hostSchedule: scheduledSendsRef.current,
           hostUsageLimits: usageLimitsRef.current,
+          agentMessages: messageSubagentsRef.current,
         }
       },
       // A watch ended there is off its list: read it again, so the strip
@@ -462,6 +465,7 @@ export default function RemoteConversationPanel({
             ...capabilities,
             operate: accessRef.current === 'operate',
             permanentApprovals: permanentApprovalsRef.current,
+            agentMessages: messageSubagentsRef.current,
           }
         },
       }

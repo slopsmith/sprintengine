@@ -1,7 +1,7 @@
 import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { GhostButton, InlineNotice, SendButton, SendGlyph, Spinner } from '../../ui'
-import { COMPOSER_SURFACE_CLASS, FOCUS_RING_WITHIN_EDITOR_CLASS } from '../../ui/tokens'
+import { COMPOSER_SURFACE_CLASS, FOCUS_RING_INSET_CLASS, FOCUS_RING_WITHIN_EDITOR_CLASS } from '../../ui/tokens'
 import { useConversationSessions } from '../../../hooks/conversationSessionsStore'
 import { useWorkspaceStore } from '../../../store/workspaceStore'
 import type { ConversationCliRuntimeOverrides } from '../../../../../shared/conversation-runtime'
@@ -254,7 +254,7 @@ function LaneConversation({
   const delivery = laneDelivery(lane, {
     operate: transport.capabilities.operate,
     providerRelays: relays,
-    transportRelays: typeof transport.messageSubagent === 'function',
+    transportRelays: transport.capabilities.agentMessages && typeof transport.messageSubagent === 'function',
     harnessName: cli ? harnessName(cli) : 'This harness',
     ...(transport.machineName ? { machineName: transport.machineName } : {}),
   })
@@ -269,7 +269,7 @@ function LaneConversation({
         tabIndex={-1}
         role="log"
         aria-label={`${name} conversation`}
-        className="chat-column-gutter min-h-0 flex-1 overflow-y-auto pb-6 pt-4 focus:outline-none"
+        className={`chat-column-gutter min-h-0 flex-1 overflow-y-auto pb-6 pt-4 focus:outline-none ${FOCUS_RING_INSET_CLASS}`}
       >
         {rows.map((row) => (
           <React.Fragment key={row.id}>

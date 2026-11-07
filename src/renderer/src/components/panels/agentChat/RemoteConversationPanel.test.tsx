@@ -111,6 +111,7 @@ async function mountRemote({
   quotes = false,
   steerSends = false,
   stopSubagents = false,
+  messageSubagents = false,
   handoff = false,
   rewind = false,
   checkpointRevert = false,
@@ -156,6 +157,7 @@ async function mountRemote({
   steerSends?: boolean
   /** The machine stops one agent of a chat by itself (`conversation-stop-subagent`). */
   stopSubagents?: boolean
+  messageSubagents?: boolean
   /** The machine hands its chats off to a fresh session (`conversation-handoff`). */
   handoff?: boolean
   /** The machine takes a chat back to before one of its messages (`conversation-rewind`). */
@@ -249,6 +251,7 @@ async function mountRemote({
       quotes,
       steerSends,
       stopSubagents,
+      messageSubagents,
       handoff,
       rewind,
       checkpointRevert,
@@ -351,6 +354,9 @@ async function mountRemote({
     meshConversationResolveApproval: vi.fn(async () => ({ ok: true })),
     meshConversationInterrupt: vi.fn(async () => ({ ok: true })),
     meshConversationHandoff: vi.fn(async (_input: { key: MeshConversationKey }) => ({ ok: true as const })),
+    meshConversationMessageSubagent: vi.fn(
+      async (_input: { key: MeshConversationKey; toolUseId: string; message: string }) => ({ ok: true }),
+    ),
     meshConversationStopSubagent: vi.fn(async (_input: { key: MeshConversationKey; toolUseId: string }) => ({
       ok: true,
     })),
@@ -897,6 +903,63 @@ test('no Stop on an agent where the machine cannot stop one by itself, or lists 
     } finally {
       await chat.unmount()
     }
+  }
+})
+
+// A chat over there, with an agent in it that finished, opened in the chat's place.
+async function openFinishedAgent(options: Parameters<typeof mountRemote>[0]) {
+  const chat = await mountRemote(options)
+  await startAgent(chat)
+  await chat.act(async () =>
+    chat.emit({
+      type: 'event',
+      event: event('subagent_status', { toolUseId: 'toolu_agent', taskId: 'task-1', status: 'completed', endedAt: 2 }),
+    }),
+  )
+  const card = Array.from(chat.host.querySelectorAll('button')).find((button) =>
+    button.getAttribute('aria-label')?.endsWith('Open it'),
+  )
+  await chat.act(async () => card!.click())
+  return chat
+}
+
+test('an agent in a chat over there opens in the chat’s place, and its box goes over the mesh', async () => {
+  const { resetSubagentViews } = await import('./subagentViewStack')
+  const chat = await openFinishedAgent({
+    access: 'operate',
+    messageSubagents: true,
+    capabilities: { ...thread.capabilities!, messageSubagent: true },
+  })
+  try {
+    expect(chat.host.querySelector('[data-subagent-header]')?.textContent).toContain('Restyle the boxes')
+    expect(chat.host.querySelector('[data-subagent-blocked]')).toBeNull()
+    expect(chat.host.querySelector('[data-lane-composer]')).not.toBeNull()
+  } finally {
+    await chat.act(async () => resetSubagentViews())
+    await chat.unmount()
+  }
+})
+
+test.each([
+  ['a machine without the capability', { messageSubagents: false }, 'needs updating'],
+  ['a chat whose provider cannot', { messageSubagents: true, messageSubagent: false }, 'no way to pass a message'],
+])('%s gets the bar and no box, and it leads back to the chat', async (_name, facts, words) => {
+  const { messageSubagent, ...rest } = facts as { messageSubagents: boolean; messageSubagent?: boolean }
+  const { resetSubagentViews } = await import('./subagentViewStack')
+  const chat = await openFinishedAgent({
+    access: 'operate',
+    ...rest,
+    capabilities: { ...thread.capabilities!, messageSubagent: messageSubagent ?? true },
+  })
+  try {
+    expect(chat.host.querySelector('[data-lane-composer]')).toBeNull()
+    const bar = chat.host.querySelector('[data-subagent-blocked]')
+    expect(bar?.textContent).toContain(words)
+    await chat.act(async () => bar!.querySelector('button')!.click())
+    expect(chat.host.querySelector('[data-subagent-header]')).toBeNull()
+  } finally {
+    await chat.act(async () => resetSubagentViews())
+    await chat.unmount()
   }
 })
 

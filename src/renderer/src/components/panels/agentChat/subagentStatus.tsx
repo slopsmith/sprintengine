@@ -253,13 +253,13 @@ export function AgentLaneSummary({ lane }: { lane: TranscriptToolEntry }): JSX.E
  * way: its links carry its agent id on that machine, by which its pane found it
  * (`publishRemoteChat`), and the lane is read through the pane's transport.
  */
-export function useOpenAgentsPane(): ((laneId: string | null) => void) | null {
+export function useOpenAgentsPane(): ((laneId: string | null, label?: string) => void) | null {
   const context = useConversationLinkContext()
   const open = useOpenSubagent()
   if (!context?.workspaceId || !context.agentId || !open) return null
   const { workspaceId, agentId } = context
-  return (laneId) => {
-    if (laneId) open({ kind: 'lane', laneId })
+  return (laneId, label) => {
+    if (laneId) open({ kind: 'lane', laneId, ...(label ? { label } : {}) })
     else openSubagentList(workspaceId, agentId)
   }
 }

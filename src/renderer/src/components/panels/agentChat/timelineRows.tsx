@@ -72,6 +72,7 @@ import {
   AgentLaneSummary,
   LaneGlyph,
   laneOutcomeWords,
+  laneName,
   laneTask,
   useOpenAgentsPane,
   useStopSubagent,
@@ -863,7 +864,7 @@ const AgentLaneCards = memo(function AgentLaneCards({ lanes }: { lanes: Transcri
         return (
           <li key={lane.id} className="relative">
             {openAgents ? (
-              <AgentLaneCard lane={lane} onOpen={() => openAgents(lane.id)} stoppable={stop !== null} />
+              <AgentLaneCard lane={lane} onOpen={() => openAgents(lane.id, laneName(lane))} stoppable={stop !== null} />
             ) : (
               <SubagentLane tool={lane} />
             )}
@@ -1024,7 +1025,7 @@ export const SubagentLane = memo(function SubagentLane({ tool }: { tool: Transcr
               size="xs"
               aria-label={`Open ${subagentLaneLabel(tool)}`}
               className="shrink-0 opacity-0 focus-visible:opacity-100 group-hover/lane:opacity-100"
-              onClick={() => openAgents(tool.id)}
+              onClick={() => openAgents(tool.id, laneName(tool))}
             >
               <OpenInPaneGlyph />
             </IconButton>

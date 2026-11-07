@@ -2090,7 +2090,7 @@ test('a turn’s steps rest folded, the latest one included; its agents are card
     const { readSubagentViews, resetSubagentViews } = await import('./subagentViewStack')
     try {
       expect(readSubagentViews('workspace', 'agent'), 'the card opens the agent in the chat’s place').toEqual([
-        { kind: 'lane', ownerAgentId: 'agent', laneId: 'fold-agent' },
+        { kind: 'lane', ownerAgentId: 'agent', laneId: 'fold-agent', label: 'Map the test suites' },
       ])
       expect(openPaneTab, 'no tab is made for it').not.toHaveBeenCalledWith('workspace', {
         kind: 'agents',
