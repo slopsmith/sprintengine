@@ -243,6 +243,7 @@ export default function RemoteConversationPanel({
   const [queuedAttachments, setQueuedAttachments] = useState(false)
   // It saves an "always allow" rule an approval here chose, for its own workspace.
   const [permanentApprovals, setPermanentApprovals] = useState(false)
+  const [quotes, setQuotes] = useState(false)
   const [sendSkills, setSendSkills] = useState(false)
   // The machine opens a pull request for one of its chats (Create PR).
   const [hostPullRequests, setHostPullRequests] = useState(false)
@@ -305,6 +306,8 @@ export default function RemoteConversationPanel({
   queuedAttachmentsRef.current = queuedAttachments
   const permanentApprovalsRef = useRef(permanentApprovals)
   permanentApprovalsRef.current = permanentApprovals
+  const quotesRef = useRef(quotes)
+  quotesRef.current = quotes
   const sendSkillsRef = useRef(sendSkills)
   sendSkillsRef.current = sendSkills
   const hostPullRequestsRef = useRef(hostPullRequests)
@@ -365,6 +368,7 @@ export default function RemoteConversationPanel({
           hostQueue: queuedSendsRef.current,
           hostQueueAttachments: queuedSendsRef.current && queuedAttachmentsRef.current,
           permanentApprovals: permanentApprovalsRef.current,
+          quotes: quotesRef.current,
           skills: sendSkillsRef.current,
           steer: steerSendsRef.current,
           hostPullRequests: hostPullRequestsRef.current,
@@ -462,6 +466,7 @@ export default function RemoteConversationPanel({
         setQueuedSends(result.queuedSends === true)
         setQueuedAttachments(result.queuedAttachments === true)
         setPermanentApprovals(result.permanentApprovals === true)
+        setQuotes(result.quotes === true)
         setSendSkills(result.sendSkills === true)
         setHostPullRequests(result.createPullRequest === true)
         setSteerSends(result.steerSends === true)
