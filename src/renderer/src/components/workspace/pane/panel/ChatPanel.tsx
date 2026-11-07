@@ -183,7 +183,7 @@ export function ChatPanel({ onClose, ...openNow }: ChatPanelProps) {
         project={project}
         onClose={onClose}
       />
-      <ChatPanelSubagents workspaceId={workspaceId} agentId={agentId} />
+      <ChatPanelSubagents workspaceId={workspaceId} agentId={agentId} cli={cli} />
       <ChatPanelOpenNow {...openNow} activity={activity} />
       <Section title="This chat" inset="flush">
         <PanelCard>

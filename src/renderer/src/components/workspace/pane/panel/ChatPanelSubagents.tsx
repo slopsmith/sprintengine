@@ -3,6 +3,7 @@ import React from 'react'
 import { Section, TruncatedText } from '../../../ui'
 import { subagentLaneLabel } from '../../../panels/agentChat/conversationTimeline'
 import { useChatSubagents, type ChatSubagent } from '../../../panels/agentChat/chatSubagentsStore'
+import type { AgentCli } from '../../../../types/workspace'
 import { SubagentIcon } from '../../../panels/agentChat/subagentIcon'
 import { LaneGlyph, LaneStatus } from '../../../panels/agentChat/subagentStatus'
 import { SubagentStatusWords } from '../agents/studioSubagents'
@@ -28,12 +29,22 @@ function ChevronGlyph({ className }: { className?: string }) {
   )
 }
 
-function SubagentRow({ subagent, onOpen }: { subagent: ChatSubagent; onOpen: () => void }) {
+function SubagentRow({ subagent, cli, onOpen }: { subagent: ChatSubagent; cli: AgentCli | null; onOpen: () => void }) {
   const name = subagent.kind === 'lane' ? subagentLaneLabel(subagent.lane) : subagent.subagent.name
   return (
     <PanelRow
       glyph={
-        subagent.kind === 'lane' ? <LaneGlyph tool={subagent.lane} /> : <SubagentIcon cli={subagent.subagent.cli} />
+        subagent.kind === 'lane' ? (
+          // The panel stands outside the chat, so a lane cannot read the harness
+          // from the conversation around it: it runs on its parent's.
+          cli ? (
+            <SubagentIcon cli={cli} />
+          ) : (
+            <LaneGlyph tool={subagent.lane} />
+          )
+        ) : (
+          <SubagentIcon cli={subagent.subagent.cli} />
+        )
       }
       label={<TruncatedText as="span" text={name} />}
       detail={
@@ -50,7 +61,16 @@ function SubagentRow({ subagent, onOpen }: { subagent: ChatSubagent; onOpen: () 
   )
 }
 
-export function ChatPanelSubagents({ workspaceId, agentId }: { workspaceId: string; agentId: string | null }) {
+export function ChatPanelSubagents({
+  workspaceId,
+  agentId,
+  cli,
+}: {
+  workspaceId: string
+  agentId: string | null
+  /** The harness of the chat being viewed. */
+  cli: AgentCli | null
+}) {
   const subagents = useChatSubagents(workspaceId, agentId)
   if (!agentId || subagents.length === 0) return null
   return (
@@ -60,6 +80,7 @@ export function ChatPanelSubagents({ workspaceId, agentId }: { workspaceId: stri
           <SubagentRow
             key={subagent.id}
             subagent={subagent}
+            cli={cli}
             onOpen={() => openAgentsPane(workspaceId, agentId, subagent.id)}
           />
         ))}
